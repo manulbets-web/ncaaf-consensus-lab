@@ -12,6 +12,8 @@ import pandas as pd
 from shiny import App, reactive, render, ui
 
 from engine import load_strategy_data
+from forecast_plots import build_forecast_plot
+from committee import analyze_finalist_portfolio
 from current_week import (
     refresh_and_build_current_week,
     build_current_board_from_cached_sources,
@@ -99,6 +101,8 @@ PATRICK_POOL_MIN_BETS = 25
 PATRICK_MIN_AVAILABLE = 4
 PATRICK_MIN_SEARCH_BETS = 50
 PATRICK_RANK_METRIC = "wilson"
+PATRICK_OVERLAP_THRESHOLD = 0.60
+PATRICK_META_MIN_COMMUNITIES = 2
 
 # Current ranking is used only as a convenient candidate-pool preset, never as
 # an outcome gate inside the combination search.
@@ -146,10 +150,15 @@ def _saved_strategy() -> dict:
                 if str(x) in MODEL_NAME_MAP
             ]
             if mids:
-                combos.append({
+                row = {
                     "rank": int(c.get("rank", i)),
                     "model_ids": mids,
-                })
+                }
+                if c.get("k") is not None:
+                    row["k"] = float(c.get("k"))
+                if c.get("community") is not None:
+                    row["community"] = int(c.get("community"))
+                combos.append(row)
 
         # Backward compatibility with v3.5.0/v3.5.1 single-set saves.
         ids = [
@@ -234,7 +243,7 @@ app_ui = ui.page_fluid(
     _style_css(),
     ui.h2("NCAAF Consensus Lab", class_="app-title"),
     ui.p(
-        "Past performance → current board → strategy discovery → upcoming picks. "
+        "Past performance → current board → strategy discovery → upcoming picks → forecast plots. "
         "CFB Picker is intentionally inactive until its 2026 feed is available.",
         class_="app-subtitle",
     ),
@@ -253,6 +262,7 @@ app_ui = ui.page_fluid(
                     ui.tags.li(ui.strong("Choose one or more finalists on Page 3."), " The selected combinations become C1, C2, C3, and so on for the current session."),
                     ui.tags.li(ui.strong("Apply them on Page 4."), " Each combination independently forms a mean projected spread, an SD across its component models, and a BET/PASS decision. The page also summarizes agreement across combinations."),
                     ui.tags.li(ui.strong("Patrick\'s one-click recipe on Page 4."), " After Page 2 is refreshed, it screens the current-week eligible pool using 6 held-out weeks, set sizes 5–13, k = 0.50 SD, and automatically applies the top 12 combinations."),
+                    ui.tags.li(ui.strong("Visualize the hierarchy on Page 5."), " Pick any current game to see every mapped model projection, the selected finalist-combination forecasts, and the final portfolio/meta estimate against the market line."),
                 ),
             ),
             ui.layout_columns(
@@ -272,7 +282,9 @@ app_ui = ui.page_fluid(
                     ui.card_header("How to read the combination portfolio"),
                     ui.tags.ul(
                         ui.tags.li(ui.strong("C1, C2, ..."), ": the finalist combinations you selected on Page 3. Search rank remains available in the detailed table, but the short labels are used throughout Page 4."),
-                        ui.tags.li(ui.strong("Portfolio mean ± SD"), ": equal-weight mean of the scorable combination means, plus the sample SD across those combination means."),
+                        ui.tags.li(ui.strong("Portfolio mean ± SD"), ": the old raw equal-weight summary across C1–C12, retained as a benchmark."),
+                        ui.tags.li(ui.strong("Diversified META"), ": near-duplicate combinations are grouped by 0.60 Jaccard model overlap; each overlap community gets equal influence. META SD combines within-combination and between-community dispersion."),
+                        ui.tags.li(ui.strong("Automatic k"), ": each frozen finalist is evaluated across 0.25–2.00 SD on discovery data only. The app favors a stable neighboring-k plateau rather than the single prettiest threshold, then tests that frozen k on holdout."),
                         ui.tags.li(ui.strong("Mean direction"), ": how many combination means lie on each side of the current betting line."),
                         ui.tags.li(ui.strong("Bet direction"), ": how many combinations actually clear their k×SD threshold in each direction."),
                         ui.tags.li(ui.strong("PASS"), ": a combination has enough models to score the game, but the available line remains inside its decision boundary."),
@@ -297,7 +309,7 @@ app_ui = ui.page_fluid(
                 ui.card_header("Recommended workflow for automatic screening"),
                 ui.tags.ul(
                     ui.tags.li("Refresh Page 2 first so the candidate pool contains only models that are actually posting this week."),
-                    ui.tags.li(ui.strong("Patrick\'s recommended recipe:"), " Top 20 current-week models by discovery Wilson lower bound (minimum 25 discovery bets/model), hold out the latest 6 chronology weeks, screen set sizes 5–13 at k = 0.50 SD, require at least 4 models available and 50 discovery bets, rank by Wilson lower bound, then apply the top 12 combinations."),
+                    ui.tags.li(ui.strong("Patrick\'s recommended recipe:"), " Top 20 current-week models by discovery Wilson lower bound (minimum 25 discovery bets/model), hold out the latest 6 chronology weeks, screen set sizes 5–13 at k = 0.50 SD, rank by Wilson lower bound, freeze the top 12, then automatically tune each finalist's k across 0.25–2.00 SD on discovery only and build a diversity-adjusted META backtest."),
                     ui.tags.li("The Page 4 button runs that recipe end-to-end; Page 3 remains available when you want to inspect or alter the research settings."),
                     ui.tags.li("Treat the discovery ranking as model-combination discovery and the recent held-out weeks as the cleaner validation check."),
                     ui.tags.li("Use the spread-scale diagnostics to see whether a finalist behaves differently on small, moderate, or very large market spreads."),
@@ -612,8 +624,9 @@ app_ui = ui.page_fluid(
                 ui.card_header("Patrick's recommended settings"),
                 ui.p(
                     "One-click current-week recipe: Top 20 currently posting models by discovery Wilson lower bound; "
-                    "latest 6 chronology weeks held out; combination sizes 5–13; k = 0.50 SD; "
-                    "top 12 discovery-ranked combinations applied as C1–C12.",
+                    "latest 6 chronology weeks held out; combination sizes 5–13; 0.50 SD search anchor; "
+                    "top 12 discovery-ranked combinations frozen, then each finalist gets an automatic stable k from 0.25–2.00 SD. "
+                    "Near-duplicate combinations are collapsed into overlap communities for the final META estimate and backtest.",
                     class_="muted",
                 ),
                 ui.input_action_button(
@@ -638,6 +651,28 @@ app_ui = ui.page_fluid(
                 ui.value_box("Required k", ui.output_text("strategy_k")),
                 ui.value_box("Games scored", ui.output_text("strategy_games_n")),
                 col_widths=(3, 3, 3, 3),
+            ),
+            ui.card(
+                ui.card_header("Final consensus: overlap, automatic k, and META backtest"),
+                ui.p(
+                    "The top combinations are often close relatives. A 0.60 Jaccard overlap groups near-duplicates into communities so one core model family cannot masquerade as many independent votes. "
+                    "Each finalist's k is selected from 0.25–2.00 SD using discovery data only; the six-week holdout remains untouched until those choices are frozen. "
+                    "The diversified META forecast gives each overlap community equal influence and combines within-combo plus between-community dispersion.",
+                    class_="muted",
+                ),
+                ui.layout_columns(
+                    ui.value_box("Independent communities", ui.output_text("committee_community_n")),
+                    ui.value_box("Mean pairwise overlap", ui.output_text("committee_mean_overlap")),
+                    ui.value_box("META k", ui.output_text("committee_meta_k")),
+                    ui.value_box("Holdout META ATS", ui.output_text("committee_holdout_ats")),
+                    col_widths=(3, 3, 3, 3),
+                ),
+                ui.h5("Final META backtest"),
+                ui.output_data_frame("committee_meta_backtest_table"),
+                ui.h5("Automatic k by finalist"),
+                ui.output_data_frame("committee_combo_k_table"),
+                ui.h5("Overlap communities"),
+                ui.output_data_frame("committee_overlap_table"),
             ),
             ui.card(
                 ui.card_header("Line shopping / alternate market"),
@@ -678,8 +713,8 @@ app_ui = ui.page_fluid(
                 ui.card_header("Combination agreement by game"),
                 ui.p(
                     "Counts how many selected finalist combinations independently produce a bet in each direction. "
-                    "Portfolio mean ± SD gives the equal-weight mean of the scorable combo forecasts and the sample SD across those combo means. "
-                    "A PASS means the market remains inside that combination's mean ± k×SD boundary.",
+                    "Raw portfolio mean ± SD is retained for comparison; diversified META collapses near-duplicate combinations into equal-weight overlap communities. "
+                    "Each C1/C2/etc. uses its own discovery-selected k when automatic threshold tuning is available.",
                     class_="muted",
                 ),
                 ui.output_data_frame("strategy_combo_summary_table"),
@@ -695,6 +730,55 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Selected-model projections by game"),
                 ui.output_data_frame("strategy_model_predictions_table"),
+            ),
+        ),
+
+        # ------------------------------------------------------------------
+        # Page 5
+        # ------------------------------------------------------------------
+        ui.nav_panel(
+            "5 · Forecast Plots",
+            ui.p(
+                "Visualizes the current forecast hierarchy for one game at a time: all mapped PredictionTracker models → "
+                "selected finalist combinations → the diversity-adjusted META estimate. Alternate lines entered on Page 4 are reflected automatically.",
+                class_="muted",
+            ),
+            ui.layout_columns(
+                ui.input_select(
+                    "plot_game",
+                    "Game",
+                    choices={"": "Apply a portfolio on Page 4 first"},
+                    selected="",
+                ),
+                ui.input_radio_buttons(
+                    "plot_style",
+                    "Plot style",
+                    choices={
+                        "hierarchy": "Forecast hierarchy",
+                        "distribution": "Distribution / rug (legacy style)",
+                    },
+                    selected="hierarchy",
+                    inline=True,
+                ),
+                col_widths=(7, 5),
+            ),
+            ui.output_text("forecast_plot_status"),
+            ui.card(
+                ui.card_header("Current-game forecast"),
+                ui.output_plot("forecast_plot", height="820px"),
+            ),
+            ui.card(
+                ui.card_header("What each layer means"),
+                ui.tags.ul(
+                    ui.tags.li(ui.strong("Individual models"), ": every mapped model currently posting for that game. Models used by at least one selected finalist are highlighted."),
+                    ui.tags.li(ui.strong("C1, C2, ..."), ": each finalist's collective expected spread. In hierarchy view, the horizontal bar is ±1 SD among models inside that combination."),
+                    ui.tags.li(ui.strong("META"), ": the diversity-adjusted final consensus. Near-duplicate finalist sets are collapsed into overlap communities, each community gets equal influence, and the uncertainty bar combines within-combo plus between-community dispersion."),
+                    ui.tags.li(ui.strong("Market"), ": the line currently being used on Page 4, including any session-only line-shopping override. If overridden, the original PredictionTracker line is also shown."),
+                ),
+                ui.p(
+                    "C1–C12 retain their own BET/PASS rules. META now also has its own discovery-selected k and an independently backtested BET/PASS rule shown on Page 4.",
+                    class_="muted",
+                ),
             ),
         ),
     ),
@@ -1736,16 +1820,31 @@ def server(input, output, session):
 
         k = float(input.auto_k())
         min_n = int(input.auto_min_available())
+        # Freeze the model sets first. Then choose each finalist's k using discovery
+        # data only and build the diversity-adjusted META backtest. Holdout data
+        # are used only after those choices are frozen.
+        _, _, discovery_periods, holdout_periods = selected_auto_periods()
+        committee_analysis = analyze_finalist_portfolio(
+            DATA, combos, discovery_periods, holdout_periods,
+            min_available_models=min_n,
+            thresholds=K_GRID,
+            combo_min_bets=max(20, int(input.auto_min_bets())),
+            meta_min_bets=max(30, int(input.auto_min_bets())),
+            overlap_threshold=PATRICK_OVERLAP_THRESHOLD,
+            min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
+            standard_price=-110,
+        )
+        combos = list(committee_analysis.get("combinations", combos))
         # Union is retained for display/backward compatibility; Page 4 scores each combo separately.
         union_ids = list(dict.fromkeys(mid for c in combos for mid in c["model_ids"]))
-        rank_text = ", ".join(str(c["rank"]) for c in combos)
         state = {
             "source": "automatic_portfolio",
-            "label": f"Finalist portfolio: {len(combos)} combos @ {k:.2f} SD",
+            "label": f"Finalist portfolio: {len(combos)} combos with discovery-selected k",
             "model_ids": union_ids,
             "combinations": combos,
             "primary_k": k,
             "min_available_models": min_n,
+            "committee_analysis": committee_analysis,
         }
         strategy.set(state)
         if not CLOUD_MODE:
@@ -1798,7 +1897,13 @@ def server(input, output, session):
     @render.text
     def strategy_k():
         s = strategy.get()
-        return f"{float(s.get('primary_k', DEFAULT_K)):.2f} SD" if s.get("combinations") else "—"
+        combos = list(s.get("combinations", []))
+        if not combos:
+            return "—"
+        ks = [float(c.get("k", s.get("primary_k", DEFAULT_K))) for c in combos]
+        if len(set(round(x, 6) for x in ks)) == 1:
+            return f"{ks[0]:.2f} SD"
+        return f"Auto {min(ks):.2f}–{max(ks):.2f} SD"
 
     # ------------------------------------------------------------------
     # Page 4: apply a finalist portfolio to the cached current board
@@ -1812,6 +1917,8 @@ def server(input, output, session):
             for i, combo in enumerate(combinations, start=1):
                 combo_number = i
                 rank = int(combo.get("rank", i))
+                combo_k = float(combo.get("k", k))
+                community = int(combo.get("community", i))
                 ids = [str(x) for x in combo.get("model_ids", []) if str(x)]
                 if not ids:
                     continue
@@ -1822,7 +1929,7 @@ def server(input, output, session):
                     MODEL_NAME_MAP,
                     season=int(season),
                     week=int(week),
-                    primary_k=float(k),
+                    primary_k=float(combo_k),
                     min_available_models=min(int(min_n), len(ids)),
                     include_cfbpicker=False,
                     write_outputs=False,
@@ -1831,16 +1938,17 @@ def server(input, output, session):
                 if len(b):
                     b["portfolio_combo"] = combo_number
                     b["combo_rank"] = rank
+                    b["community"] = community
                     b["combo_size"] = len(ids)
                     b["combo_model_ids"] = "|".join(ids)
                     b["combo_models"] = ", ".join(MODEL_NAME_MAP.get(x, x) for x in ids)
-                    b["primary_k"] = float(k)
+                    b["primary_k"] = float(combo_k)
                     sd = pd.to_numeric(b["model_sd"], errors="coerce")
                     mu = pd.to_numeric(b["consensus_home_margin"], errors="coerce")
                     b["mean_minus_sd"] = mu - sd
                     b["mean_plus_sd"] = mu + sd
-                    b["decision_lower"] = mu - float(k) * sd
-                    b["decision_upper"] = mu + float(k) * sd
+                    b["decision_lower"] = mu - float(combo_k) * sd
+                    b["decision_upper"] = mu + float(combo_k) * sd
                     detail_frames.append(b)
                 pp = rr.get("predictions", pd.DataFrame()).copy()
                 if len(pp):
@@ -1972,14 +2080,29 @@ def server(input, output, session):
                 patrick_state.set({"phase": "error", "message": "The top 12 combinations could not be resolved."})
                 return
 
+            periods = tuple((y, w) for y, w in HISTORICAL_PERIODS if y in set(HISTORICAL_SEASONS))
+            discovery_periods = periods[:-PATRICK_HOLDOUT_WEEKS]
+            holdout_periods = periods[-PATRICK_HOLDOUT_WEEKS:]
+            committee_analysis = analyze_finalist_portfolio(
+                DATA, combos, discovery_periods, holdout_periods,
+                min_available_models=PATRICK_MIN_AVAILABLE,
+                thresholds=K_GRID,
+                combo_min_bets=PATRICK_MIN_SEARCH_BETS,
+                meta_min_bets=PATRICK_MIN_SEARCH_BETS,
+                overlap_threshold=PATRICK_OVERLAP_THRESHOLD,
+                min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
+                standard_price=-110,
+            )
+            combos = list(committee_analysis.get("combinations", combos))
             union_ids = list(dict.fromkeys(mid for c in combos for mid in c["model_ids"]))
             strategy.set({
                 "source": "patrick_recommended",
-                "label": f"Patrick's recommended portfolio: {len(combos)} combos @ {PATRICK_K:.2f} SD",
+                "label": f"Patrick's recommended portfolio: {len(combos)} combos with auto-k + diversified META",
                 "model_ids": union_ids,
                 "combinations": combos,
                 "primary_k": PATRICK_K,
                 "min_available_models": PATRICK_MIN_AVAILABLE,
+                "committee_analysis": committee_analysis,
             })
             ui.update_selectize(
                 "auto_portfolio_ranks",
@@ -2008,8 +2131,73 @@ def server(input, output, session):
                 games = len(result.get("summary", pd.DataFrame())) if result else 0
                 patrick_state.set({
                     "phase": "complete",
-                    "message": f"Complete: top {len(strategy.get().get('combinations', []))} combinations applied to {games} current games at k = {PATRICK_K:.2f} SD.",
+                    "message": f"Complete: top {len(strategy.get().get('combinations', []))} combinations auto-tuned across k = 0.25–2.00, overlap-adjusted, and applied to {games} current games.",
                 })
+
+    def _active_committee_analysis() -> dict:
+        a = strategy.get().get("committee_analysis", {})
+        return a if isinstance(a, dict) else {}
+
+    def _selected_meta_k(method: str = "Diversified META") -> float:
+        a = _active_committee_analysis()
+        d = a.get("meta_selected", pd.DataFrame()) if a else pd.DataFrame()
+        if isinstance(d, pd.DataFrame) and len(d) and "method" in d.columns:
+            q = d[d["method"].astype(str).eq(method)]
+            if len(q):
+                v = pd.to_numeric(pd.Series([q.iloc[0].get("selected_k")]), errors="coerce").iloc[0]
+                if np.isfinite(v):
+                    return float(v)
+        return float(strategy.get().get("primary_k", DEFAULT_K))
+
+    def _diversified_meta_current(g: pd.DataFrame) -> dict:
+        if g is None or g.empty:
+            return {}
+        scorable = g[g["availability_state"].astype(str).eq("SCORABLE")].copy()
+        if scorable.empty:
+            return {}
+        if "community" not in scorable.columns:
+            scorable["community"] = pd.to_numeric(scorable.get("portfolio_combo"), errors="coerce")
+        units = []
+        for cid, z in scorable.groupby("community", dropna=False):
+            means = pd.to_numeric(z["consensus_home_margin"], errors="coerce").dropna().to_numpy(dtype=float)
+            sds = pd.to_numeric(z["model_sd"], errors="coerce").dropna().to_numpy(dtype=float)
+            if not len(means):
+                continue
+            cmean = float(np.mean(means))
+            within = float(np.mean(np.square(sds))) if len(sds) else np.nan
+            between = float(np.var(means, ddof=1)) if len(means) >= 2 else 0.0
+            cvar = within + between if np.isfinite(within) else np.nan
+            if np.isfinite(cvar):
+                units.append((cid, cmean, cvar))
+        if not units:
+            return {}
+        means = np.array([x[1] for x in units], dtype=float)
+        vars_ = np.array([x[2] for x in units], dtype=float)
+        meta_mean = float(np.mean(means))
+        within = float(np.mean(vars_))
+        between = float(np.var(means, ddof=1)) if len(means) >= 2 else 0.0
+        meta_sd = float(np.sqrt(max(0.0, within + between)))
+        market = pd.to_numeric(pd.Series([g.iloc[0].get("market_home_margin")]), errors="coerce").iloc[0]
+        edge = meta_mean - float(market) if np.isfinite(market) else np.nan
+        if np.isfinite(edge) and np.isfinite(meta_sd):
+            signal = abs(edge) / meta_sd if meta_sd > 1e-12 else (np.inf if abs(edge) > 1e-12 else 0.0)
+        else:
+            signal = np.nan
+        meta_k = _selected_meta_k("Diversified META")
+        min_comm = int(_active_committee_analysis().get("min_meta_communities", PATRICK_META_MIN_COMMUNITIES))
+        qualifies = bool(len(units) >= min_comm and (np.isfinite(signal) or np.isinf(signal)) and signal >= meta_k)
+        home = str(g.iloc[0].get("home", "")); away = str(g.iloc[0].get("away", ""))
+        side = home if np.isfinite(edge) and edge > 0 else (away if np.isfinite(edge) and edge < 0 else "")
+        return {
+            "independent_communities": int(len(units)),
+            "meta_mean_home_margin": meta_mean,
+            "meta_total_sd": meta_sd,
+            "meta_edge_home": edge,
+            "meta_signal_sd": signal,
+            "meta_k": meta_k,
+            "meta_qualifies": qualifies,
+            "meta_bet_side": side if qualifies else "",
+        }
 
     def _summarize_portfolio_detail(detail: pd.DataFrame) -> pd.DataFrame:
         summary_rows = []
@@ -2033,6 +2221,7 @@ def server(input, output, session):
             portfolio_mean = float(combo_means.mean()) if len(combo_means) else np.nan
             portfolio_sd = float(combo_means.std(ddof=1)) if len(combo_means) >= 2 else np.nan
             portfolio_combos_used = int(len(combo_means))
+            meta_now = _diversified_meta_current(g)
             if bet_home > bet_away:
                 committee = home
             elif bet_away > bet_home:
@@ -2062,6 +2251,7 @@ def server(input, output, session):
                 "portfolio_mean_home_margin": portfolio_mean,
                 "portfolio_sd_across_combos": portfolio_sd,
                 "portfolio_combos_used": portfolio_combos_used,
+                **meta_now,
                 "committee_direction": committee,
                 "home_bet_ranks": home_ranks, "away_bet_ranks": away_ranks,
             })
@@ -2103,8 +2293,12 @@ def server(input, output, session):
         detail["edge_home"] = edge
         detail["signal_sd"] = signal
         scorable = detail["availability_state"].astype(str).eq("SCORABLE").to_numpy()
-        k = float(strategy.get().get("primary_k", DEFAULT_K))
-        qualifies = scorable & (np.isfinite(signal) | np.isinf(signal)) & (signal >= k)
+        fallback_k = float(strategy.get().get("primary_k", DEFAULT_K))
+        if "primary_k" in detail.columns:
+            k_vec = pd.to_numeric(detail["primary_k"], errors="coerce").fillna(fallback_k).to_numpy(dtype=float)
+        else:
+            k_vec = np.full(len(detail), fallback_k, dtype=float)
+        qualifies = scorable & (np.isfinite(signal) | np.isinf(signal)) & (signal >= k_vec)
         detail["qualifies"] = qualifies
         home = detail["home"].astype(str).to_numpy()
         away = detail["away"].astype(str).to_numpy()
@@ -2270,6 +2464,82 @@ def server(input, output, session):
         d = r.get("summary", pd.DataFrame())
         return f"{len(d):,}"
 
+    @render.text
+    def committee_community_n():
+        a = _active_committee_analysis()
+        return str(int(a.get("overlap_summary", {}).get("communities", 0))) if a else "—"
+
+    @render.text
+    def committee_mean_overlap():
+        a = _active_committee_analysis()
+        v = a.get("overlap_summary", {}).get("mean_pairwise_jaccard", np.nan) if a else np.nan
+        return f"{100*float(v):.1f}%" if np.isfinite(v) else "—"
+
+    @render.text
+    def committee_meta_k():
+        a = _active_committee_analysis()
+        return f"{_selected_meta_k('Diversified META'):.2f} SD" if a else "—"
+
+    @render.text
+    def committee_holdout_ats():
+        a = _active_committee_analysis()
+        d = a.get("meta_summary", pd.DataFrame()) if a else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return "—"
+        q = d[d["method"].astype(str).eq("Diversified META") & d["period"].astype(str).eq("Holdout")]
+        if q.empty:
+            return "—"
+        ats = pd.to_numeric(pd.Series([q.iloc[0].get("ats_pct")]), errors="coerce").iloc[0]
+        bets = int(q.iloc[0].get("bets", 0) or 0)
+        return f"{100*float(ats):.1f}% ({bets} bets)" if np.isfinite(ats) else f"— ({bets} bets)"
+
+    @render.data_frame
+    def committee_meta_backtest_table():
+        a = _active_committee_analysis()
+        d = a.get("meta_summary", pd.DataFrame()).copy() if a else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = _pct_frame(d, ["ats_pct", "roi", "wilson_low"])
+        keep = [c for c in ["method", "period", "selected_k", "scorable_games", "bets", "wins", "losses", "ats_pct", "roi", "wilson_low", "units"] if c in d.columns]
+        d = d[keep].rename(columns={
+            "method": "META method", "period": "Period", "selected_k": "Frozen k",
+            "scorable_games": "Scorable games", "bets": "Bets", "wins": "Wins", "losses": "Losses",
+            "ats_pct": "ATS %", "roi": "ROI %", "wilson_low": "Wilson LB %", "units": "Units",
+        })
+        return render.DataGrid(d, filters=False, height="260px")
+
+    @render.data_frame
+    def committee_combo_k_table():
+        a = _active_committee_analysis()
+        d = a.get("combo_k_selected", pd.DataFrame()).copy() if a else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d["Combo"] = "C" + pd.to_numeric(d["portfolio_combo"], errors="coerce").astype("Int64").astype(str)
+        d = _pct_frame(d, ["discovery_ats_pct", "discovery_roi", "discovery_wilson_low", "neighbor_wilson_floor", "holdout_ats_pct", "holdout_roi", "holdout_wilson_low"])
+        keep = [c for c in ["Combo", "search_rank", "community", "selected_k", "discovery_bets", "discovery_ats_pct", "discovery_roi", "discovery_wilson_low", "neighbor_wilson_floor", "holdout_bets", "holdout_ats_pct", "holdout_roi", "holdout_wilson_low"] if c in d.columns]
+        d = d[keep].rename(columns={
+            "search_rank": "Search rank", "community": "Community", "selected_k": "Auto k",
+            "discovery_bets": "Discovery bets", "discovery_ats_pct": "Discovery ATS %",
+            "discovery_roi": "Discovery ROI %", "discovery_wilson_low": "Discovery Wilson LB %",
+            "neighbor_wilson_floor": "Neighbor-k Wilson floor %",
+            "holdout_bets": "Holdout bets", "holdout_ats_pct": "Holdout ATS %",
+            "holdout_roi": "Holdout ROI %", "holdout_wilson_low": "Holdout Wilson LB %",
+        })
+        return render.DataGrid(d, filters=False, height="360px")
+
+    @render.data_frame
+    def committee_overlap_table():
+        a = _active_committee_analysis()
+        d = a.get("community_table", pd.DataFrame()).copy() if a else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d["Models"] = d["model_ids"].astype(str).apply(lambda x: ", ".join(MODEL_NAME_MAP.get(mid, mid) for mid in x.split("|") if mid))
+        d["Overlap to representative %"] = 100 * pd.to_numeric(d["jaccard_to_representative"], errors="coerce")
+        keep = ["combo", "search_rank", "community", "combo_size", "Overlap to representative %", "Models"]
+        return render.DataGrid(d[keep].rename(columns={
+            "combo": "Combo", "search_rank": "Search rank", "community": "Community", "combo_size": "N",
+        }), filters=True, height="360px")
+
     @render.data_frame
     def strategy_combo_summary_table():
         r = strategy_current_view_result()
@@ -2306,13 +2576,33 @@ def server(input, output, session):
                 d["away"], d["home"], d["portfolio_mean_home_margin"], d["portfolio_sd_across_combos"]
             )
         ]
+        if "meta_mean_home_margin" in d.columns:
+            d["Diversified META ± SD"] = [
+                (
+                    f"{_spread_label(a, h, m)} ± {float(sd):.2f}"
+                    if np.isfinite(pd.to_numeric(pd.Series([m]), errors="coerce").iloc[0])
+                    and np.isfinite(pd.to_numeric(pd.Series([sd]), errors="coerce").iloc[0])
+                    else "—"
+                )
+                for a, h, m, sd in zip(d["away"], d["home"], d["meta_mean_home_margin"], d["meta_total_sd"])
+            ]
+            d["META decision"] = [
+                (f"BET {side}" if bool(q) and str(side) else "PASS")
+                for q, side in zip(d["meta_qualifies"].fillna(False), d["meta_bet_side"].fillna(""))
+            ]
+        else:
+            d["Diversified META ± SD"] = "—"
+            d["META decision"] = "—"
         keep = [
-            "Game", "PT market", "Line used", "Portfolio mean ± SD", "portfolio_combos_used",
+            "Game", "PT market", "Line used", "Portfolio mean ± SD", "Diversified META ± SD",
+            "independent_communities", "meta_signal_sd", "meta_k", "META decision", "portfolio_combos_used",
             "selected_combos", "Mean direction", "Bet direction",
             "passes", "insufficient", "committee_direction", "home_bet_ranks", "away_bet_ranks",
         ]
+        keep = [c for c in keep if c in d.columns]
         return render.DataGrid(d[keep].rename(columns={
             "portfolio_combos_used": "Portfolio combos used", "selected_combos": "Combos", "passes": "Passes", "insufficient": "Insufficient",
+            "independent_communities": "Independent communities", "meta_signal_sd": "META signal (SD)", "meta_k": "META k",
             "committee_direction": "Combo consensus", "home_bet_ranks": "Home bet combos",
             "away_bet_ranks": "Away bet combos",
         }), filters=True, height="430px")
@@ -2349,11 +2639,12 @@ def server(input, output, session):
         scorable = d["availability_state"].astype(str).eq("SCORABLE")
         d["Decision"] = np.where(q, "BET " + d["bet_side"].astype(str), np.where(scorable, "PASS", "INSUFFICIENT"))
         keep = [
-            "Game", "portfolio_combo", "combo_rank", "combo_models", "PT market", "Line used", "Expected spread", "Mean ± SD",
+            "Game", "portfolio_combo", "combo_rank", "community", "primary_k", "combo_models", "PT market", "Line used", "Expected spread", "Mean ± SD",
             "k×SD decision band", "signal_sd", "available_models", "combo_size", "Decision",
         ]
         out = d[keep].rename(columns={
-            "portfolio_combo": "Combo", "combo_rank": "Search rank", "combo_models": "Models", "signal_sd": "Signal (SD)",
+            "portfolio_combo": "Combo", "combo_rank": "Search rank", "community": "Community", "primary_k": "Auto k",
+            "combo_models": "Models", "signal_sd": "Signal (SD)",
             "available_models": "Models available", "combo_size": "Combo size",
         })
         return render.DataGrid(out.sort_values(["Game", "Combo"]), filters=True, height="650px")
@@ -2373,6 +2664,92 @@ def server(input, output, session):
             "combo_memberships": "Used by combos", "source": "Source",
         })
         return render.DataGrid(d, filters=True, height="520px")
+
+
+    # ------------------------------------------------------------------
+    # Page 5: forecast hierarchy plots
+    # ------------------------------------------------------------------
+    @reactive.effect
+    def update_forecast_plot_games():
+        r = strategy_current_view_result()
+        if r is None:
+            ui.update_select("plot_game", choices={"": "Apply a portfolio on Page 4 first"}, selected="")
+            return
+        d = r.get("summary", pd.DataFrame()).copy()
+        if d.empty:
+            ui.update_select("plot_game", choices={"": "No scored games"}, selected="")
+            return
+        choices = {
+            str(row.game_join_key): f"{row.away} @ {row.home}"
+            for row in d.itertuples(index=False)
+        }
+        current = str(input.plot_game() or "")
+        selected = current if current in choices else next(iter(choices))
+        ui.update_select("plot_game", choices=choices, selected=selected)
+
+    def _forecast_plot_inputs():
+        key = str(input.plot_game() or "")
+        view = strategy_current_view_result()
+        up = upcoming_result()
+        if not key or view is None or up is None:
+            return None
+        summary = view.get("summary", pd.DataFrame()).copy()
+        detail = view.get("detail", pd.DataFrame()).copy()
+        all_preds = up.get("predictions", pd.DataFrame()).copy()
+        if summary.empty or detail.empty or all_preds.empty:
+            return None
+        sr = summary[summary["game_join_key"].astype(str).eq(key)]
+        dg = detail[detail["game_join_key"].astype(str).eq(key)].copy()
+        if sr.empty or dg.empty:
+            return None
+        row = sr.iloc[0]
+        away = str(row["away"]); home = str(row["home"])
+        ig = all_preds[
+            all_preds["away"].astype(str).eq(away)
+            & all_preds["home"].astype(str).eq(home)
+        ].copy()
+        if len(ig):
+            ig = ig.drop_duplicates("canonical_model_id", keep="first")
+        return row, dg, ig
+
+    @render.text
+    def forecast_plot_status():
+        z = _forecast_plot_inputs()
+        if z is None:
+            return "Refresh Page 2 and apply a finalist portfolio on Page 4 first."
+        row, dg, ig = z
+        selected = set(map(str, strategy.get().get("model_ids", [])))
+        used_now = int(ig["canonical_model_id"].astype(str).isin(selected).sum()) if len(ig) else 0
+        market = _spread_label(str(row["away"]), str(row["home"]), row["market_home_margin"])
+        meta_margin = row.get("meta_mean_home_margin", row.get("portfolio_mean_home_margin", np.nan))
+        meta = _spread_label(str(row["away"]), str(row["home"]), meta_margin)
+        sd = pd.to_numeric(pd.Series([row.get("meta_total_sd", row.get("portfolio_sd_across_combos"))]), errors="coerce").iloc[0]
+        sd_text = f" ± {float(sd):.2f}" if np.isfinite(sd) else ""
+        return (
+            f"{len(ig)} individual current models ({used_now} used by the finalist portfolio) · "
+            f"{int(row['portfolio_combos_used'])} scorable combinations · diversified META {meta}{sd_text} · line used {market}."
+        )
+
+    @render.plot
+    def forecast_plot():
+        z = _forecast_plot_inputs()
+        if z is None:
+            return None
+        row, dg, ig = z
+        s = strategy.get()
+        return build_forecast_plot(
+            str(input.plot_style() or "hierarchy"),
+            ig,
+            dg,
+            away=str(row["away"]),
+            home=str(row["home"]),
+            selected_model_ids=s.get("model_ids", []),
+            meta_mean=float(row.get("meta_mean_home_margin", row.get("portfolio_mean_home_margin", np.nan))),
+            meta_sd=float(row.get("meta_total_sd", row.get("portfolio_sd_across_combos", np.nan))) if np.isfinite(pd.to_numeric(pd.Series([row.get("meta_total_sd", row.get("portfolio_sd_across_combos"))]), errors="coerce").iloc[0]) else np.nan,
+            market_home_margin=float(row["market_home_margin"]),
+            pt_market_home_margin=float(row["pt_market_home_margin"]),
+            k=_selected_meta_k("Diversified META"),
+        )
 
 
 app = App(app_ui, server)

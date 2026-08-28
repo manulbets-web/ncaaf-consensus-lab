@@ -111,3 +111,17 @@ combo k:                     fixed at the selected primary k
 The key output is whether committee agreement improves chronological OOS
 performance and stability versus the single best combination and the ordinary
 base-model mean.
+
+
+## Implemented in v3.5.8
+
+The first committee implementation uses a rank-ordered 0.60 Jaccard community rule. A combination joins an existing community only when its model membership overlaps that community's best-ranked representative by at least 0.60; otherwise it starts a new community. This avoids transitive graph chaining.
+
+Each frozen finalist is evaluated over k = 0.25, 0.50, ..., 2.00 on discovery data only. The selected k maximizes a neighboring-threshold Wilson-floor criterion (with bet-count gates and volume tie-breaks), rather than maximizing one isolated historical point. The chosen k is frozen before holdout scoring.
+
+The diversified META spread is built in two stages:
+
+1. within each overlap community, average the scorable combination means;
+2. average the active community means with equal community weight.
+
+META uncertainty uses total-variance decomposition: average within-unit variance plus between-unit variance. Thus it reflects both disagreement inside combinations and disagreement between independent combination communities. META has its own discovery-selected k and is reported on both discovery and the untouched recent holdout. A naive equal-combination META remains visible as a benchmark.

@@ -939,11 +939,16 @@ def save_current_selection(
             mids = [str(x) for x in c.get("model_ids", []) if str(x)]
             if not mids:
                 continue
-            clean.append({
+            row = {
                 "rank": int(c.get("rank", len(clean) + 1)),
                 "model_ids": mids,
                 "model_names": [model_name_map.get(x, x) for x in mids],
-            })
+            }
+            if c.get("k") is not None:
+                row["k"] = float(c.get("k"))
+            if c.get("community") is not None:
+                row["community"] = int(c.get("community"))
+            clean.append(row)
         if clean:
             payload["combinations"] = clean
     path = root / "data/strategy/current_week_selection.json"
