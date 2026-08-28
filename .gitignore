@@ -1,0 +1,9 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+.posit/
+data/raw/
+data/snapshots/
+data/strategy/
+outputs/current_week/

@@ -1,0 +1,113 @@
+# Combination Committee / Hypergraph Design
+
+The next ensemble layer should **not** brute-force "combinations of
+combinations." That would create a much larger multiple-testing problem and
+would let the same base model vote dozens of times simply because it appears
+inside many overlapping subsets.
+
+Instead use a **committee of stable combinations**.
+
+## Graph
+
+Treat the system as a bipartite / hypergraph:
+
+```text
+base models  ->  candidate combinations  ->  game-side votes
+```
+
+A combination node contains 4–8 base-model nodes.
+
+For a given game each combination computes the same fixed statistic:
+
+```text
+combo mean margin
+combo SD
+edge = mean - market
+signal = abs(edge) / SD
+```
+
+It abstains unless the normal N and k gates pass.
+
+## Prevent combinatorial echo
+
+Two combinations such as
+
+```text
+A+B+C+D+E
+A+B+C+D+F
+```
+
+are not independent voters.
+
+Create a combination-similarity graph using Jaccard overlap:
+
+```text
+J(A,B) = |models_A intersect models_B| / |models_A union models_B|
+```
+
+Optionally augment this with historical decision/edge correlation.
+
+Cluster highly overlapping combinations into communities. Each **community
+gets one vote**, regardless of how many near-duplicate combinations it
+contains.
+
+That avoids a model such as Sasser being counted 30 times because Sasser
+appears in 30 high-ranked subsets.
+
+## Baseline committee rule
+
+Use the top N combinations selected using training data only.
+
+For each test/current game:
+
+1. score each combination independently;
+2. inactive combinations abstain;
+3. collapse active combination votes within overlap communities;
+4. each active community casts one Home/Away vote;
+5. report:
+   - active combinations,
+   - active independent communities,
+   - community vote share,
+   - unique base-model support,
+   - median combination signal,
+   - range of combination edges.
+
+The first version should use **equal community votes**.
+
+Do not weight votes by retrospective ROI. A secondary sensitivity analysis can
+weight communities by how often their member combinations recur across
+chronological training folds.
+
+## Chronological validation
+
+For every fold:
+
+```text
+training weeks
+    -> exhaustive combination ranking
+    -> freeze top N combinations
+    -> freeze overlap graph/communities
+    -> next two weeks
+    -> committee votes
+```
+
+The graph must be rebuilt using training information only.
+
+This tests the actual prospective policy rather than asking whether one exact
+combination happened to remain optimal.
+
+## Candidate decision grid
+
+Do not optimize all of these simultaneously at first. A compact grid is enough:
+
+```text
+top N combinations:          10, 25, 50
+Jaccard community threshold: 0.50, 0.60, 0.70
+minimum active communities:  3, 4, 5
+community agreement:         0.60, 0.67, 0.75
+combo k:                     fixed at the selected primary k
+```
+
+The key output is whether committee agreement improves chronological OOS
+performance and stability versus the single best combination and the ordinary
+base-model mean.
