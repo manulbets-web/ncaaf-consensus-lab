@@ -14,7 +14,6 @@ from shiny import App, reactive, render, ui
 from engine import load_strategy_data
 from forecast_plots import build_forecast_plot
 from committee import analyze_finalist_portfolio
-from weighting_experiment import analyze_weighting_experiment
 from current_week import (
     refresh_and_build_current_week,
     build_current_board_from_cached_sources,
@@ -64,13 +63,20 @@ ALL_MODEL_CHOICES = {
     for mid in ALL_MODEL_IDS
 }
 
+# Historical discovery/holdout periods must be graded periods. DATA may also
+# contain current/future rows with season/week populated but no final outcome.
+_hist_actual = pd.to_numeric(DATA.get("actual_margin"), errors="coerce")
+_hist_market = pd.to_numeric(DATA.get("market_margin"), errors="coerce")
+_HISTORICAL_GRADED_MASK = _hist_actual.notna() & _hist_market.notna()
+_HISTORICAL_GRADED_DATA = DATA.loc[_HISTORICAL_GRADED_MASK].copy()
+
 HISTORICAL_SEASONS = sorted(
-    pd.to_numeric(DATA["season"], errors="coerce")
+    pd.to_numeric(_HISTORICAL_GRADED_DATA["season"], errors="coerce")
     .dropna().astype(int).unique().tolist()
 )
 SEASON_CHOICES = {str(y): str(y) for y in HISTORICAL_SEASONS}
 
-_period_frame = DATA[["season", "week"]].copy()
+_period_frame = _HISTORICAL_GRADED_DATA[["season", "week"]].copy()
 _period_frame["season"] = pd.to_numeric(_period_frame["season"], errors="coerce")
 _period_frame["week"] = pd.to_numeric(_period_frame["week"], errors="coerce")
 _period_frame = _period_frame.dropna().drop_duplicates()
@@ -262,7 +268,7 @@ app_ui = ui.page_fluid(
                     ui.tags.li(ui.strong("Build a strategy on Page 3."), " Automatic screening ranks only models that are posting this week, searches promising model combinations on historical discovery data, and evaluates frozen finalists on a recent chronological holdout."),
                     ui.tags.li(ui.strong("Choose one or more finalists on Page 3."), " The selected combinations become C1, C2, C3, and so on for the current session."),
                     ui.tags.li(ui.strong("Apply them on Page 4."), " Each combination independently forms a mean projected spread, an SD across its component models, and a BET/PASS decision. The page also summarizes agreement across combinations."),
-                    ui.tags.li(ui.strong("Patrick\'s one-click recipe on Page 4."), " After Page 2 is refreshed, it screens the current-week eligible pool using 6 held-out weeks, set sizes 5–13, k = 0.50 SD, and automatically applies the top 12 combinations. The weighting experiment then compares equal, reliability, and shrunk-reliability internal weights without changing the live picks."),
+                    ui.tags.li(ui.strong("Patrick\'s one-click recipe on Page 4."), " After Page 2 is refreshed, it screens the current-week eligible pool using 6 held-out weeks, set sizes 5–13, k = 0.50 SD, automatically applies the top 12 combinations, tunes each finalist's k on discovery data, and builds the overlap-adjusted META backtest."),
                     ui.tags.li(ui.strong("Visualize the hierarchy on Page 5."), " Pick any current game to see every mapped model projection, the selected finalist-combination forecasts, and the final portfolio/meta estimate against the market line."),
                 ),
             ),
@@ -292,20 +298,6 @@ app_ui = ui.page_fluid(
                     ),
                 ),
                 col_widths=(6, 6),
-            ),
-            ui.card(
-                ui.card_header("Experimental unequal model weighting"),
-                ui.p(
-                    "Page 4 keeps equal weighting as the production baseline but also asks whether models inside C1–C12 should contribute unequally. "
-                    "Reliability weights are based on inverse discovery-period forecast MSE; noisy MSE estimates are shrunk toward the combination median before inversion. "
-                    "A safer shrunk-reliability version then moves those weights 50% back toward equal weighting."
-                ),
-                ui.tags.ul(
-                    ui.tags.li(ui.strong("No holdout leakage:"), " model weights and k are learned on discovery only."),
-                    ui.tags.li(ui.strong("Forecast test first:"), " compare holdout MAE/RMSE before interpreting ATS/ROI."),
-                    ui.tags.li(ui.strong("META test too:"), " the diversified final consensus is rebuilt and backtested under all three internal weighting schemes."),
-                    ui.tags.li(ui.strong("Production remains equal-weighted:"), " weighted picks are experimental until the holdout evidence supports changing the live strategy."),
-                ),
             ),
             ui.card(
                 ui.card_header("Line shopping / alternate lines"),
@@ -514,7 +506,7 @@ app_ui = ui.page_fluid(
                         col_widths=(4, 4, 4),
                     ),
                     ui.p(
-                        "The holdout is chronological by season/week, not by whole season. "
+                        "The holdout uses completed/graded chronology weeks by season/week, not by whole season. "
                         "This lets newer models contribute discovery history and still receive a genuine recent holdout.",
                         class_="muted",
                     ),
@@ -639,9 +631,9 @@ app_ui = ui.page_fluid(
                 ui.card_header("Patrick's recommended settings"),
                 ui.p(
                     "One-click current-week recipe: Top 20 currently posting models by discovery Wilson lower bound; "
-                    "latest 6 chronology weeks held out; combination sizes 5–13; 0.50 SD search anchor; "
+                    "latest 6 completed chronology weeks held out; combination sizes 5–13; 0.50 SD search anchor; "
                     "top 12 discovery-ranked combinations frozen, then each finalist gets an automatic stable k from 0.25–2.00 SD. "
-                    "Near-duplicate combinations are collapsed into overlap communities for the final META estimate and backtest. A discovery-only unequal-weighting experiment is also run afterward, but equal weighting remains the live recommendation.",
+                    "Near-duplicate combinations are collapsed into overlap communities for the final META estimate and backtest. Models inside every individual ensemble are equal-weighted.",
                     class_="muted",
                 ),
                 ui.input_action_button(
@@ -671,7 +663,7 @@ app_ui = ui.page_fluid(
                 ui.card_header("Final consensus: overlap, automatic k, and META backtest"),
                 ui.p(
                     "The top combinations are often close relatives. A 0.60 Jaccard overlap groups near-duplicates into communities so one core model family cannot masquerade as many independent votes. "
-                    "Each finalist's k is selected from 0.25–2.00 SD using discovery data only; the six-week holdout remains untouched until those choices are frozen. "
+                    "Each finalist's k is selected from 0.25–2.00 SD using discovery data only; the six completed-week holdout remains untouched until those choices are frozen. "
                     "The diversified META forecast gives each overlap community equal influence and combines within-combo plus between-community dispersion.",
                     class_="muted",
                 ),
@@ -682,34 +674,13 @@ app_ui = ui.page_fluid(
                     ui.value_box("Holdout META ATS", ui.output_text("committee_holdout_ats")),
                     col_widths=(3, 3, 3, 3),
                 ),
+                ui.p(ui.strong("Backtest split: "), ui.output_text("committee_holdout_window"), class_="muted"),
                 ui.h5("Final META backtest"),
                 ui.output_data_frame("committee_meta_backtest_table"),
                 ui.h5("Automatic k by finalist"),
                 ui.output_data_frame("committee_combo_k_table"),
                 ui.h5("Overlap communities"),
                 ui.output_data_frame("committee_overlap_table"),
-            ),
-            ui.card(
-                ui.card_header("Within-ensemble weighting experiment"),
-                ui.p(
-                    "Experimental only: the live C1–C12 and META recommendations above remain equal-weighted. "
-                    "For each frozen finalist, model weights are learned from discovery outcomes only, the method gets its own discovery-selected k, "
-                    "and frozen weights + k are then evaluated on the untouched holdout. Lower holdout MAE/RMSE is the primary forecast-quality test; ATS/ROI are secondary betting outcomes.",
-                    class_="muted",
-                ),
-                ui.h5("Across-finalist holdout comparison"),
-                ui.output_data_frame("weighting_method_summary_table"),
-                ui.h5("Diversified META backtest by internal weighting method"),
-                ui.output_data_frame("weighting_meta_table"),
-                ui.h5("C1–C12: equal vs weighted holdout results"),
-                ui.output_data_frame("weighting_combo_table"),
-                ui.h5("Discovery-fitted model weights"),
-                ui.p(
-                    "Relative weight 1.00 = equal weight. Reliability uses inverse discovery MSE after shrinking noisy MSE estimates toward the combo median; "
-                    "shrunk reliability then moves those weights 50% back toward equal and limits extreme relative weights.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("weighting_model_weights_table"),
             ),
             ui.card(
                 ui.card_header("Line shopping / alternate market"),
@@ -776,8 +747,8 @@ app_ui = ui.page_fluid(
         ui.nav_panel(
             "5 · Forecast Plots",
             ui.p(
-                "Visualizes the current forecast hierarchy for one game at a time: all mapped PredictionTracker models → "
-                "selected finalist combinations → the diversity-adjusted META estimate. Alternate lines entered on Page 4 are reflected automatically.",
+                "Visualizes the complete current forecast hierarchy for one game at a time: every mapped model posting for the game → "
+                "every selected finalist ensemble → the diversity-adjusted META estimate. Models do not need to belong to a finalist to appear. Alternate lines entered on Page 4 are reflected automatically.",
                 class_="muted",
             ),
             ui.layout_columns(
@@ -801,15 +772,15 @@ app_ui = ui.page_fluid(
             ),
             ui.output_text("forecast_plot_status"),
             ui.card(
-                ui.card_header("Current-game forecast"),
-                ui.output_plot("forecast_plot", height="820px"),
+                ui.card_header("Complete current-game forecast hierarchy"),
+                ui.output_plot("forecast_plot", height="1500px"),
             ),
             ui.card(
                 ui.card_header("What each layer means"),
                 ui.tags.ul(
-                    ui.tags.li(ui.strong("Individual models"), ": every mapped model currently posting for that game. Models used by at least one selected finalist are highlighted."),
-                    ui.tags.li(ui.strong("C1, C2, ..."), ": each finalist's collective expected spread. In hierarchy view, the horizontal bar is ±1 SD among models inside that combination."),
-                    ui.tags.li(ui.strong("META"), ": the diversity-adjusted final consensus. Near-duplicate finalist sets are collapsed into overlap communities, each community gets equal influence, and the uncertainty bar combines within-combo plus between-community dispersion."),
+                    ui.tags.li(ui.strong("Individual models"), ": every mapped model currently posting for that game gets its own labeled row, including models not selected into C1–C12. Models used by at least one finalist are highlighted, with the number of finalist ensembles using each model shown at right."),
+                    ui.tags.li(ui.strong("C1, C2, ..."), ": every finalist ensemble gets its own row. The thin interval is ±1 within-ensemble SD; the heavier interval is that finalist's actual ±k×SD decision band."),
+                    ui.tags.li(ui.strong("META"), ": the diversity-adjusted final consensus. Near-duplicate finalist sets are collapsed into overlap communities, each community gets equal influence, and both ±1 total SD and the frozen META ±k×SD decision band are shown."),
                     ui.tags.li(ui.strong("Market"), ": the line currently being used on Page 4, including any session-only line-shopping override. If overridden, the original PredictionTracker line is also shown."),
                 ),
                 ui.p(
@@ -1872,15 +1843,6 @@ def server(input, output, session):
             standard_price=-110,
         )
         combos = list(committee_analysis.get("combinations", combos))
-        weighting_experiment = analyze_weighting_experiment(
-            DATA, combos, discovery_periods, holdout_periods,
-            min_available_models=min_n,
-            thresholds=K_GRID,
-            combo_min_bets=max(20, int(input.auto_min_bets())),
-            meta_min_bets=max(30, int(input.auto_min_bets())),
-            min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
-            standard_price=-110,
-        )
         # Union is retained for display/backward compatibility; Page 4 scores each combo separately.
         union_ids = list(dict.fromkeys(mid for c in combos for mid in c["model_ids"]))
         state = {
@@ -1891,7 +1853,8 @@ def server(input, output, session):
             "primary_k": k,
             "min_available_models": min_n,
             "committee_analysis": committee_analysis,
-            "weighting_experiment": weighting_experiment,
+            "discovery_periods": tuple(discovery_periods),
+            "holdout_periods": tuple(holdout_periods),
         }
         strategy.set(state)
         if not CLOUD_MODE:
@@ -2140,16 +2103,8 @@ def server(input, output, session):
                 min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
                 standard_price=-110,
             )
-            combos = list(committee_analysis.get("combinations", combos))
-            weighting_experiment = analyze_weighting_experiment(
-                DATA, combos, discovery_periods, holdout_periods,
-                min_available_models=PATRICK_MIN_AVAILABLE,
-                thresholds=K_GRID,
-                combo_min_bets=PATRICK_MIN_SEARCH_BETS,
-                meta_min_bets=PATRICK_MIN_SEARCH_BETS,
-                min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
-                standard_price=-110,
-            )
+            combos = list(committee_analysis.get("combinations", combos))[:PATRICK_FINALISTS]
+            # Hard-cap the one-click preset to its documented top-12 contract.
             union_ids = list(dict.fromkeys(mid for c in combos for mid in c["model_ids"]))
             strategy.set({
                 "source": "patrick_recommended",
@@ -2159,7 +2114,8 @@ def server(input, output, session):
                 "primary_k": PATRICK_K,
                 "min_available_models": PATRICK_MIN_AVAILABLE,
                 "committee_analysis": committee_analysis,
-                "weighting_experiment": weighting_experiment,
+                    "discovery_periods": tuple(discovery_periods),
+                "holdout_periods": tuple(holdout_periods),
             })
             ui.update_selectize(
                 "auto_portfolio_ranks",
@@ -2188,15 +2144,11 @@ def server(input, output, session):
                 games = len(result.get("summary", pd.DataFrame())) if result else 0
                 patrick_state.set({
                     "phase": "complete",
-                    "message": f"Complete: top {len(strategy.get().get('combinations', []))} combinations auto-tuned across k = 0.25–2.00, overlap-adjusted, weighting experiment evaluated, and applied to {games} current games.",
+                    "message": f"Complete: top {len(strategy.get().get('combinations', []))} combinations auto-tuned across k = 0.25–2.00, overlap-adjusted, and applied to {games} current games.",
                 })
 
     def _active_committee_analysis() -> dict:
         a = strategy.get().get("committee_analysis", {})
-        return a if isinstance(a, dict) else {}
-
-    def _active_weighting_experiment() -> dict:
-        a = strategy.get().get("weighting_experiment", {})
         return a if isinstance(a, dict) else {}
 
     def _selected_meta_k(method: str = "Diversified META") -> float:
@@ -2554,6 +2506,27 @@ def server(input, output, session):
         bets = int(q.iloc[0].get("bets", 0) or 0)
         return f"{100*float(ats):.1f}% ({bets} bets)" if np.isfinite(ats) else f"— ({bets} bets)"
 
+    @render.text
+    def committee_holdout_window():
+        periods = tuple(strategy.get().get("holdout_periods", ()) or ())
+        if not periods:
+            return "No holdout selected."
+        wanted = set((int(y), int(w)) for y, w in periods)
+        d = _HISTORICAL_GRADED_DATA.copy()
+        yy = pd.to_numeric(d["season"], errors="coerce")
+        ww = pd.to_numeric(d["week"], errors="coerce")
+        mask = pd.Series([
+            (int(y), int(w)) in wanted if pd.notna(y) and pd.notna(w) else False
+            for y, w in zip(yy, ww)
+        ], index=d.index)
+        q = d.loc[mask]
+        games = int(q["game_key"].astype(str).nunique()) if "game_key" in q.columns else 0
+        first, last = periods[0], periods[-1]
+        return (
+            f"{int(first[0])} W{int(first[1])}–{int(last[0])} W{int(last[1])} "
+            f"· {len(periods)} completed weeks · {games:,} graded games"
+        )
+
     @render.data_frame
     def committee_meta_backtest_table():
         a = _active_committee_analysis()
@@ -2600,84 +2573,6 @@ def server(input, output, session):
         return render.DataGrid(d[keep].rename(columns={
             "combo": "Combo", "search_rank": "Search rank", "community": "Community", "combo_size": "N",
         }), filters=True, height="360px")
-
-    @render.data_frame
-    def weighting_method_summary_table():
-        a = _active_weighting_experiment()
-        d = a.get("method_summary", pd.DataFrame()).copy() if a else pd.DataFrame()
-        if not isinstance(d, pd.DataFrame) or d.empty:
-            return render.DataGrid(pd.DataFrame())
-        for c in ["median_holdout_rmse", "median_holdout_rmse_delta_vs_equal", "median_holdout_mae_delta_vs_equal"]:
-            if c in d.columns:
-                d[c] = pd.to_numeric(d[c], errors="coerce").round(3)
-        keep = [c for c in ["weight_method_label", "combos_evaluated", "median_holdout_rmse", "median_holdout_rmse_delta_vs_equal", "median_holdout_mae_delta_vs_equal", "combos_rmse_improved", "combos_mae_improved"] if c in d.columns]
-        d = d[keep].rename(columns={
-            "weight_method_label": "Internal weighting", "combos_evaluated": "Combos evaluated",
-            "median_holdout_rmse": "Median holdout RMSE",
-            "median_holdout_rmse_delta_vs_equal": "Median Δ RMSE vs equal",
-            "median_holdout_mae_delta_vs_equal": "Median Δ MAE vs equal",
-            "combos_rmse_improved": "Combos with lower RMSE", "combos_mae_improved": "Combos with lower MAE",
-        })
-        return render.DataGrid(d, filters=False, height="230px")
-
-    @render.data_frame
-    def weighting_meta_table():
-        a = _active_weighting_experiment()
-        d = a.get("meta_summary", pd.DataFrame()).copy() if a else pd.DataFrame()
-        if not isinstance(d, pd.DataFrame) or d.empty:
-            return render.DataGrid(pd.DataFrame())
-        d = _pct_frame(d, ["ats_pct", "roi", "wilson_low", "delta_ats_pct_vs_equal_holdout", "delta_roi_vs_equal_holdout"])
-        for c in ["mae", "rmse", "delta_mae_vs_equal_holdout", "delta_rmse_vs_equal_holdout"]:
-            if c in d.columns:
-                d[c] = pd.to_numeric(d[c], errors="coerce").round(3)
-        keep = [c for c in ["weight_method_label", "period", "selected_k", "scorable_games", "mae", "rmse", "delta_mae_vs_equal_holdout", "delta_rmse_vs_equal_holdout", "bets", "wins", "losses", "ats_pct", "roi", "wilson_low"] if c in d.columns]
-        d = d[keep].rename(columns={
-            "weight_method_label": "Internal weighting", "period": "Period", "selected_k": "Frozen META k",
-            "scorable_games": "Scorable games", "mae": "Forecast MAE", "rmse": "Forecast RMSE",
-            "delta_mae_vs_equal_holdout": "Δ MAE vs equal holdout", "delta_rmse_vs_equal_holdout": "Δ RMSE vs equal holdout",
-            "bets": "Bets", "wins": "Wins", "losses": "Losses", "ats_pct": "ATS %", "roi": "ROI %", "wilson_low": "Wilson LB %",
-        })
-        return render.DataGrid(d, filters=False, height="320px")
-
-    @render.data_frame
-    def weighting_combo_table():
-        a = _active_weighting_experiment()
-        d = a.get("combo_summary", pd.DataFrame()).copy() if a else pd.DataFrame()
-        if not isinstance(d, pd.DataFrame) or d.empty:
-            return render.DataGrid(pd.DataFrame())
-        d["Combo"] = "C" + pd.to_numeric(d["portfolio_combo"], errors="coerce").astype("Int64").astype(str)
-        d = _pct_frame(d, ["holdout_ats_pct", "holdout_roi", "holdout_wilson_low", "holdout_ats_delta_vs_equal", "holdout_roi_delta_vs_equal"])
-        for c in ["discovery_rmse", "holdout_mae", "holdout_rmse", "holdout_mae_delta_vs_equal", "holdout_rmse_delta_vs_equal", "holdout_mean_effective_n"]:
-            if c in d.columns:
-                d[c] = pd.to_numeric(d[c], errors="coerce").round(3)
-        keep = [c for c in ["Combo", "community", "weight_method_label", "selected_k", "discovery_rmse", "holdout_mae", "holdout_rmse", "holdout_mae_delta_vs_equal", "holdout_rmse_delta_vs_equal", "holdout_mean_effective_n", "holdout_bets", "holdout_ats_pct", "holdout_roi", "holdout_wilson_low"] if c in d.columns]
-        d = d[keep].rename(columns={
-            "community": "Community", "weight_method_label": "Internal weighting", "selected_k": "Auto k",
-            "discovery_rmse": "Discovery RMSE", "holdout_mae": "Holdout MAE", "holdout_rmse": "Holdout RMSE",
-            "holdout_mae_delta_vs_equal": "Δ MAE vs equal", "holdout_rmse_delta_vs_equal": "Δ RMSE vs equal",
-            "holdout_mean_effective_n": "Effective N", "holdout_bets": "Holdout bets",
-            "holdout_ats_pct": "Holdout ATS %", "holdout_roi": "Holdout ROI %", "holdout_wilson_low": "Holdout Wilson LB %",
-        })
-        return render.DataGrid(d, filters=True, height="420px")
-
-    @render.data_frame
-    def weighting_model_weights_table():
-        a = _active_weighting_experiment()
-        d = a.get("model_weights", pd.DataFrame()).copy() if a else pd.DataFrame()
-        if not isinstance(d, pd.DataFrame) or d.empty:
-            return render.DataGrid(pd.DataFrame())
-        d["Combo"] = "C" + pd.to_numeric(d["portfolio_combo"], errors="coerce").astype("Int64").astype(str)
-        d["Model"] = d["canonical_model_id"].astype(str).map(lambda x: MODEL_NAME_MAP.get(x, x))
-        for c in ["discovery_mae", "discovery_rmse", "discovery_bias", "relative_weight_reliability", "relative_weight_shrunk_reliability"]:
-            if c in d.columns:
-                d[c] = pd.to_numeric(d[c], errors="coerce").round(3)
-        keep = [c for c in ["Combo", "community", "Model", "discovery_n", "discovery_mae", "discovery_rmse", "relative_weight_reliability", "relative_weight_shrunk_reliability"] if c in d.columns]
-        d = d[keep].rename(columns={
-            "community": "Community", "discovery_n": "Discovery N", "discovery_mae": "Discovery MAE",
-            "discovery_rmse": "Discovery RMSE", "relative_weight_reliability": "Reliability relative weight",
-            "relative_weight_shrunk_reliability": "Shrunk relative weight",
-        })
-        return render.DataGrid(d, filters=True, height="420px")
 
     @render.data_frame
     def strategy_combo_summary_table():
