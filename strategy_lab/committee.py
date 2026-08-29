@@ -11,6 +11,145 @@ import pandas as pd
 DEFAULT_K_GRID = tuple(np.round(np.arange(0.25, 2.01, 0.25), 2))
 
 
+META_SPREAD_BUCKETS = (
+    ("0–3.5", 0.0, 3.5),
+    ("4–7.5", 3.5, 7.5),
+    ("8–14.5", 7.5, 14.5),
+    ("15–21.5", 14.5, 21.5),
+    ("22–27.5", 21.5, 27.5),
+    ("28–34.5", 27.5, 34.5),
+    ("35+", 34.5, None),
+)
+
+
+def meta_spread_bucket_label(value: float) -> str:
+    """Return the configured absolute-market-spread regime label."""
+    try:
+        x = abs(float(value))
+    except Exception:
+        return ""
+    if not np.isfinite(x):
+        return ""
+    for label, lower, upper in META_SPREAD_BUCKETS:
+        if upper is None:
+            if x > float(lower):
+                return label
+        elif float(lower) <= 0:
+            if x <= float(upper):
+                return label
+        elif x > float(lower) and x <= float(upper):
+            return label
+    return ""
+
+
+def summarize_meta_spread_regimes(
+    frame: pd.DataFrame,
+    selected_k: float,
+    *,
+    period: str,
+    min_active_units: int = 2,
+    standard_price: int = -110,
+    buckets=META_SPREAD_BUCKETS,
+) -> pd.DataFrame:
+    """Summarize a frozen META strategy by absolute market-spread regime.
+
+    Forecast-error metrics use all scorable games in each regime. Betting
+    metrics use only the frozen META k and therefore do not optimize by spread
+    bucket. Favorite/underdog splits describe the side actually bet.
+    """
+    cols = [
+        "period", "bucket_order", "line_bucket", "selected_k",
+        "scorable_games", "forecast_mae", "market_mae",
+        "delta_mae_vs_market", "forecast_bias", "bets", "wins", "losses",
+        "pushes", "ats_pct", "roi", "wilson_low", "mean_abs_edge",
+        "favorite_bets", "favorite_ats_pct", "underdog_bets",
+        "underdog_ats_pct",
+    ]
+    if frame is None or frame.empty:
+        return pd.DataFrame(columns=cols)
+
+    d = frame.copy()
+    market = pd.to_numeric(d.get("market_margin"), errors="coerce").to_numpy(dtype=float)
+    actual = pd.to_numeric(d.get("actual_margin"), errors="coerce").to_numpy(dtype=float)
+    mean = pd.to_numeric(d.get("meta_mean"), errors="coerce").to_numpy(dtype=float)
+    edge = pd.to_numeric(d.get("meta_edge"), errors="coerce").to_numpy(dtype=float)
+    signal = pd.to_numeric(d.get("meta_signal"), errors="coerce").to_numpy(dtype=float)
+    active = pd.to_numeric(d.get("active_units"), errors="coerce").fillna(0).to_numpy(dtype=float)
+    cover = actual - market
+    abs_market = np.abs(market)
+
+    gate = (
+        (active >= int(min_active_units))
+        & np.isfinite(market) & np.isfinite(actual) & np.isfinite(mean)
+        & (np.isfinite(signal) | np.isinf(signal))
+    )
+    qualifies = gate & (signal >= float(selected_k))
+    pushes = qualifies & (np.abs(cover) < 1e-12)
+    graded = qualifies & ~pushes
+    wins = graded & ((edge * cover) > 0)
+    losses = graded & ~wins
+    favorite_side = qualifies & ((edge * market) > 0)
+    underdog_side = qualifies & ((edge * market) < 0)
+    win_units = 100.0 / abs(float(standard_price)) if standard_price < 0 else float(standard_price) / 100.0
+
+    rows = []
+    for order, (label, lower, upper) in enumerate(tuple(buckets), start=1):
+        if upper is None:
+            in_bucket = abs_market > float(lower)
+        elif float(lower) <= 0:
+            in_bucket = abs_market <= float(upper)
+        else:
+            in_bucket = (abs_market > float(lower)) & (abs_market <= float(upper))
+        sc = gate & in_bucket
+        b = qualifies & in_bucket
+        g = graded & in_bucket
+        w = wins & in_bucket
+        l = losses & in_bucket
+        p = pushes & in_bucket
+        fav_g = g & favorite_side
+        dog_g = g & underdog_side
+        fav_w = w & favorite_side
+        dog_w = w & underdog_side
+        n_sc = int(sc.sum())
+        n_bets = int(g.sum())
+        n_w = int(w.sum())
+        n_l = int(l.sum())
+        n_p = int(p.sum())
+        units = n_w * win_units - n_l
+        ats = n_w / n_bets if n_bets else np.nan
+        roi = units / n_bets if n_bets else np.nan
+        forecast_mae = float(np.nanmean(np.abs(mean[sc] - actual[sc]))) if n_sc else np.nan
+        market_mae = float(np.nanmean(np.abs(market[sc] - actual[sc]))) if n_sc else np.nan
+        bias = float(np.nanmean(mean[sc] - actual[sc])) if n_sc else np.nan
+        mean_abs_edge = float(np.nanmean(np.abs(edge[b]))) if np.any(b) else np.nan
+        fav_n = int(fav_g.sum())
+        dog_n = int(dog_g.sum())
+        rows.append({
+            "period": str(period),
+            "bucket_order": order,
+            "line_bucket": label,
+            "selected_k": float(selected_k),
+            "scorable_games": n_sc,
+            "forecast_mae": forecast_mae,
+            "market_mae": market_mae,
+            "delta_mae_vs_market": forecast_mae - market_mae if np.isfinite(forecast_mae) and np.isfinite(market_mae) else np.nan,
+            "forecast_bias": bias,
+            "bets": n_bets,
+            "wins": n_w,
+            "losses": n_l,
+            "pushes": n_p,
+            "ats_pct": ats,
+            "roi": roi,
+            "wilson_low": _wilson_lower(n_w, n_bets) if n_bets else np.nan,
+            "mean_abs_edge": mean_abs_edge,
+            "favorite_bets": fav_n,
+            "favorite_ats_pct": (int(fav_w.sum()) / fav_n) if fav_n else np.nan,
+            "underdog_bets": dog_n,
+            "underdog_ats_pct": (int(dog_w.sum()) / dog_n) if dog_n else np.nan,
+        })
+    return pd.DataFrame(rows, columns=cols)
+
+
 def _wilson_lower(wins: int, n: int, z: float = 1.96) -> float:
     if n <= 0:
         return np.nan
@@ -629,6 +768,30 @@ def analyze_finalist_portfolio(
                 **{kk: vv for kk, vv in row.items() if kk != "k"},
             })
 
+    # 4) Diagnose the frozen final META strategy by absolute market-spread
+    # regime. This is descriptive only: the same discovery-selected META k is
+    # used in every bucket, so the tail analysis cannot retrospectively choose
+    # a more favorable threshold.
+    selected_meta_df = pd.DataFrame(selected_meta)
+    diversified_k = np.nan
+    if len(selected_meta_df):
+        qk = selected_meta_df[selected_meta_df["method"].astype(str).eq("Diversified META")]
+        if len(qk):
+            diversified_k = pd.to_numeric(pd.Series([qk.iloc[0].get("selected_k")]), errors="coerce").iloc[0]
+    if not np.isfinite(diversified_k):
+        diversified_k = 0.50
+    spread_rows = []
+    for period_name, frame_key in (("Discovery", "discovery"), ("Holdout", "holdout")):
+        frame = meta_frames.get(("Diversified META", frame_key), pd.DataFrame())
+        q = summarize_meta_spread_regimes(
+            frame, float(diversified_k), period=period_name,
+            min_active_units=int(min_meta_communities),
+            standard_price=standard_price,
+        )
+        if len(q):
+            spread_rows.append(q)
+    meta_spread_scale = pd.concat(spread_rows, ignore_index=True) if spread_rows else pd.DataFrame()
+
     overlap_summary = overlap_extra["summary"]
     return {
         "combinations": combos,
@@ -640,8 +803,9 @@ def analyze_finalist_portfolio(
         "combo_k_selected": selected_k,
         "meta_discovery_grid": pd.concat(discovery_profiles, ignore_index=True) if discovery_profiles else pd.DataFrame(),
         "meta_summary": pd.DataFrame(holdout_summaries),
-        "meta_selected": pd.DataFrame(selected_meta),
+        "meta_selected": selected_meta_df,
         "meta_frames": meta_frames,
+        "meta_spread_scale": meta_spread_scale,
         "overlap_threshold": float(overlap_threshold),
         "min_meta_communities": int(min_meta_communities),
     }

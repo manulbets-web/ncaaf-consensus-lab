@@ -13,7 +13,7 @@ from shiny import App, reactive, render, ui
 
 from engine import load_strategy_data
 from forecast_plots import build_forecast_plot
-from committee import analyze_finalist_portfolio
+from committee import analyze_finalist_portfolio, meta_spread_bucket_label
 from current_week import (
     refresh_and_build_current_week,
     build_current_board_from_cached_sources,
@@ -326,7 +326,7 @@ app_ui = ui.page_fluid(
                     ui.tags.li(ui.strong("Patrick\'s recommended recipe:"), " Top 26 current-week models by discovery Wilson lower bound (minimum 25 discovery bets/model), hold out the latest 6 completed weeks with adequate model coverage, screen set sizes 4–7 at k = 0.75 SD, rank by Wilson lower bound, freeze the top 19, then automatically tune each finalist's k across 0.25–2.00 SD on discovery only and build a diversity-adjusted META backtest."),
                     ui.tags.li("The Page 4 button runs that recipe end-to-end; Page 3 remains available when you want to inspect or alter the research settings."),
                     ui.tags.li("Treat the discovery ranking as model-combination discovery and the recent held-out weeks as the cleaner validation check."),
-                    ui.tags.li("Use the spread-scale diagnostics to see whether a finalist behaves differently on small, moderate, or very large market spreads."),
+                    ui.tags.li("On Page 4, use the Absolute spread trust check to compare the final Diversified META strategy across small spreads through 35+, including META-vs-market MAE and separate favorite/underdog betting performance."),
                 ),
                 ui.p("CFB Picker is currently inactive and can be added back when its current-season feed is available.", class_="muted"),
             ),
@@ -699,6 +699,22 @@ app_ui = ui.page_fluid(
                 ui.output_data_frame("committee_combo_k_table"),
                 ui.h5("Overlap communities"),
                 ui.output_data_frame("committee_overlap_table"),
+            ),
+            ui.card(
+                ui.card_header("Absolute spread trust check"),
+                ui.p(
+                    "Large favorites and underdogs are a distinct forecasting regime. This diagnostic keeps the frozen Diversified META strategy unchanged, then asks how its forecast accuracy and betting performance vary with |market spread|. "
+                    "The tail is split into 22–27.5, 28–34.5, and 35+ so a -38 game is not pooled with an ordinary -23 favorite. Negative ΔMAE vs market means META was closer to the final margin than the market on average.",
+                    class_="muted",
+                ),
+                ui.h5("Current slate mapped to historical spread regimes"),
+                ui.output_data_frame("committee_current_spread_context_table"),
+                ui.h5("Diversified META performance by |market spread|"),
+                ui.output_data_frame("committee_meta_spread_table"),
+                ui.p(
+                    "These rows are diagnostics, not new optimization rules. The same discovery-selected META k is used in every bucket. Favorite/underdog columns classify the side actually bet, which is especially important for very large spreads.",
+                    class_="muted",
+                ),
             ),
             ui.card(
                 ui.card_header("Line shopping / alternate market"),
@@ -2664,6 +2680,103 @@ def server(input, output, session):
             "ats_pct": "ATS %", "roi": "ROI %", "wilson_low": "Wilson LB %", "units": "Units",
         })
         return render.DataGrid(d, filters=False, height="260px")
+
+    @render.data_frame
+    def committee_meta_spread_table():
+        a = _active_committee_analysis()
+        d = a.get("meta_spread_scale", pd.DataFrame()).copy() if a else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = _pct_frame(d, ["ats_pct", "roi", "wilson_low", "favorite_ats_pct", "underdog_ats_pct"])
+        for c in ["forecast_mae", "market_mae", "delta_mae_vs_market", "forecast_bias", "mean_abs_edge"]:
+            if c in d.columns:
+                d[c] = pd.to_numeric(d[c], errors="coerce").round(2)
+        keep = [c for c in [
+            "period", "line_bucket", "scorable_games", "forecast_mae", "market_mae",
+            "delta_mae_vs_market", "forecast_bias", "bets", "ats_pct", "roi",
+            "wilson_low", "favorite_bets", "favorite_ats_pct", "underdog_bets",
+            "underdog_ats_pct", "mean_abs_edge",
+        ] if c in d.columns]
+        d = d[keep].rename(columns={
+            "period": "Period", "line_bucket": "|Market spread|",
+            "scorable_games": "Scorable games", "forecast_mae": "META MAE",
+            "market_mae": "Market MAE", "delta_mae_vs_market": "ΔMAE vs market",
+            "forecast_bias": "META bias", "bets": "META bets", "ats_pct": "ATS %",
+            "roi": "ROI %", "wilson_low": "Wilson LB %",
+            "favorite_bets": "Fav bets", "favorite_ats_pct": "Fav ATS %",
+            "underdog_bets": "Dog bets", "underdog_ats_pct": "Dog ATS %",
+            "mean_abs_edge": "Mean bet edge (pts)",
+        })
+        return render.DataGrid(d, filters=False, height="390px")
+
+    @render.data_frame
+    def committee_current_spread_context_table():
+        r = strategy_current_view_result()
+        a = _active_committee_analysis()
+        hist = a.get("meta_spread_scale", pd.DataFrame()).copy() if a else pd.DataFrame()
+        if r is None or not isinstance(hist, pd.DataFrame) or hist.empty:
+            return render.DataGrid(pd.DataFrame())
+        cur = r.get("summary", pd.DataFrame()).copy()
+        if cur.empty:
+            return render.DataGrid(pd.DataFrame())
+        rows = []
+        for x in cur.itertuples(index=False):
+            market = pd.to_numeric(pd.Series([getattr(x, "market_home_margin", np.nan)]), errors="coerce").iloc[0]
+            if not np.isfinite(market):
+                continue
+            bucket = meta_spread_bucket_label(float(market))
+            qd = hist[(hist["period"].astype(str).eq("Discovery")) & (hist["line_bucket"].astype(str).eq(bucket))]
+            qh = hist[(hist["period"].astype(str).eq("Holdout")) & (hist["line_bucket"].astype(str).eq(bucket))]
+            dr = qd.iloc[0] if len(qd) else pd.Series(dtype=object)
+            hr = qh.iloc[0] if len(qh) else pd.Series(dtype=object)
+            edge = pd.to_numeric(pd.Series([getattr(x, "meta_edge_home", np.nan)]), errors="coerce").iloc[0]
+            qualifies = bool(getattr(x, "meta_qualifies", False))
+            if qualifies and np.isfinite(edge) and abs(float(market)) > 1e-12:
+                side_type = "Favorite" if float(edge) * float(market) > 0 else "Underdog"
+            elif qualifies:
+                side_type = "Pick'em"
+            else:
+                side_type = "—"
+            if side_type == "Favorite":
+                disc_side_bets = dr.get("favorite_bets", np.nan); disc_side_ats = dr.get("favorite_ats_pct", np.nan)
+                hold_side_bets = hr.get("favorite_bets", np.nan); hold_side_ats = hr.get("favorite_ats_pct", np.nan)
+            elif side_type == "Underdog":
+                disc_side_bets = dr.get("underdog_bets", np.nan); disc_side_ats = dr.get("underdog_ats_pct", np.nan)
+                hold_side_bets = hr.get("underdog_bets", np.nan); hold_side_ats = hr.get("underdog_ats_pct", np.nan)
+            else:
+                disc_side_bets = np.nan; disc_side_ats = np.nan; hold_side_bets = np.nan; hold_side_ats = np.nan
+            home = str(getattr(x, "home", "")); away = str(getattr(x, "away", ""))
+            rows.append({
+                "Game": f"{away} @ {home}",
+                "Line used": _spread_label(away, home, float(market)),
+                "|Spread|": round(abs(float(market)), 1),
+                "Regime": bucket,
+                "META": (f"BET {getattr(x, 'meta_bet_side', '')}" if qualifies else "PASS"),
+                "Bet type": side_type,
+                "Discovery games": int(dr.get("scorable_games", 0) or 0),
+                "Discovery bets": int(dr.get("bets", 0) or 0),
+                "Discovery ATS %": dr.get("ats_pct", np.nan),
+                "Discovery ΔMAE": dr.get("delta_mae_vs_market", np.nan),
+                "Same-side disc bets": disc_side_bets,
+                "Same-side disc ATS %": disc_side_ats,
+                "Holdout games": int(hr.get("scorable_games", 0) or 0),
+                "Holdout bets": int(hr.get("bets", 0) or 0),
+                "Holdout ATS %": hr.get("ats_pct", np.nan),
+                "Holdout ΔMAE": hr.get("delta_mae_vs_market", np.nan),
+                "Same-side hold bets": hold_side_bets,
+                "Same-side hold ATS %": hold_side_ats,
+            })
+        d = pd.DataFrame(rows)
+        if d.empty:
+            return render.DataGrid(d)
+        for c in ["Discovery ATS %", "Same-side disc ATS %", "Holdout ATS %", "Same-side hold ATS %"]:
+            d[c] = 100 * pd.to_numeric(d[c], errors="coerce")
+        for c in ["Discovery ΔMAE", "Holdout ΔMAE"]:
+            d[c] = pd.to_numeric(d[c], errors="coerce").round(2)
+        for c in ["Same-side disc bets", "Same-side hold bets"]:
+            d[c] = pd.to_numeric(d[c], errors="coerce").astype("Int64")
+        d = d.sort_values(["|Spread|", "Game"], ascending=[False, True]).reset_index(drop=True)
+        return render.DataGrid(d, filters=False, height="340px")
 
     @render.data_frame
     def committee_combo_k_table():
