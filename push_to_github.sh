@@ -23,7 +23,7 @@ fi
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.8"
+  git commit -m "Deploy NCAAF Consensus Lab v3.5.9"
 else
   echo "No new changes to commit."
 fi

@@ -125,3 +125,8 @@ The diversified META spread is built in two stages:
 2. average the active community means with equal community weight.
 
 META uncertainty uses total-variance decomposition: average within-unit variance plus between-unit variance. Thus it reflects both disagreement inside combinations and disagreement between independent combination communities. META has its own discovery-selected k and is reported on both discovery and the untouched recent holdout. A naive equal-combination META remains visible as a benchmark.
+
+
+## v3.5.9 experimental extension: unequal weighting inside finalists
+
+Equal weighting remains the production strategy. For each frozen C1–C12, v3.5.9 compares equal weighting with inverse-MSE reliability weights and a 50%-shrunk reliability variant. Weights are learned on discovery only and frozen for holdout. Each method receives a discovery-selected stable k and is evaluated on holdout using forecast MAE/RMSE plus ATS/ROI. The diversified META layer is rebuilt under each internal weighting method and separately backtested. No holdout result is used to alter the current-week production strategy in this experimental release.
