@@ -1468,7 +1468,7 @@ class CombinationSearchConfig:
     standard_price: int = -110
     chunk_size: int = 256
     top_n: int = 100
-    max_combinations: int = 350000
+    max_combinations: int = 10000000
 
 
 def combination_count(n_models: int, min_size: int, max_size: int) -> int:
@@ -2028,7 +2028,7 @@ class CombinationSearchConfig:
     standard_price: int = -110
     chunk_size: int = 256
     top_n: int = 100
-    max_combinations: int = 2000000
+    max_combinations: int = 10000000
 
 
 @dataclass

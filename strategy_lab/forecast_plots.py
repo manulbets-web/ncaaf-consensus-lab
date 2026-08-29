@@ -243,7 +243,7 @@ def hierarchy_plot(
                    zorder=6, label="Diversified META")
         meta_text = _spread_label(away, home, float(meta_mean))
         if np.isfinite(meta_sd):
-            meta_text += f" ± {float(meta_sd):.2f} total SD"
+            meta_text += f" ± {float(meta_sd):.2f} consensus SD"
         meta_text += f" · k={float(k):.2f}"
         ax.text(1.005, meta_y, meta_text, transform=ax.get_yaxis_transform(), va="center", ha="left",
                 fontsize=8.5, color="#355b3d", weight="bold")
@@ -376,7 +376,7 @@ def distribution_plot(
                    label=f"META: {_spread_label(away, home, float(meta_mean))}")
         if np.isfinite(meta_sd):
             ax.axvspan(float(meta_mean) - float(meta_sd), float(meta_mean) + float(meta_sd),
-                       color="#58a66d", alpha=0.11, zorder=0, label="META ± 1 total SD")
+                       color="#58a66d", alpha=0.11, zorder=0, label="META ± 1 consensus SD")
             ax.axvspan(float(meta_mean) - float(k) * float(meta_sd), float(meta_mean) + float(k) * float(meta_sd),
                        color="#16823b", alpha=0.06, zorder=0, label="META ± k×SD decision band")
     if np.isfinite(market_home_margin):

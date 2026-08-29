@@ -422,10 +422,11 @@ def _meta_game_frame(
         return pd.DataFrame()
     forecasts = []
     for i, c in enumerate(combinations, start=1):
-        _, mean, sd = _combo_forecast_arrays(pred, c.get("model_ids", []), min_available_models)
+        count, mean, sd = _combo_forecast_arrays(pred, c.get("model_ids", []), min_available_models)
         forecasts.append({
             "combo": i,
             "community": int(c.get("community", i)),
+            "count": count,
             "mean": mean,
             "sd": sd,
         })
@@ -435,35 +436,53 @@ def _meta_game_frame(
         for f in forecasts:
             mu = float(f["mean"][gi]) if np.isfinite(f["mean"][gi]) else np.nan
             sd = float(f["sd"][gi]) if np.isfinite(f["sd"][gi]) else np.nan
-            if np.isfinite(mu) and np.isfinite(sd):
-                active.append((f["community"], f["combo"], mu, sd))
+            n = int(f["count"][gi]) if np.isfinite(f["count"][gi]) else 0
+            if np.isfinite(mu) and np.isfinite(sd) and n > 0:
+                active.append((f["community"], f["combo"], mu, sd, n))
         if not active:
             continue
 
+        # META is an ensemble of ensemble *means*. The old implementation
+        # reused each combo's raw model SD at full strength, then added
+        # between-community dispersion. That double-counted within-ensemble
+        # disagreement and made the final consensus much more restrictive than
+        # the underlying C1/C2/... decisions. Here the within-unit component is
+        # the uncertainty of the ensemble mean (SD / sqrt(n)), while independent
+        # community disagreement remains on the full spread scale.
         if diversified:
             units = []
+            raw_unit_vars = []
             for community in sorted({x[0] for x in active}):
                 z = [x for x in active if x[0] == community]
                 means = np.array([x[2] for x in z], dtype=float)
                 sds = np.array([x[3] for x in z], dtype=float)
+                counts = np.array([max(1, int(x[4])) for x in z], dtype=float)
                 cmean = float(np.mean(means))
-                within = float(np.mean(np.square(sds))) if len(sds) else np.nan
-                between = float(np.var(means, ddof=1)) if len(means) >= 2 else 0.0
-                cvar = within + between if np.isfinite(within) else np.nan
-                units.append((community, cmean, cvar))
+                mean_uncertainty = float(np.mean(np.square(sds) / counts)) if len(sds) else np.nan
+                between_combo = float(np.var(means, ddof=1)) if len(means) >= 2 else 0.0
+                cvar_mean = mean_uncertainty + between_combo if np.isfinite(mean_uncertainty) else np.nan
+                raw_within = float(np.mean(np.square(sds))) if len(sds) else np.nan
+                raw_cvar = raw_within + between_combo if np.isfinite(raw_within) else np.nan
+                units.append((community, cmean, cvar_mean))
+                raw_unit_vars.append(raw_cvar)
             unit_means = np.array([x[1] for x in units], dtype=float)
             unit_vars = np.array([x[2] for x in units], dtype=float)
+            raw_unit_vars = np.array(raw_unit_vars, dtype=float)
             n_units = len(units)
         else:
             unit_means = np.array([x[2] for x in active], dtype=float)
-            unit_vars = np.square(np.array([x[3] for x in active], dtype=float))
+            unit_vars = np.array([np.square(x[3]) / max(1, int(x[4])) for x in active], dtype=float)
+            raw_unit_vars = np.array([np.square(x[3]) for x in active], dtype=float)
             n_units = len(active)
 
         meta_mean = float(np.mean(unit_means)) if len(unit_means) else np.nan
         within = float(np.mean(unit_vars)) if len(unit_vars) else np.nan
         between = float(np.var(unit_means, ddof=1)) if len(unit_means) >= 2 else 0.0
-        total_var = within + between if np.isfinite(within) else np.nan
-        meta_sd = float(math.sqrt(max(0.0, total_var))) if np.isfinite(total_var) else np.nan
+        consensus_var = within + between if np.isfinite(within) else np.nan
+        meta_sd = float(math.sqrt(max(0.0, consensus_var))) if np.isfinite(consensus_var) else np.nan
+        raw_within = float(np.nanmean(raw_unit_vars)) if len(raw_unit_vars) else np.nan
+        raw_total_var = raw_within + between if np.isfinite(raw_within) else np.nan
+        raw_total_sd = float(math.sqrt(max(0.0, raw_total_var))) if np.isfinite(raw_total_var) else np.nan
         m = meta.loc[game_key]
         market = float(m["market_margin"])
         actual = float(m["actual_margin"])
@@ -478,6 +497,9 @@ def _meta_game_frame(
             "cover": actual - market,
             "meta_mean": meta_mean,
             "meta_sd": meta_sd,
+            "meta_consensus_sd": meta_sd,
+            "meta_raw_total_sd": raw_total_sd,
+            "meta_between_community_sd": float(math.sqrt(max(0.0, between))),
             "meta_edge": edge,
             "meta_signal": sig,
             "active_units": n_units,

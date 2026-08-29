@@ -98,11 +98,17 @@ DEFAULT_K = 0.75
 # established automatic-search defaults so the recommendation changes only
 # the settings Patrick explicitly standardized.
 PATRICK_HOLDOUT_WEEKS = 6
-PATRICK_MIN_SIZE = 5
-PATRICK_MAX_SIZE = 13
-PATRICK_K = 0.50
-PATRICK_FINALISTS = 12
-PATRICK_POOL_N = 20
+PATRICK_MIN_SIZE = 4
+PATRICK_MAX_SIZE = 7
+PATRICK_K = 0.75
+PATRICK_FINALISTS = 19
+
+# Exact streaming search remains memory-bounded because only each batch and a
+# bounded leaderboard are retained. The UI exposes a user-controlled safety cap
+# so multi-million subset spaces can be explored deliberately.
+EXACT_SEARCH_DEFAULT_MAX = 10_000_000
+EXACT_SEARCH_HARD_MAX = 50_000_000
+PATRICK_POOL_N = 26
 PATRICK_POOL_METRIC = "wilson"
 PATRICK_POOL_MIN_BETS = 25
 PATRICK_MIN_AVAILABLE = 4
@@ -110,6 +116,7 @@ PATRICK_MIN_SEARCH_BETS = 50
 PATRICK_RANK_METRIC = "wilson"
 PATRICK_OVERLAP_THRESHOLD = 0.60
 PATRICK_META_MIN_COMMUNITIES = 2
+PATRICK_HOLDOUT_MIN_SCORABLE_GAMES = 10
 
 # Current ranking is used only as a convenient candidate-pool preset, never as
 # an outcome gate inside the combination search.
@@ -268,7 +275,7 @@ app_ui = ui.page_fluid(
                     ui.tags.li(ui.strong("Build a strategy on Page 3."), " Automatic screening ranks only models that are posting this week, searches promising model combinations on historical discovery data, and evaluates frozen finalists on a recent chronological holdout."),
                     ui.tags.li(ui.strong("Choose one or more finalists on Page 3."), " The selected combinations become C1, C2, C3, and so on for the current session."),
                     ui.tags.li(ui.strong("Apply them on Page 4."), " Each combination independently forms a mean projected spread, an SD across its component models, and a BET/PASS decision. The page also summarizes agreement across combinations."),
-                    ui.tags.li(ui.strong("Patrick\'s one-click recipe on Page 4."), " After Page 2 is refreshed, it screens the current-week eligible pool using 6 held-out weeks, set sizes 5–13, k = 0.50 SD, automatically applies the top 12 combinations, tunes each finalist's k on discovery data, and builds the overlap-adjusted META backtest."),
+                    ui.tags.li(ui.strong("Patrick\'s one-click recipe on Page 4."), " After Page 2 is refreshed, it screens the current-week eligible pool using 6 sufficiently covered held-out weeks, set sizes 4–7, k = 0.75 SD, automatically applies the top 19 combinations, tunes each finalist's k on discovery data, and builds the overlap-adjusted META backtest."),
                     ui.tags.li(ui.strong("Visualize the hierarchy on Page 5."), " Pick any current game to see every mapped model projection, the selected finalist-combination forecasts, and the final portfolio/meta estimate against the market line."),
                 ),
             ),
@@ -290,7 +297,7 @@ app_ui = ui.page_fluid(
                     ui.tags.ul(
                         ui.tags.li(ui.strong("C1, C2, ..."), ": the finalist combinations you selected on Page 3. Search rank remains available in the detailed table, but the short labels are used throughout Page 4."),
                         ui.tags.li(ui.strong("Portfolio mean ± SD"), ": the old raw equal-weight summary across C1–C12, retained as a benchmark."),
-                        ui.tags.li(ui.strong("Diversified META"), ": near-duplicate combinations are grouped by 0.60 Jaccard model overlap; each overlap community gets equal influence. META SD combines within-combination and between-community dispersion."),
+                        ui.tags.li(ui.strong("Diversified META"), ": near-duplicate combinations are grouped by 0.60 Jaccard model overlap; each overlap community gets equal influence. META consensus SD combines uncertainty in the ensemble means with disagreement between independent overlap communities; raw within-model dispersion is not counted a second time at full strength."),
                         ui.tags.li(ui.strong("Automatic k"), ": each frozen finalist is evaluated across 0.25–2.00 SD on discovery data only. The app favors a stable neighboring-k plateau rather than the single prettiest threshold, then tests that frozen k on holdout."),
                         ui.tags.li(ui.strong("Mean direction"), ": how many combination means lie on each side of the current betting line."),
                         ui.tags.li(ui.strong("Bet direction"), ": how many combinations actually clear their k×SD threshold in each direction."),
@@ -316,7 +323,7 @@ app_ui = ui.page_fluid(
                 ui.card_header("Recommended workflow for automatic screening"),
                 ui.tags.ul(
                     ui.tags.li("Refresh Page 2 first so the candidate pool contains only models that are actually posting this week."),
-                    ui.tags.li(ui.strong("Patrick\'s recommended recipe:"), " Top 20 current-week models by discovery Wilson lower bound (minimum 25 discovery bets/model), hold out the latest 6 chronology weeks, screen set sizes 5–13 at k = 0.50 SD, rank by Wilson lower bound, freeze the top 12, then automatically tune each finalist's k across 0.25–2.00 SD on discovery only and build a diversity-adjusted META backtest."),
+                    ui.tags.li(ui.strong("Patrick\'s recommended recipe:"), " Top 26 current-week models by discovery Wilson lower bound (minimum 25 discovery bets/model), hold out the latest 6 completed weeks with adequate model coverage, screen set sizes 4–7 at k = 0.75 SD, rank by Wilson lower bound, freeze the top 19, then automatically tune each finalist's k across 0.25–2.00 SD on discovery only and build a diversity-adjusted META backtest."),
                     ui.tags.li("The Page 4 button runs that recipe end-to-end; Page 3 remains available when you want to inspect or alter the research settings."),
                     ui.tags.li("Treat the discovery ranking as model-combination discovery and the recent held-out weeks as the cleaner validation check."),
                     ui.tags.li("Use the spread-scale diagnostics to see whether a finalist behaves differently on small, moderate, or very large market spreads."),
@@ -526,7 +533,18 @@ app_ui = ui.page_fluid(
                             selected="wilson",
                         ),
                         ui.input_numeric("auto_top_n", "Finalists retained", 25, min=5, max=100, step=5),
-                        col_widths=(6, 6),
+                        ui.input_numeric(
+                            "auto_max_combinations_m",
+                            "Exact-search safety cap (millions)",
+                            EXACT_SEARCH_DEFAULT_MAX // 1_000_000,
+                            min=1, max=EXACT_SEARCH_HARD_MAX // 1_000_000, step=1,
+                        ),
+                        col_widths=(4, 4, 4),
+                    ),
+                    ui.p(
+                        "The search is exhaustive, not sampled. Multi-million searches stream in batches and retain only the bounded leaderboard. "
+                        "Raise the safety cap deliberately for larger candidate pools; very large searches can take several minutes on Connect Cloud.",
+                        class_="muted",
                     ),
                     ui.p(
                         "Automatic screening is restricted to models that are actually posting in the current PredictionTracker week. "
@@ -630,9 +648,9 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Patrick's recommended settings"),
                 ui.p(
-                    "One-click current-week recipe: Top 20 currently posting models by discovery Wilson lower bound; "
-                    "latest 6 completed chronology weeks held out; combination sizes 5–13; 0.50 SD search anchor; "
-                    "top 12 discovery-ranked combinations frozen, then each finalist gets an automatic stable k from 0.25–2.00 SD. "
+                    "One-click current-week recipe: Top 26 currently posting models by discovery Wilson lower bound; "
+                    "latest 6 completed weeks with adequate candidate-model coverage held out; combination sizes 4–7; 0.75 SD search anchor; "
+                    "top 19 discovery-ranked combinations frozen, then each finalist gets an automatic stable k from 0.25–2.00 SD. "
                     "Near-duplicate combinations are collapsed into overlap communities for the final META estimate and backtest. Models inside every individual ensemble are equal-weighted.",
                     class_="muted",
                 ),
@@ -664,7 +682,7 @@ app_ui = ui.page_fluid(
                 ui.p(
                     "The top combinations are often close relatives. A 0.60 Jaccard overlap groups near-duplicates into communities so one core model family cannot masquerade as many independent votes. "
                     "Each finalist's k is selected from 0.25–2.00 SD using discovery data only; the six completed-week holdout remains untouched until those choices are frozen. "
-                    "The diversified META forecast gives each overlap community equal influence and combines within-combo plus between-community dispersion.",
+                    "The diversified META forecast gives each overlap community equal influence and uses a consensus-uncertainty scale based on uncertainty of ensemble means plus between-community disagreement, avoiding the overly conservative double-counting of raw within-ensemble SD.",
                     class_="muted",
                 ),
                 ui.layout_columns(
@@ -780,7 +798,7 @@ app_ui = ui.page_fluid(
                 ui.tags.ul(
                     ui.tags.li(ui.strong("Individual models"), ": every mapped model currently posting for that game gets its own labeled row, including models not selected into C1–C12. Models used by at least one finalist are highlighted, with the number of finalist ensembles using each model shown at right."),
                     ui.tags.li(ui.strong("C1, C2, ..."), ": every finalist ensemble gets its own row. The thin interval is ±1 within-ensemble SD; the heavier interval is that finalist's actual ±k×SD decision band."),
-                    ui.tags.li(ui.strong("META"), ": the diversity-adjusted final consensus. Near-duplicate finalist sets are collapsed into overlap communities, each community gets equal influence, and both ±1 total SD and the frozen META ±k×SD decision band are shown."),
+                    ui.tags.li(ui.strong("META"), ": the diversity-adjusted final consensus. Near-duplicate finalist sets are collapsed into overlap communities, each community gets equal influence, and both ±1 consensus SD and the frozen META ±k×SD decision band are shown."),
                     ui.tags.li(ui.strong("Market"), ": the line currently being used on Page 4, including any session-only line-shopping override. If overridden, the original PredictionTracker line is also shown."),
                 ),
                 ui.p(
@@ -1205,6 +1223,49 @@ def server(input, output, session):
         )
         return DATA.loc[mask].copy()
 
+    def candidate_period_coverage(
+        periods: tuple[tuple[int, int], ...],
+        candidate_ids: list[str],
+        min_available_models: int,
+    ) -> pd.DataFrame:
+        """Count graded games per chronology period with enough candidate forecasts.
+
+        This is used by Patrick's one-click recipe so a nominal holdout cannot
+        silently land on bowl/postseason weeks where the currently relevant
+        model family has almost no simultaneous coverage.
+        """
+        if not periods or not candidate_ids:
+            return pd.DataFrame(columns=["season", "week", "graded_games", "scorable_games"])
+        wanted = set((int(y), int(w)) for y, w in periods)
+        z = DATA.copy()
+        yy = pd.to_numeric(z["season"], errors="coerce")
+        ww = pd.to_numeric(z["week"], errors="coerce")
+        pred = pd.to_numeric(z.get("prediction_margin"), errors="coerce")
+        actual = pd.to_numeric(z.get("actual_margin"), errors="coerce")
+        market = pd.to_numeric(z.get("market_margin"), errors="coerce")
+        mask = pd.Series([
+            (int(y), int(w)) in wanted if pd.notna(y) and pd.notna(w) else False
+            for y, w in zip(yy, ww)
+        ], index=z.index)
+        mask &= z["canonical_model_id"].astype(str).isin(set(map(str, candidate_ids)))
+        mask &= pred.notna() & actual.notna() & market.notna()
+        z = z.loc[mask, ["game_key", "season", "week", "canonical_model_id"]].copy()
+        if z.empty:
+            return pd.DataFrame(columns=["season", "week", "graded_games", "scorable_games"])
+        per_game = (
+            z.groupby(["season", "week", "game_key"], as_index=False)["canonical_model_id"]
+            .nunique()
+            .rename(columns={"canonical_model_id": "available_models"})
+        )
+        per_game["scorable"] = per_game["available_models"] >= int(min_available_models)
+        out = (
+            per_game.groupby(["season", "week"], as_index=False)
+            .agg(graded_games=("game_key", "nunique"), scorable_games=("scorable", "sum"))
+        )
+        out["season"] = pd.to_numeric(out["season"], errors="coerce").astype(int)
+        out["week"] = pd.to_numeric(out["week"], errors="coerce").astype(int)
+        return out.sort_values(["season", "week"]).reset_index(drop=True)
+
     def resolve_ranked_live_candidates(
         search_periods: tuple[tuple[int, int], ...],
         live_ids: set[str],
@@ -1324,7 +1385,13 @@ def server(input, output, session):
         lo, hi = int(input.auto_min_size()), int(input.auto_max_size())
         if hi < lo:
             return "Maximum set size must be at least the minimum."
-        return f"{combination_count(len(ids), lo, hi):,} exact combinations from {len(ids)} resolved candidates"
+        total = combination_count(len(ids), lo, hi)
+        cap = max(1_000_000, min(EXACT_SEARCH_HARD_MAX, int(float(input.auto_max_combinations_m()) * 1_000_000)))
+        status = "within cap" if total <= cap else f"ABOVE {cap:,} cap"
+        return (
+            f"{total:,} exact combinations from {len(ids)} resolved candidates · "
+            f"safety cap {cap:,} ({status})"
+        )
 
     @ui.bind_task_button(button_id="run_auto")
     @reactive.extended_task
@@ -1405,9 +1472,14 @@ def server(input, output, session):
             return
 
         total = combination_count(len(ids), lo, hi)
-        if total > 2_000_000:
+        max_combinations = max(
+            1_000_000,
+            min(EXACT_SEARCH_HARD_MAX, int(float(input.auto_max_combinations_m()) * 1_000_000)),
+        )
+        if total > max_combinations:
             ui.notification_show(
-                f"{total:,} combinations exceeds the 2,000,000 exact-search safeguard. Reduce Top N or the size range.",
+                f"{total:,} combinations exceeds your {max_combinations:,} exact-search safety cap. "
+                "Raise the cap or reduce Top N / the size range.",
                 type="error", duration=12,
             )
             return
@@ -1428,7 +1500,7 @@ def server(input, output, session):
             "standard_price": -110,
             "chunk_size": 512,
             "top_n": int(input.auto_top_n()),
-            "max_combinations": 2_000_000,
+            "max_combinations": max_combinations,
         }
         now = time.monotonic()
         set_auto_progress(
@@ -1441,6 +1513,11 @@ def server(input, output, session):
             f"sizes {lo}–{hi}, {total:,} combinations, k={float(input.auto_k()):.2f}",
             flush=True,
         )
+        if total > 5_000_000:
+            ui.notification_show(
+                f"Launching an exact {total:,}-combination search. Keep this session open; progress and ETA will update below.",
+                type="message", duration=10,
+            )
         auto_task(ids, values, val_periods if val_periods else search_periods)
 
     def auto_result():
@@ -1524,14 +1601,44 @@ def server(input, output, session):
         if len(periods) <= PATRICK_HOLDOUT_WEEKS:
             ui.notification_show("Not enough historical weeks for the 6-week holdout.", type="error")
             return
-        search_periods = periods[:-PATRICK_HOLDOUT_WEEKS]
-        val_periods = periods[-PATRICK_HOLDOUT_WEEKS:]
+        # First pass uses the ordinary chronological split only to obtain a
+        # provisional candidate pool. Then choose the latest six *usable*
+        # completed weeks for that pool and rerank candidates on discovery
+        # data strictly before the holdout. Sparse later periods are excluded
+        # rather than leaking back into discovery.
+        provisional_search = periods[:-PATRICK_HOLDOUT_WEEKS]
         ids, _ = resolve_ranked_live_candidates(
-            search_periods, live_ids,
+            provisional_search, live_ids,
             pool_n=PATRICK_POOL_N,
             pool_metric=PATRICK_POOL_METRIC,
             pool_min_bets=PATRICK_POOL_MIN_BETS,
         )
+        search_periods = provisional_search
+        val_periods = periods[-PATRICK_HOLDOUT_WEEKS:]
+        for _ in range(2):
+            coverage = candidate_period_coverage(periods, ids, PATRICK_MIN_AVAILABLE)
+            covered = [
+                (int(r.season), int(r.week))
+                for r in coverage.itertuples(index=False)
+                if int(r.scorable_games) >= PATRICK_HOLDOUT_MIN_SCORABLE_GAMES
+            ]
+            if len(covered) < PATRICK_HOLDOUT_WEEKS:
+                covered = [
+                    (int(r.season), int(r.week))
+                    for r in coverage.itertuples(index=False)
+                    if int(r.scorable_games) > 0
+                ]
+            if len(covered) < PATRICK_HOLDOUT_WEEKS:
+                break
+            val_periods = tuple(covered[-PATRICK_HOLDOUT_WEEKS:])
+            first_val = val_periods[0]
+            search_periods = tuple(p for p in periods if p < first_val)
+            ids, _ = resolve_ranked_live_candidates(
+                search_periods, live_ids,
+                pool_n=PATRICK_POOL_N,
+                pool_metric=PATRICK_POOL_METRIC,
+                pool_min_bets=PATRICK_POOL_MIN_BETS,
+            )
         if len(ids) < PATRICK_MIN_SIZE:
             ui.notification_show(
                 f"Only {len(ids)} eligible current-week models remain; at least {PATRICK_MIN_SIZE} are required.",
@@ -1541,9 +1648,9 @@ def server(input, output, session):
 
         hi = min(PATRICK_MAX_SIZE, len(ids))
         total = combination_count(len(ids), PATRICK_MIN_SIZE, hi)
-        if total > 2_000_000:
+        if total > EXACT_SEARCH_DEFAULT_MAX:
             ui.notification_show(
-                f"Recommended search resolves to {total:,} combinations, above the exact-search safeguard.",
+                f"Recommended search resolves to {total:,} combinations, above its {EXACT_SEARCH_DEFAULT_MAX:,} exact-search safeguard.",
                 type="error", duration=12,
             )
             return
@@ -1579,7 +1686,7 @@ def server(input, output, session):
             "standard_price": -110,
             "chunk_size": 512,
             "top_n": PATRICK_FINALISTS,
-            "max_combinations": 2_000_000,
+            "max_combinations": EXACT_SEARCH_DEFAULT_MAX,
         }
         now = time.monotonic()
         set_auto_progress(
@@ -1587,9 +1694,10 @@ def server(input, output, session):
             label=f"Patrick recipe: {len(ids)} live candidates; preparing discovery matrix…",
             phase="Preparing Patrick's recommended search", started=now, updated=now,
         )
+        holdout_label = f"{val_periods[0][0]} W{val_periods[0][1]}–{val_periods[-1][0]} W{val_periods[-1][1]}" if val_periods else "none"
         patrick_state.set({
             "phase": "searching",
-            "message": f"Searching {total:,} exact combinations from {len(ids)} current-week candidates…",
+            "message": f"Searching {total:,} exact combinations from {len(ids)} current-week candidates · holdout {holdout_label}…",
         })
         print(
             f"[Patrick recipe] starting exact search: {len(ids)} candidates, sizes "
@@ -2087,7 +2195,7 @@ def server(input, output, session):
                 if ids:
                     combos.append({"rank": rank, "model_ids": ids})
             if not combos:
-                patrick_state.set({"phase": "error", "message": "The top 12 combinations could not be resolved."})
+                patrick_state.set({"phase": "error", "message": "The recommended finalist combinations could not be resolved."})
                 return
 
             periods = tuple((y, w) for y, w in HISTORICAL_PERIODS if y in set(HISTORICAL_SEASONS))
@@ -2138,7 +2246,7 @@ def server(input, output, session):
         if phase == "scoring":
             status = strategy_current_task.status()
             if status == "error":
-                patrick_state.set({"phase": "error", "message": "The top 12 were selected, but current-week scoring failed."})
+                patrick_state.set({"phase": "error", "message": "The recommended finalists were selected, but current-week scoring failed."})
             elif status == "success":
                 result = strategy_current_result()
                 games = len(result.get("summary", pd.DataFrame())) if result else 0
@@ -2171,17 +2279,27 @@ def server(input, output, session):
         if "community" not in scorable.columns:
             scorable["community"] = pd.to_numeric(scorable.get("portfolio_combo"), errors="coerce")
         units = []
+        raw_unit_vars = []
         for cid, z in scorable.groupby("community", dropna=False):
-            means = pd.to_numeric(z["consensus_home_margin"], errors="coerce").dropna().to_numpy(dtype=float)
-            sds = pd.to_numeric(z["model_sd"], errors="coerce").dropna().to_numpy(dtype=float)
+            zz = z.copy()
+            means_s = pd.to_numeric(zz["consensus_home_margin"], errors="coerce")
+            sds_s = pd.to_numeric(zz["model_sd"], errors="coerce")
+            counts_s = pd.to_numeric(zz.get("available_models", 1), errors="coerce").fillna(1).clip(lower=1)
+            ok = means_s.notna() & sds_s.notna()
+            means = means_s[ok].to_numpy(dtype=float)
+            sds = sds_s[ok].to_numpy(dtype=float)
+            counts = counts_s[ok].to_numpy(dtype=float)
             if not len(means):
                 continue
             cmean = float(np.mean(means))
-            within = float(np.mean(np.square(sds))) if len(sds) else np.nan
-            between = float(np.var(means, ddof=1)) if len(means) >= 2 else 0.0
-            cvar = within + between if np.isfinite(within) else np.nan
-            if np.isfinite(cvar):
-                units.append((cid, cmean, cvar))
+            mean_uncertainty = float(np.mean(np.square(sds) / counts)) if len(sds) else np.nan
+            between_combo = float(np.var(means, ddof=1)) if len(means) >= 2 else 0.0
+            cvar_mean = mean_uncertainty + between_combo if np.isfinite(mean_uncertainty) else np.nan
+            raw_within = float(np.mean(np.square(sds))) if len(sds) else np.nan
+            raw_cvar = raw_within + between_combo if np.isfinite(raw_within) else np.nan
+            if np.isfinite(cvar_mean):
+                units.append((cid, cmean, cvar_mean))
+                raw_unit_vars.append(raw_cvar)
         if not units:
             return {}
         means = np.array([x[1] for x in units], dtype=float)
@@ -2190,6 +2308,8 @@ def server(input, output, session):
         within = float(np.mean(vars_))
         between = float(np.var(means, ddof=1)) if len(means) >= 2 else 0.0
         meta_sd = float(np.sqrt(max(0.0, within + between)))
+        raw_within = float(np.nanmean(np.array(raw_unit_vars, dtype=float))) if raw_unit_vars else np.nan
+        raw_total_sd = float(np.sqrt(max(0.0, raw_within + between))) if np.isfinite(raw_within) else np.nan
         market = pd.to_numeric(pd.Series([g.iloc[0].get("market_home_margin")]), errors="coerce").iloc[0]
         edge = meta_mean - float(market) if np.isfinite(market) else np.nan
         if np.isfinite(edge) and np.isfinite(meta_sd):
@@ -2205,6 +2325,9 @@ def server(input, output, session):
             "independent_communities": int(len(units)),
             "meta_mean_home_margin": meta_mean,
             "meta_total_sd": meta_sd,
+            "meta_consensus_sd": meta_sd,
+            "meta_raw_total_sd": raw_total_sd,
+            "meta_between_community_sd": float(np.sqrt(max(0.0, between))),
             "meta_edge_home": edge,
             "meta_signal_sd": signal,
             "meta_k": meta_k,
