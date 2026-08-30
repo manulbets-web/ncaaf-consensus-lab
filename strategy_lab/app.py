@@ -97,7 +97,7 @@ DEFAULT_K = 0.75
 # One-click Page 4 recipe. Other screening gates intentionally use the
 # established automatic-search defaults so the recommendation changes only
 # the settings Patrick explicitly standardized.
-PATRICK_HOLDOUT_WEEKS = 6
+PATRICK_HOLDOUT_WEEKS = 0
 PATRICK_MIN_SIZE = 4
 PATRICK_MAX_SIZE = 7
 PATRICK_K = 0.75
@@ -323,7 +323,7 @@ app_ui = ui.page_fluid(
                 ui.card_header("Recommended workflow for automatic screening"),
                 ui.tags.ul(
                     ui.tags.li("Refresh Page 2 first so the candidate pool contains only models that are actually posting this week."),
-                    ui.tags.li(ui.strong("Patrick\'s recommended recipe:"), " Top 26 current-week models by discovery Wilson lower bound (minimum 25 discovery bets/model), hold out the latest 6 completed weeks with adequate model coverage, screen set sizes 4–7 at k = 0.75 SD, rank by Wilson lower bound, freeze the top 19, then automatically tune each finalist's k across 0.25–2.00 SD on discovery only and build a diversity-adjusted META backtest."),
+                    ui.tags.li(ui.strong("Patrick\'s recommended recipe:"), " Top 26 current-week models by discovery Wilson lower bound (minimum 25 discovery bets/model), hold out the latest 0 holdout weeks with adequate model coverage, screen set sizes 4–7 at k = 0.75 SD, rank by Wilson lower bound, freeze the top 19, then automatically tune each finalist's k across 0.25–2.00 SD on discovery only and build a diversity-adjusted META backtest."),
                     ui.tags.li("The Page 4 button runs that recipe end-to-end; Page 3 remains available when you want to inspect or alter the research settings."),
                     ui.tags.li("Treat the discovery ranking as model-combination discovery and the recent held-out weeks as the cleaner validation check."),
                     ui.tags.li("On Page 4, use the Absolute spread trust check to compare the final Diversified META strategy across small spreads through 35+, including META-vs-market MAE and separate favorite/underdog betting performance."),
@@ -641,17 +641,18 @@ app_ui = ui.page_fluid(
             "4 · Upcoming Predictions",
             ui.div(ui.output_text("strategy_banner"), class_="strategy-banner"),
             ui.p(
-                "Applies every finalist combination selected on Page 3 to the same cached PredictionTracker slate. "
-                "Each combination independently calculates its collective expected spread, model SD, k×SD boundary, and BET/PASS decision.",
+                "Current-week recommendations from the selected finalist consortium. "
+                "Historical context is shown using all graded past games: overall performance and performance in the current game's absolute-spread bin. "
+                "These historical rates are descriptive context, not an additional filter.",
                 class_="muted",
             ),
             ui.card(
                 ui.card_header("Patrick's recommended settings"),
                 ui.p(
-                    "One-click current-week recipe: Top 26 currently posting models by discovery Wilson lower bound; "
-                    "latest 6 completed weeks with adequate candidate-model coverage held out; combination sizes 4–7; 0.75 SD search anchor; "
-                    "top 19 discovery-ranked combinations frozen, then each finalist gets an automatic stable k from 0.25–2.00 SD. "
-                    "Near-duplicate combinations are collapsed into overlap communities for the final META estimate and backtest. Models inside every individual ensemble are equal-weighted.",
+                    "One-click recipe: Top 26 currently posting models by historical Wilson lower bound; "
+                    "combination sizes 4–7; 0.75 SD search anchor; top 19 combinations retained. "
+                    "All completed historical games are used—there is no recent-week holdout in this streamlined version. "
+                    "Models inside every individual ensemble are equal-weighted, and near-duplicate ensembles are collapsed into overlap communities for the final META estimate.",
                     class_="muted",
                 ),
                 ui.input_action_button(
@@ -670,75 +671,16 @@ app_ui = ui.page_fluid(
                 type="primary",
             ),
             ui.output_text("strategy_current_status"),
-            ui.layout_columns(
-                ui.value_box("Selected combos", ui.output_text("strategy_combo_n")),
-                ui.value_box("Unique models", ui.output_text("strategy_model_n")),
-                ui.value_box("Required k", ui.output_text("strategy_k")),
-                ui.value_box("Games scored", ui.output_text("strategy_games_n")),
-                col_widths=(3, 3, 3, 3),
-            ),
-            ui.card(
-                ui.card_header("Final consensus: overlap, automatic k, and META backtest"),
-                ui.p(
-                    "The top combinations are often close relatives. A 0.60 Jaccard overlap groups near-duplicates into communities so one core model family cannot masquerade as many independent votes. "
-                    "Each finalist's k is selected from 0.25–2.00 SD using discovery data only; the six completed-week holdout remains untouched until those choices are frozen. "
-                    "The diversified META forecast gives each overlap community equal influence and uses a consensus-uncertainty scale based on uncertainty of ensemble means plus between-community disagreement, avoiding the overly conservative double-counting of raw within-ensemble SD.",
-                    class_="muted",
-                ),
-                ui.layout_columns(
-                    ui.value_box("Independent communities", ui.output_text("committee_community_n")),
-                    ui.value_box("Mean pairwise overlap", ui.output_text("committee_mean_overlap")),
-                    ui.value_box("META k", ui.output_text("committee_meta_k")),
-                    ui.value_box("Holdout META ATS", ui.output_text("committee_holdout_ats")),
-                    col_widths=(3, 3, 3, 3),
-                ),
-                ui.p(ui.strong("Backtest split: "), ui.output_text("committee_holdout_window"), class_="muted"),
-                ui.h5("Final META backtest"),
-                ui.output_data_frame("committee_meta_backtest_table"),
-                ui.h5("Automatic k by finalist"),
-                ui.output_data_frame("committee_combo_k_table"),
-                ui.h5("Overlap communities"),
-                ui.output_data_frame("committee_overlap_table"),
-            ),
-            ui.card(
-                ui.card_header("Absolute spread trust check"),
-                ui.p(
-                    "Large favorites and underdogs are a distinct forecasting regime. This diagnostic keeps the frozen Diversified META strategy unchanged, then asks how its forecast accuracy and betting performance vary with |market spread|. "
-                    "The tail is split into 22–27.5, 28–34.5, and 35+ so a -38 game is not pooled with an ordinary -23 favorite. Negative ΔMAE vs market means META was closer to the final margin than the market on average.",
-                    class_="muted",
-                ),
-                ui.h5("Current slate mapped to historical spread regimes"),
-                ui.output_data_frame("committee_current_spread_context_table"),
-                ui.h5("Diversified META performance by |market spread|"),
-                ui.output_data_frame("committee_meta_spread_table"),
-                ui.p(
-                    "These rows are diagnostics, not new optimization rules. The same discovery-selected META k is used in every bucket. Favorite/underdog columns classify the side actually bet, which is especially important for very large spreads.",
-                    class_="muted",
-                ),
-            ),
             ui.card(
                 ui.card_header("Line shopping / alternate market"),
                 ui.p(
                     "Test a sportsbook line without refreshing the slate or rerunning the combination search. "
-                    "Enter the home team's spread exactly as displayed by the book: negative = home favorite, positive = home underdog. "
-                    "Example: NC State @ Virginia → enter -3.0 to test Virginia -3.",
+                    "Enter the home team's spread exactly as displayed by the book: negative = home favorite, positive = home underdog.",
                     class_="muted",
                 ),
                 ui.layout_columns(
-                    ui.input_select(
-                        "line_override_game",
-                        "Game",
-                        choices={"": "Apply the portfolio first"},
-                        selected="",
-                    ),
-                    ui.input_numeric(
-                        "line_override_value",
-                        "Available home-team spread",
-                        0.0,
-                        min=-80,
-                        max=80,
-                        step=0.5,
-                    ),
+                    ui.input_select("line_override_game", "Game", choices={"": "Apply the portfolio first"}, selected=""),
+                    ui.input_numeric("line_override_value", "Available home-team spread", 0.0, min=-80, max=80, step=0.5),
                     col_widths=(8, 4),
                 ),
                 ui.output_text("line_override_prompt"),
@@ -752,26 +694,18 @@ app_ui = ui.page_fluid(
                 ui.output_text("line_override_game_result"),
             ),
             ui.card(
-                ui.card_header("Combination agreement by game"),
+                ui.card_header("Upcoming game predictions"),
                 ui.p(
-                    "Counts how many selected finalist combinations independently produce a bet in each direction. "
-                    "Raw portfolio mean ± SD is retained for comparison; diversified META collapses near-duplicate combinations into equal-weight overlap communities. "
-                    "Each C1/C2/etc. uses its own discovery-selected k when automatic threshold tuning is available.",
+                    "Overall ATS/ROI summarizes the frozen Diversified META consortium across all graded historical games. "
+                    "Bin ATS/ROI uses only historical games in the current |spread| regime: 0–3.5, 4–7.5, 8–14.5, 15–21.5, 22–27.5, 28–34.5, or 35+. "
+                    "Poor bin performance is displayed—not used to suppress the current recommendation.",
                     class_="muted",
                 ),
-                ui.output_data_frame("strategy_combo_summary_table"),
+                ui.output_data_frame("committee_current_spread_context_table"),
             ),
-            ui.card(
-                ui.card_header("Per-combination expected spreads"),
-                ui.p(
-                    "One row per game × finalist. Mean ± SD describes the model set itself; the k×SD interval is the actual decision boundary.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("strategy_combo_detail_table"),
-            ),
-            ui.card(
-                ui.card_header("Selected-model projections by game"),
-                ui.output_data_frame("strategy_model_predictions_table"),
+            ui.p(
+                "Detailed combination diagnostics remain available on Page 3; Page 5 shows every individual model, every selected ensemble, and META visually.",
+                class_="muted",
             ),
         ),
 
@@ -1614,47 +1548,20 @@ def server(input, output, session):
 
         seasons = tuple(HISTORICAL_SEASONS)
         periods = tuple((y, w) for y, w in HISTORICAL_PERIODS if y in set(seasons))
-        if len(periods) <= PATRICK_HOLDOUT_WEEKS:
-            ui.notification_show("Not enough historical weeks for the 6-week holdout.", type="error")
+        if not periods:
+            ui.notification_show("No completed historical weeks are available.", type="error")
             return
-        # First pass uses the ordinary chronological split only to obtain a
-        # provisional candidate pool. Then choose the latest six *usable*
-        # completed weeks for that pool and rerank candidates on discovery
-        # data strictly before the holdout. Sparse later periods are excluded
-        # rather than leaking back into discovery.
-        provisional_search = periods[:-PATRICK_HOLDOUT_WEEKS]
+        # v3.5.15 Patrick preset: use all completed historical weeks. There is
+        # intentionally no recent-week holdout; spread-bin performance is
+        # descriptive context shown beside each current recommendation.
+        search_periods = periods
+        val_periods = tuple()
         ids, _ = resolve_ranked_live_candidates(
-            provisional_search, live_ids,
+            search_periods, live_ids,
             pool_n=PATRICK_POOL_N,
             pool_metric=PATRICK_POOL_METRIC,
             pool_min_bets=PATRICK_POOL_MIN_BETS,
         )
-        search_periods = provisional_search
-        val_periods = periods[-PATRICK_HOLDOUT_WEEKS:]
-        for _ in range(2):
-            coverage = candidate_period_coverage(periods, ids, PATRICK_MIN_AVAILABLE)
-            covered = [
-                (int(r.season), int(r.week))
-                for r in coverage.itertuples(index=False)
-                if int(r.scorable_games) >= PATRICK_HOLDOUT_MIN_SCORABLE_GAMES
-            ]
-            if len(covered) < PATRICK_HOLDOUT_WEEKS:
-                covered = [
-                    (int(r.season), int(r.week))
-                    for r in coverage.itertuples(index=False)
-                    if int(r.scorable_games) > 0
-                ]
-            if len(covered) < PATRICK_HOLDOUT_WEEKS:
-                break
-            val_periods = tuple(covered[-PATRICK_HOLDOUT_WEEKS:])
-            first_val = val_periods[0]
-            search_periods = tuple(p for p in periods if p < first_val)
-            ids, _ = resolve_ranked_live_candidates(
-                search_periods, live_ids,
-                pool_n=PATRICK_POOL_N,
-                pool_metric=PATRICK_POOL_METRIC,
-                pool_min_bets=PATRICK_POOL_MIN_BETS,
-            )
         if len(ids) < PATRICK_MIN_SIZE:
             ui.notification_show(
                 f"Only {len(ids)} eligible current-week models remain; at least {PATRICK_MIN_SIZE} are required.",
@@ -2215,8 +2122,8 @@ def server(input, output, session):
                 return
 
             periods = tuple((y, w) for y, w in HISTORICAL_PERIODS if y in set(HISTORICAL_SEASONS))
-            discovery_periods = periods[:-PATRICK_HOLDOUT_WEEKS]
-            holdout_periods = periods[-PATRICK_HOLDOUT_WEEKS:]
+            discovery_periods = periods
+            holdout_periods = tuple()
             committee_analysis = analyze_finalist_portfolio(
                 DATA, combos, discovery_periods, holdout_periods,
                 min_available_models=PATRICK_MIN_AVAILABLE,
@@ -2711,72 +2618,66 @@ def server(input, output, session):
 
     @render.data_frame
     def committee_current_spread_context_table():
-        r = strategy_current_view_result()
+        current = strategy_current_view_result()
+        if not current:
+            return render.DataGrid(pd.DataFrame())
+        summary = current.get("summary", pd.DataFrame()).copy()
+        if summary.empty:
+            return render.DataGrid(pd.DataFrame())
+
         a = _active_committee_analysis()
         hist = a.get("meta_spread_scale", pd.DataFrame()).copy() if a else pd.DataFrame()
-        if r is None or not isinstance(hist, pd.DataFrame) or hist.empty:
-            return render.DataGrid(pd.DataFrame())
-        cur = r.get("summary", pd.DataFrame()).copy()
-        if cur.empty:
-            return render.DataGrid(pd.DataFrame())
+        overall = a.get("meta_summary", pd.DataFrame()).copy() if a else pd.DataFrame()
+
+        # v3.5.15 uses the all-history rows for Page 4 context.
+        if len(hist):
+            hist = hist[hist["period"].astype(str).eq("All history")].copy()
+        if len(overall):
+            overall = overall[
+                overall["method"].astype(str).eq("Diversified META")
+                & overall["period"].astype(str).eq("All history")
+            ].copy()
+
+        overall_row = overall.iloc[0] if len(overall) else pd.Series(dtype=object)
         rows = []
-        for x in cur.itertuples(index=False):
+        for x in summary.itertuples(index=False):
             market = pd.to_numeric(pd.Series([getattr(x, "market_home_margin", np.nan)]), errors="coerce").iloc[0]
-            if not np.isfinite(market):
-                continue
-            bucket = meta_spread_bucket_label(float(market))
-            qd = hist[(hist["period"].astype(str).eq("Discovery")) & (hist["line_bucket"].astype(str).eq(bucket))]
-            qh = hist[(hist["period"].astype(str).eq("Holdout")) & (hist["line_bucket"].astype(str).eq(bucket))]
-            dr = qd.iloc[0] if len(qd) else pd.Series(dtype=object)
+            bucket = meta_spread_bucket_label(float(market)) if np.isfinite(market) else ""
+            qh = hist[hist["line_bucket"].astype(str).eq(bucket)] if len(hist) else pd.DataFrame()
             hr = qh.iloc[0] if len(qh) else pd.Series(dtype=object)
-            edge = pd.to_numeric(pd.Series([getattr(x, "meta_edge_home", np.nan)]), errors="coerce").iloc[0]
             qualifies = bool(getattr(x, "meta_qualifies", False))
-            if qualifies and np.isfinite(edge) and abs(float(market)) > 1e-12:
-                side_type = "Favorite" if float(edge) * float(market) > 0 else "Underdog"
-            elif qualifies:
-                side_type = "Pick'em"
-            else:
-                side_type = "—"
-            if side_type == "Favorite":
-                disc_side_bets = dr.get("favorite_bets", np.nan); disc_side_ats = dr.get("favorite_ats_pct", np.nan)
-                hold_side_bets = hr.get("favorite_bets", np.nan); hold_side_ats = hr.get("favorite_ats_pct", np.nan)
-            elif side_type == "Underdog":
-                disc_side_bets = dr.get("underdog_bets", np.nan); disc_side_ats = dr.get("underdog_ats_pct", np.nan)
-                hold_side_bets = hr.get("underdog_bets", np.nan); hold_side_ats = hr.get("underdog_ats_pct", np.nan)
-            else:
-                disc_side_bets = np.nan; disc_side_ats = np.nan; hold_side_bets = np.nan; hold_side_ats = np.nan
-            home = str(getattr(x, "home", "")); away = str(getattr(x, "away", ""))
+            bet_side = str(getattr(x, "meta_bet_side", "") or "")
+            home = str(getattr(x, "home", ""))
+            away = str(getattr(x, "away", ""))
+            line_label = _spread_label(away, home, market)
+            meta_mean = pd.to_numeric(pd.Series([getattr(x, "meta_mean_home_margin", np.nan)]), errors="coerce").iloc[0]
+            meta_label = _spread_label(away, home, meta_mean) if np.isfinite(meta_mean) else "—"
             rows.append({
                 "Game": f"{away} @ {home}",
-                "Line used": _spread_label(away, home, float(market)),
-                "|Spread|": round(abs(float(market)), 1),
-                "Regime": bucket,
-                "META": (f"BET {getattr(x, 'meta_bet_side', '')}" if qualifies else "PASS"),
-                "Bet type": side_type,
-                "Discovery games": int(dr.get("scorable_games", 0) or 0),
-                "Discovery bets": int(dr.get("bets", 0) or 0),
-                "Discovery ATS %": dr.get("ats_pct", np.nan),
-                "Discovery ΔMAE": dr.get("delta_mae_vs_market", np.nan),
-                "Same-side disc bets": disc_side_bets,
-                "Same-side disc ATS %": disc_side_ats,
-                "Holdout games": int(hr.get("scorable_games", 0) or 0),
-                "Holdout bets": int(hr.get("bets", 0) or 0),
-                "Holdout ATS %": hr.get("ats_pct", np.nan),
-                "Holdout ΔMAE": hr.get("delta_mae_vs_market", np.nan),
-                "Same-side hold bets": hold_side_bets,
-                "Same-side hold ATS %": hold_side_ats,
+                "Line used": line_label,
+                "|Spread| bin": bucket,
+                "META estimate": meta_label,
+                "META": (f"BET {bet_side}" if qualifies else "PASS"),
+                "Signal (SD)": getattr(x, "meta_signal_sd", np.nan),
+                "k": getattr(x, "meta_k", np.nan),
+                "Overall hist bets": int(overall_row.get("bets", 0) or 0),
+                "Overall ATS %": overall_row.get("ats_pct", np.nan),
+                "Overall ROI %": overall_row.get("roi", np.nan),
+                "Bin hist bets": int(hr.get("bets", 0) or 0),
+                "Bin ATS %": hr.get("ats_pct", np.nan),
+                "Bin ROI %": hr.get("roi", np.nan),
+                "Bin Wilson LB %": hr.get("wilson_low", np.nan),
+                "Bin META MAE": hr.get("forecast_mae", np.nan),
+                "Bin market MAE": hr.get("market_mae", np.nan),
             })
-        d = pd.DataFrame(rows)
-        if d.empty:
-            return render.DataGrid(d)
-        for c in ["Discovery ATS %", "Same-side disc ATS %", "Holdout ATS %", "Same-side hold ATS %"]:
-            d[c] = 100 * pd.to_numeric(d[c], errors="coerce")
-        for c in ["Discovery ΔMAE", "Holdout ΔMAE"]:
-            d[c] = pd.to_numeric(d[c], errors="coerce").round(2)
-        for c in ["Same-side disc bets", "Same-side hold bets"]:
-            d[c] = pd.to_numeric(d[c], errors="coerce").astype("Int64")
-        d = d.sort_values(["|Spread|", "Game"], ascending=[False, True]).reset_index(drop=True)
-        return render.DataGrid(d, filters=False, height="340px")
+        out = pd.DataFrame(rows)
+        for c in ["Overall ATS %", "Bin ATS %", "Bin Wilson LB %"]:
+            if c in out:
+                out[c] = pd.to_numeric(out[c], errors="coerce") * 100.0
+        for c in ["Overall ROI %", "Bin ROI %"]:
+            if c in out:
+                out[c] = pd.to_numeric(out[c], errors="coerce") * 100.0
+        return render.DataGrid(out, filters=False, width="100%")
 
     @render.data_frame
     def committee_combo_k_table():

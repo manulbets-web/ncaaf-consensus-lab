@@ -780,17 +780,48 @@ def analyze_finalist_portfolio(
             diversified_k = pd.to_numeric(pd.Series([qk.iloc[0].get("selected_k")]), errors="coerce").iloc[0]
     if not np.isfinite(diversified_k):
         diversified_k = 0.50
+    # v3.5.15: Page 4 uses all graded historical games rather than a
+    # discovery/holdout split for spread-regime trust context. The same frozen
+    # META k is applied to every bin; bin performance never suppresses a bet.
+    all_periods = list(dict.fromkeys(
+        [tuple(map(int, p)) for p in list(discovery_periods) + list(holdout_periods)]
+    ))
+    all_frame = _meta_game_frame(
+        data, combos, all_periods,
+        min_available_models=min_available_models,
+        diversified=True,
+    ) if all_periods else pd.DataFrame()
+    meta_frames[("Diversified META", "all_history")] = all_frame
+
     spread_rows = []
-    for period_name, frame_key in (("Discovery", "discovery"), ("Holdout", "holdout")):
-        frame = meta_frames.get(("Diversified META", frame_key), pd.DataFrame())
-        q = summarize_meta_spread_regimes(
-            frame, float(diversified_k), period=period_name,
-            min_active_units=int(min_meta_communities),
-            standard_price=standard_price,
-        )
-        if len(q):
-            spread_rows.append(q)
+    q = summarize_meta_spread_regimes(
+        all_frame, float(diversified_k), period="All history",
+        min_active_units=int(min_meta_communities),
+        standard_price=standard_price,
+    )
+    if len(q):
+        spread_rows.append(q)
     meta_spread_scale = pd.concat(spread_rows, ignore_index=True) if spread_rows else pd.DataFrame()
+
+    # Add one overall all-history row using the same frozen k.
+    if all_frame is None or all_frame.empty:
+        all_row = {"k": diversified_k, "bets": 0, "wins": 0, "losses": 0, "pushes": 0,
+                   "ats_pct": np.nan, "units": 0.0, "roi": np.nan, "wilson_low": np.nan}
+        all_scorable = 0
+    else:
+        edge = pd.to_numeric(all_frame["meta_edge"], errors="coerce").to_numpy(dtype=float)
+        sig = pd.to_numeric(all_frame["meta_signal"], errors="coerce").to_numpy(dtype=float)
+        cover = pd.to_numeric(all_frame["cover"], errors="coerce").to_numpy(dtype=float)
+        gate = pd.to_numeric(all_frame["active_units"], errors="coerce").fillna(0).to_numpy(dtype=float) >= int(min_meta_communities)
+        all_row = _threshold_stats(edge, sig, cover, float(diversified_k), standard_price=standard_price, extra_gate=gate)
+        all_scorable = int(gate.sum())
+    holdout_summaries.append({
+        "method": "Diversified META",
+        "period": "All history",
+        "selected_k": float(diversified_k),
+        "scorable_games": all_scorable,
+        **{kk: vv for kk, vv in all_row.items() if kk != "k"},
+    })
 
     overlap_summary = overlap_extra["summary"]
     return {
