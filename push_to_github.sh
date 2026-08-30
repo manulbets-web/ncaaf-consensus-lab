@@ -21,9 +21,32 @@ else
   git remote add origin "$REPO_URL"
 fi
 
+echo "Preflight: verifying v3.5.16 Patrick preset..."
+python - <<'PYVERIFY'
+from pathlib import Path
+p = Path("strategy_lab/app.py")
+s = p.read_text(encoding="utf-8")
+expected = [
+    "PATRICK_HOLDOUT_WEEKS = 6",
+    "PATRICK_MIN_SIZE = 3",
+    "PATRICK_MAX_SIZE = 6",
+    "PATRICK_FINALISTS = 50",
+    "PATRICK_POOL_N = 35",
+    'PATRICK_POOL_METRIC = "wilson"',
+    "PATRICK_POOL_MIN_BETS = 25",
+    "PATRICK_MIN_AVAILABLE = 3",
+    "PATRICK_MIN_SEARCH_BETS = 50",
+    'PATRICK_RANK_METRIC = "ats"',
+]
+missing = [x for x in expected if x not in s]
+if missing:
+    raise SystemExit("REFUSING TO PUSH: stale Patrick preset detected:\n  " + "\n  ".join(missing))
+print("Verified: Top 35 | Wilson | min 25 | sizes 3–6 | ATS rank | 50 finalists")
+PYVERIFY
+
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.14"
+  git commit -m "Deploy NCAAF Consensus Lab v3.5.16"
 else
   echo "No new changes to commit."
 fi

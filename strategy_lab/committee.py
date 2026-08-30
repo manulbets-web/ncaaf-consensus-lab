@@ -325,23 +325,57 @@ def _threshold_stats(
 
 
 def _choose_stable_k(profile: pd.DataFrame, min_bets: int) -> dict:
+    """Choose a discovery-only k from a genuinely centered stable plateau.
+
+    The previous selector allowed endpoint thresholds (especially k=2.00) to
+    win using only a one-sided two-point neighborhood. That could turn a
+    modest improvement in historical ATS into a very restrictive current-week
+    rule. The revised selector requires both adjacent k values to be eligible,
+    scores the centered three-k neighborhood by its worst Wilson lower bound,
+    and—when robust performance is within 1 percentage point of the best
+    plateau—prefers the threshold with more betting support, then the lower k.
+
+    Endpoint thresholds remain visible in the diagnostic profile but are only
+    used as a fallback when no centered plateau can be formed.
+    """
     if profile is None or profile.empty:
         return {"selected_k": np.nan, "selection_score": np.nan}
     p = profile.sort_values("k").reset_index(drop=True).copy()
     p["eligible_k"] = pd.to_numeric(p["bets"], errors="coerce").fillna(0).ge(int(min_bets))
-    floors = []
-    means = []
-    for i in range(len(p)):
-        lo = max(0, i - 1)
-        hi = min(len(p), i + 2)
-        window = p.iloc[lo:hi]
-        vals = pd.to_numeric(window.loc[window["eligible_k"], "wilson_low"], errors="coerce").dropna()
-        floors.append(float(vals.min()) if len(vals) >= 2 else np.nan)
-        means.append(float(vals.mean()) if len(vals) >= 2 else np.nan)
+    floors = np.full(len(p), np.nan, dtype=float)
+    means = np.full(len(p), np.nan, dtype=float)
+    centered = np.zeros(len(p), dtype=bool)
+    # A stable threshold needs an eligible k immediately on both sides.
+    for i in range(1, len(p) - 1):
+        window = p.iloc[i-1:i+2]
+        if bool(window["eligible_k"].all()):
+            vals = pd.to_numeric(window["wilson_low"], errors="coerce")
+            if vals.notna().all():
+                floors[i] = float(vals.min())
+                means[i] = float(vals.mean())
+                centered[i] = True
+    p["centered_plateau"] = centered
     p["neighbor_wilson_floor"] = floors
     p["neighbor_wilson_mean"] = means
-    cand = p[p["eligible_k"] & p["neighbor_wilson_floor"].notna()].copy()
-    if cand.empty:
+
+    cand = p[p["eligible_k"] & p["centered_plateau"] & p["neighbor_wilson_floor"].notna()].copy()
+    if len(cand):
+        best_floor = float(pd.to_numeric(cand["neighbor_wilson_floor"], errors="coerce").max())
+        # Treat <=1 percentage point of robust Wilson performance as essentially
+        # tied, then prefer more observations / a less restrictive threshold.
+        cand["near_best"] = pd.to_numeric(cand["neighbor_wilson_floor"], errors="coerce") >= (best_floor - 0.01)
+        near = cand[cand["near_best"]].copy()
+        near["distance_from_anchor"] = (pd.to_numeric(near["k"], errors="coerce") - 0.75).abs()
+        near = near.sort_values(
+            ["bets", "k", "neighbor_wilson_floor", "neighbor_wilson_mean", "distance_from_anchor"],
+            ascending=[False, True, False, False, True],
+            na_position="last",
+        )
+        row = near.iloc[0]
+    else:
+        # Sparse profiles cannot establish a centered plateau. Preserve a
+        # deterministic fallback but favor support and proximity to the 0.75
+        # search anchor instead of selecting an extreme endpoint on hit rate.
         cand = p[p["eligible_k"]].copy()
         if cand.empty:
             cand = p[p["bets"].gt(0)].copy()
@@ -349,16 +383,17 @@ def _choose_stable_k(profile: pd.DataFrame, min_bets: int) -> dict:
             return {"selected_k": np.nan, "selection_score": np.nan, "profile": p}
         cand["neighbor_wilson_floor"] = cand["wilson_low"]
         cand["neighbor_wilson_mean"] = cand["wilson_low"]
-    cand["distance_from_anchor"] = (pd.to_numeric(cand["k"]) - 0.50).abs()
-    cand = cand.sort_values(
-        ["neighbor_wilson_floor", "neighbor_wilson_mean", "wilson_low", "bets", "distance_from_anchor", "k"],
-        ascending=[False, False, False, False, True, True],
-        na_position="last",
-    )
-    row = cand.iloc[0]
+        cand["distance_from_anchor"] = (pd.to_numeric(cand["k"], errors="coerce") - 0.75).abs()
+        cand = cand.sort_values(
+            ["bets", "distance_from_anchor", "wilson_low", "k"],
+            ascending=[False, True, False, True],
+            na_position="last",
+        )
+        row = cand.iloc[0]
+
     return {
         "selected_k": float(row["k"]),
-        "selection_score": float(row["neighbor_wilson_floor"]),
+        "selection_score": float(row.get("neighbor_wilson_floor", np.nan)),
         "profile": p,
     }
 
@@ -780,48 +815,17 @@ def analyze_finalist_portfolio(
             diversified_k = pd.to_numeric(pd.Series([qk.iloc[0].get("selected_k")]), errors="coerce").iloc[0]
     if not np.isfinite(diversified_k):
         diversified_k = 0.50
-    # v3.5.15: Page 4 uses all graded historical games rather than a
-    # discovery/holdout split for spread-regime trust context. The same frozen
-    # META k is applied to every bin; bin performance never suppresses a bet.
-    all_periods = list(dict.fromkeys(
-        [tuple(map(int, p)) for p in list(discovery_periods) + list(holdout_periods)]
-    ))
-    all_frame = _meta_game_frame(
-        data, combos, all_periods,
-        min_available_models=min_available_models,
-        diversified=True,
-    ) if all_periods else pd.DataFrame()
-    meta_frames[("Diversified META", "all_history")] = all_frame
-
     spread_rows = []
-    q = summarize_meta_spread_regimes(
-        all_frame, float(diversified_k), period="All history",
-        min_active_units=int(min_meta_communities),
-        standard_price=standard_price,
-    )
-    if len(q):
-        spread_rows.append(q)
+    for period_name, frame_key in (("Discovery", "discovery"), ("Holdout", "holdout")):
+        frame = meta_frames.get(("Diversified META", frame_key), pd.DataFrame())
+        q = summarize_meta_spread_regimes(
+            frame, float(diversified_k), period=period_name,
+            min_active_units=int(min_meta_communities),
+            standard_price=standard_price,
+        )
+        if len(q):
+            spread_rows.append(q)
     meta_spread_scale = pd.concat(spread_rows, ignore_index=True) if spread_rows else pd.DataFrame()
-
-    # Add one overall all-history row using the same frozen k.
-    if all_frame is None or all_frame.empty:
-        all_row = {"k": diversified_k, "bets": 0, "wins": 0, "losses": 0, "pushes": 0,
-                   "ats_pct": np.nan, "units": 0.0, "roi": np.nan, "wilson_low": np.nan}
-        all_scorable = 0
-    else:
-        edge = pd.to_numeric(all_frame["meta_edge"], errors="coerce").to_numpy(dtype=float)
-        sig = pd.to_numeric(all_frame["meta_signal"], errors="coerce").to_numpy(dtype=float)
-        cover = pd.to_numeric(all_frame["cover"], errors="coerce").to_numpy(dtype=float)
-        gate = pd.to_numeric(all_frame["active_units"], errors="coerce").fillna(0).to_numpy(dtype=float) >= int(min_meta_communities)
-        all_row = _threshold_stats(edge, sig, cover, float(diversified_k), standard_price=standard_price, extra_gate=gate)
-        all_scorable = int(gate.sum())
-    holdout_summaries.append({
-        "method": "Diversified META",
-        "period": "All history",
-        "selected_k": float(diversified_k),
-        "scorable_games": all_scorable,
-        **{kk: vv for kk, vv in all_row.items() if kk != "k"},
-    })
 
     overlap_summary = overlap_extra["summary"]
     return {
