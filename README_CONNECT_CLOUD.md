@@ -1,4 +1,4 @@
-# NCAAF Consensus Lab v3.5.18 — Posit Connect Cloud bundle
+# NCAAF Consensus Lab v3.5.19 — Posit Connect Cloud bundle
 
 This directory was generated from:
 
@@ -8,8 +8,8 @@ Primary file for Connect Cloud: `app.py`
 Python version: 3.11 or 3.12 recommended.
 
 The deployment is public-session safe: strategy selections and alternate-line overrides are kept in each Shiny session.
-PredictionTracker refresh files are runtime cache and may reset when the app sleeps or is republished.
-Use Page 2's **Download prospective snapshots** button to preserve the early-week research archive outside the cloud worker.
+PredictionTracker currently blocks Posit Connect Cloud worker IPs. The deployed app therefore falls back to a strict season/week-tagged GitHub mirror refreshed from the user's Mac.
+Use `./refresh_predictiontracker_local_and_push.sh SEASON WEEK` whenever PredictionTracker changes; the helper also persists unique source snapshots in Git.
 
 ## Local smoke test
 

@@ -5,12 +5,15 @@ import math
 import re
 import subprocess
 import sys
+import hashlib
+import io
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
 import numpy as np
 import pandas as pd
+import requests
 
 
 CFB_NAME_ALIASES = {
@@ -21,6 +24,16 @@ CFB_NAME_ALIASES = {
     "TeamRankings.com": "TeamRankings",
     "David Harville": "Harville",
 }
+
+
+# Connect Cloud is currently blocked by PredictionTracker (HTTP 403 from the
+# cloud worker IP range).  A locally refreshed GitHub mirror is therefore the
+# production fallback.  Cache-busting is applied only to GitHub, not to
+# PredictionTracker itself.
+PT_MIRROR_BASE = "https://raw.githubusercontent.com/manulbets-web/ncaaf-consensus-lab/main"
+PT_MIRROR_CSV_URL = f"{PT_MIRROR_BASE}/data/current/ncaapredictions.csv"
+PT_MIRROR_META_URL = f"{PT_MIRROR_BASE}/data/current/predictiontracker_mirror_status.json"
+
 
 
 def utc_now():
@@ -815,6 +828,137 @@ def _run(cmd, cwd, timeout_seconds=None):
         }
 
 
+
+def _sha256_bytes(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _download_raw_github(url: str, timeout: int = 45) -> bytes:
+    """Fetch a raw-GitHub mirror with cache busting on GitHub only."""
+    sep = "&" if "?" in url else "?"
+    full = f"{url}{sep}_refresh={utc_stamp()}"
+    response = requests.get(
+        full,
+        timeout=timeout,
+        headers={
+            "User-Agent": "ncaaf-consensus-lab/3.5.19",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Accept": "*/*",
+        },
+    )
+    response.raise_for_status()
+    if not response.content:
+        raise RuntimeError(f"Empty GitHub mirror response: {url}")
+    return response.content
+
+
+def _refresh_predictiontracker_from_github_mirror(
+    root: Path,
+    *,
+    season: int,
+    week: int,
+) -> dict:
+    """Load a locally refreshed PT mirror from GitHub and validate its provenance.
+
+    This is deliberately strict.  A mirror is accepted only when its metadata
+    explicitly says it belongs to the season/week currently selected in the app
+    and the canonical CSV hash agrees with the metadata.  Therefore a prior-week
+    GitHub file cannot silently masquerade as a successful live refresh.
+    """
+    meta_bytes = _download_raw_github(PT_MIRROR_META_URL)
+    try:
+        meta = json.loads(meta_bytes.decode("utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"Could not parse PT mirror metadata: {exc}") from exc
+
+    mirror_season = int(meta.get("season", -1))
+    mirror_week = int(meta.get("week", -1))
+    if mirror_season != int(season) or mirror_week != int(week):
+        raise RuntimeError(
+            "PredictionTracker direct fetch is blocked by Connect Cloud, and the "
+            f"GitHub mirror is season {mirror_season} week {mirror_week}, not "
+            f"season {int(season)} week {int(week)}. On your Mac run: "
+            f"./refresh_predictiontracker_local_and_push.sh {int(season)} {int(week)}"
+        )
+
+    csv_bytes = _download_raw_github(PT_MIRROR_CSV_URL)
+    frame = pd.read_csv(io.BytesIO(csv_bytes), low_memory=False)
+    frame.columns = [str(c).strip().lower() for c in frame.columns]
+    required = {"home", "road", "line"}
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise RuntimeError(
+            "GitHub PT mirror is missing required columns: " + ", ".join(missing)
+        )
+    model_columns = [
+        c for c in frame.columns
+        if c.startswith("line") and c not in {"line", "lineopen", "linemidweek", "lineca", "lineavg", "linemedian", "linecons", "linestd"}
+    ]
+    if len(model_columns) < 3:
+        raise RuntimeError(
+            f"GitHub PT mirror has only {len(model_columns)} model columns; refusing it."
+        )
+
+    canonical = frame.to_csv(index=False, na_rep="").encode("utf-8")
+    canonical_sha = _sha256_bytes(canonical)
+    expected_sha = str(meta.get("canonical_sha256") or "").strip()
+    if expected_sha and canonical_sha != expected_sha:
+        raise RuntimeError(
+            "GitHub PT mirror CSV hash does not match mirror metadata; refusing it."
+        )
+
+    production = root / "data/current/ncaapredictions.csv"
+    production.parent.mkdir(parents=True, exist_ok=True)
+    old_bytes = production.read_bytes() if production.exists() else None
+    changed = old_bytes != canonical
+    production.write_bytes(canonical)
+
+    raw_path = root / "data/raw/predictiontracker/current_ncaapredictions_from_github.csv"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_bytes(csv_bytes)
+
+    record = {
+        "name": "current_predictions",
+        "url": PT_MIRROR_CSV_URL,
+        "status": "ok",
+        "fetched_at_utc": utc_now(),
+        "source_fetched_at_utc": meta.get("fetched_at_utc"),
+        "http_status": 200,
+        "bytes": len(csv_bytes),
+        "sha256": _sha256_bytes(csv_bytes),
+        "canonical_sha256": canonical_sha,
+        "rows": int(len(frame)),
+        "columns": int(len(frame.columns)),
+        "changed": bool(changed),
+        "production_path": "data/current/ncaapredictions.csv",
+        "snapshot_path": meta.get("snapshot_path"),
+        "published_update": meta.get("published_update"),
+        "transport": "github_mirror",
+        "mirror_commit_hint": meta.get("git_commit"),
+        "message": json.dumps({
+            "rows": int(len(frame)),
+            "columns": int(len(frame.columns)),
+            "model_columns": int(len(model_columns)),
+            "mirror_validation": "ok",
+            "mirror_season": mirror_season,
+            "mirror_week": mirror_week,
+            "source_fetched_at_utc": meta.get("fetched_at_utc"),
+            "page_validation": meta.get("page_validation") or {},
+        }, sort_keys=True),
+    }
+
+    manifest = {
+        "overall_status": "ok",
+        "transport": "github_mirror",
+        "records": [record],
+    }
+    status_path = root / "data/derived/predictiontracker_source_status.json"
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    status_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return record
+
+
 def refresh_current_sources(
     root: str | Path,
     history: pd.DataFrame,
@@ -849,7 +993,7 @@ def refresh_current_sources(
 
     pt_script = root / "scripts/scrape_predictiontracker.py"
     if pt_script.exists():
-        status["predictiontracker"] = _run(
+        direct = _run(
             [
                 sys.executable,
                 str(pt_script),
@@ -863,15 +1007,13 @@ def refresh_current_sources(
             timeout_seconds=120,
         )
     else:
-        status["predictiontracker"] = {
+        direct = {
             "returncode": 127,
-            "stderr": (
-                "scripts/scrape_predictiontracker.py is missing."
-            ),
+            "stderr": "scripts/scrape_predictiontracker.py is missing.",
         }
 
-    # Attach the scraper's machine-readable record so the UI can prove what
-    # was fetched rather than merely reporting that a subprocess returned.
+    status["predictiontracker_direct"] = direct
+
     source_manifest = _safe_json_load(
         root / "data/derived/predictiontracker_source_status.json"
     )
@@ -879,10 +1021,44 @@ def refresh_current_sources(
         r for r in source_manifest.get("records", [])
         if r.get("name") == "current_predictions"
     ]
-    status["predictiontracker_source_record"] = (
-        current_records[-1] if current_records else None
-    )
-    status["predictiontracker_source_manifest_status"] = source_manifest.get("overall_status")
+    direct_record = current_records[-1] if current_records else None
+
+    if int(direct.get("returncode", 1)) == 0 and (direct_record or {}).get("status") == "ok":
+        # Local development can still reach PredictionTracker directly.
+        status["predictiontracker"] = direct
+        status["predictiontracker_source_record"] = direct_record
+        status["predictiontracker_transport"] = "direct"
+        status["predictiontracker_source_manifest_status"] = source_manifest.get("overall_status")
+    else:
+        # Posit Connect Cloud receives HTTP 403 from PredictionTracker.  Do not
+        # keep retrying headers or accept cached rows: load the explicit
+        # season/week-tagged GitHub mirror produced by the user's local Mac.
+        try:
+            mirror_record = _refresh_predictiontracker_from_github_mirror(
+                root, season=int(season), week=int(week)
+            )
+            status["predictiontracker"] = {
+                "returncode": 0,
+                "stdout": "Direct PredictionTracker access blocked; verified GitHub mirror loaded.",
+                "stderr": str(direct.get("stderr") or ""),
+                "fallback": "github_mirror",
+            }
+            status["predictiontracker_source_record"] = mirror_record
+            status["predictiontracker_transport"] = "github_mirror"
+            status["predictiontracker_source_manifest_status"] = "ok"
+        except Exception as mirror_exc:
+            status["predictiontracker"] = {
+                "returncode": 1,
+                "stdout": str(direct.get("stdout") or ""),
+                "stderr": (
+                    str(direct.get("stderr") or "")
+                    + "\nGitHub mirror fallback failed: " + str(mirror_exc)
+                ),
+                "fallback": "github_mirror_failed",
+            }
+            status["predictiontracker_source_record"] = direct_record
+            status["predictiontracker_transport"] = "failed"
+            status["predictiontracker_source_manifest_status"] = "error"
 
     cfb_script = root / "scripts/scrape_cfbpicker_current.py"
     if not include_cfbpicker:

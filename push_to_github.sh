@@ -21,7 +21,7 @@ else
   git remote add origin "$REPO_URL"
 fi
 
-echo "Preflight: verifying v3.5.18 Patrick preset..."
+echo "Preflight: verifying v3.5.19 Patrick preset..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -42,25 +42,25 @@ missing = [x for x in expected if x not in s]
 if missing:
     raise SystemExit("REFUSING TO PUSH: stale Patrick preset detected:\n  " + "\n  ".join(missing))
 refresh_expected = [
-    "Cached prior-week rows were not accepted",
+    "cached prior-week rows were NOT used",
     "Download prospective snapshots",
     "upcoming_refresh_audit",
 ]
-refresh_missing = [x for x in refresh_expected if x not in s]
 current_week = Path("strategy_lab/current_week.py").read_text(encoding="utf-8")
 scraper = Path("scripts/scrape_predictiontracker.py").read_text(encoding="utf-8")
+refresh_missing = [x for x in refresh_expected if x not in s and x not in current_week and x not in scraper]
 if "save_prospective_current_week_snapshot" not in current_week:
     refresh_missing.append("save_prospective_current_week_snapshot")
-if "Do NOT append query-string" not in scraper:
-    refresh_missing.append("canonical no-query PredictionTracker fetch")
+if "PT_MIRROR_CSV_URL" not in current_week:
+    refresh_missing.append("GitHub mirror fallback")
 if refresh_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.18 refresh code detected:\n  " + "\n  ".join(refresh_missing))
-print("Verified: Top 35 | Wilson | min 25 | sizes 3–6 | ATS rank | 50 finalists | strict PT refresh + snapshots")
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.19 refresh code detected:\n  " + "\n  ".join(refresh_missing))
+print("Verified: Top 35 | Wilson | min 25 | sizes 3–6 | ATS rank | 50 finalists | strict PT mirror fallback + persistent snapshots")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.18"
+  git commit -m "Deploy NCAAF Consensus Lab v3.5.19"
 else
   echo "No new changes to commit."
 fi

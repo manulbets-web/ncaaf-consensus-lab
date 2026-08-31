@@ -368,8 +368,8 @@ app_ui = ui.page_fluid(
         ui.nav_panel(
             "2 · Upcoming Games",
             ui.p(
-                "Raw PredictionTracker board only. Refresh is strict: if the live source cannot be verified, "
-                "the app fails rather than silently showing a cached prior-week slate. Every unique changed "
+                "Raw PredictionTracker board. Connect Cloud direct access is blocked by PredictionTracker, so Refresh falls back to a season/week-verified GitHub mirror created by the local sync helper. "
+                "If neither route can provide the selected season/week, the app fails rather than silently showing a cached prior-week slate. Every unique changed "
                 "board is timestamped for prospective early-line / closing-line-value analysis.",
                 class_="muted",
             ),
@@ -985,9 +985,11 @@ def server(input, output, session):
         if s == "success":
             r = upcoming_result()
             live = len(r.get("pt_live_models", pd.DataFrame())) if r else 0
-            return f"PredictionTracker verified and loaded. {live} model columns are currently posting. CFB Picker was not queried."
+            transport = ((r or {}).get("refresh_status") or {}).get("predictiontracker_transport") or "unknown"
+            via = "direct source" if transport == "direct" else "verified GitHub mirror" if transport == "github_mirror" else transport
+            return f"PredictionTracker verified and loaded via {via}. {live} model columns are currently posting. CFB Picker was not queried."
         if s == "error":
-            return "PredictionTracker refresh failed verification. Cached prior-week rows were not accepted; try Refresh again."
+            return "PredictionTracker refresh failed. Connect Cloud is blocked by the source and no matching verified GitHub mirror was available. Run the local mirror helper on your Mac, then click Refresh again."
         return str(s)
 
     @render.text
@@ -1013,8 +1015,11 @@ def server(input, output, session):
         except Exception:
             pass
         snap_txt = snap.get("snapshot_prefix") or "not saved"
+        transport = rs.get("predictiontracker_transport") or rec.get("transport") or "unknown"
+        source_fetched = rec.get("source_fetched_at_utc")
+        source_txt = f" · source fetched: {source_fetched}" if source_fetched else ""
         return (
-            f"PT published: {published} · fetched: {fetched} · "
+            f"PT published: {published} · app fetched: {fetched}{source_txt} · transport: {transport} · "
             f"prospective snapshot: {snap_txt}{validation}"
         )
 
