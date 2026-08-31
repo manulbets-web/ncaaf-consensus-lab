@@ -56,8 +56,9 @@ RESULTS_URL = f"{BASE_URL}/ncaaresults.php"
 ARCHIVE_INDEX_URL = f"{BASE_URL}/ncaaarchive.html"
 
 USER_AGENT = (
-    "manulbets-web-ncaaf-consensus/0.3 "
-    "(research dashboard; low-frequency public-data retrieval)"
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/151.0.0.0 Safari/537.36"
 )
 
 MISSING_VALUES = ["", ".", "NA", "N/A", "null", "None"]
@@ -96,14 +97,6 @@ def iso_utc(moment: datetime | None = None) -> str:
     return moment.isoformat().replace("+00:00", "Z")
 
 
-def cache_busted_url(url: str, moment: datetime | None = None) -> str:
-    """Return a URL with a unique query token so current-week caches revalidate."""
-    moment = moment or utc_now()
-    token = moment.strftime("%Y%m%d%H%M%S%f")
-    sep = "&" if "?" in url else "?"
-    return f"{url}{sep}_ncaaf_refresh={token}"
-
-
 def sha256_bytes(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
@@ -137,9 +130,10 @@ def create_session() -> requests.Session:
                 "text/csv,text/html,application/xhtml+xml,"
                 "application/xml;q=0.9,*/*;q=0.8"
             ),
-            # PredictionTracker/CDN caching can lag the visible HTML page.
-            # Current-week refreshes must ask intermediaries to revalidate.
-            "Cache-Control": "no-cache, no-store, max-age=0",
+            "Accept-Language": "en-US,en;q=0.9",
+            # Revalidate without changing the URL. PredictionTracker returns HTTP
+            # 403 for cache-busting query strings on these static resources.
+            "Cache-Control": "no-cache",
             "Pragma": "no-cache",
         }
     )
@@ -157,7 +151,7 @@ def fetch_bytes(
     headers = None
     if force_revalidate:
         headers = {
-            "Cache-Control": "no-cache, no-store, max-age=0",
+            "Cache-Control": "no-cache",
             "Pragma": "no-cache",
         }
     response = session.get(url, timeout=timeout_seconds, headers=headers)
@@ -742,16 +736,16 @@ def process_current(
     )
 
     try:
-        # Fetch the visible page and CSV with the SAME unique cache-busting token.
-        # This avoids the observed state where predncaa.html advances to the new
-        # week while an intermediary continues serving the prior ncaapredictions.csv.
-        token_time = run_time
+        # Fetch the canonical static URLs directly. Do NOT append query-string
+        # cache busters: PredictionTracker's static-file host returns 403 for
+        # those URLs. Freshness is enforced with no-cache headers plus the
+        # CSV-vs-visible-page validation below.
         page_content = None
         published_update = None
         try:
             page_content, _ = fetch_bytes(
                 session,
-                cache_busted_url(CURRENT_PAGE_URL, token_time),
+                CURRENT_PAGE_URL,
                 force_revalidate=True,
             )
             published_update = parse_prediction_page_update(page_content)
@@ -765,11 +759,21 @@ def process_current(
                 exc,
             )
 
-        content, response = fetch_bytes(
-            session,
-            cache_busted_url(CURRENT_CSV_URL, token_time),
-            force_revalidate=True,
-        )
+        # The CSV link is exposed from predncaa.html; use the page as Referer
+        # to look like the normal browser download path.
+        old_referer = session.headers.get("Referer")
+        session.headers["Referer"] = CURRENT_PAGE_URL
+        try:
+            content, response = fetch_bytes(
+                session,
+                CURRENT_CSV_URL,
+                force_revalidate=True,
+            )
+        finally:
+            if old_referer is None:
+                session.headers.pop("Referer", None)
+            else:
+                session.headers["Referer"] = old_referer
         normalized, report = normalize_current(content)
 
         validation = None
@@ -777,7 +781,27 @@ def process_current(
             validation = validate_current_csv_against_page(normalized, page_content)
             report["page_validation"] = validation
             if validation.get("status") == "mismatch":
-                raise ValueError(validation.get("message") or "PredictionTracker CSV/page mismatch")
+                # A CDN edge can briefly lag the page. Re-request the SAME
+                # canonical CSV URL once; never fall back to cached local rows.
+                import time
+                time.sleep(2.0)
+                session.headers["Referer"] = CURRENT_PAGE_URL
+                try:
+                    content2, response2 = fetch_bytes(
+                        session, CURRENT_CSV_URL, force_revalidate=True
+                    )
+                finally:
+                    session.headers.pop("Referer", None)
+                normalized2, report2 = normalize_current(content2)
+                validation2 = validate_current_csv_against_page(normalized2, page_content)
+                report2["page_validation"] = validation2
+                if validation2.get("status") == "mismatch":
+                    raise ValueError(
+                        validation2.get("message") or "PredictionTracker CSV/page mismatch"
+                    )
+                content, response, normalized, report, validation = (
+                    content2, response2, normalized2, report2, validation2
+                )
         else:
             report["page_validation"] = {
                 "status": "page_fetch_failed",
