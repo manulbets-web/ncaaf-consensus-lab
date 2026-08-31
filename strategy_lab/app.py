@@ -23,6 +23,11 @@ from current_week import (
     build_current_board_from_cached_sources,
     save_current_selection,
 )
+from line_movement import (
+    build_selection_detail, fixed_bet_repricing, bet_set_overlap,
+    signal_migration_detail, signal_migration_summary, opening_line_qc,
+    individual_line_reference_by_period, run_line_specific_pipelines,
+)
 from streamlined_engine import (
     StreamlinedBacktestConfig,
     CombinationSearchConfig,
@@ -258,13 +263,13 @@ def _style_css():
 
 
 # ---------------------------------------------------------------------------
-# Four-page UI
+# Six-page UI
 # ---------------------------------------------------------------------------
 app_ui = ui.page_fluid(
     _style_css(),
     ui.h2("NCAAF Consensus Lab", class_="app-title"),
     ui.p(
-        "Past performance → current board → strategy discovery → upcoming picks → forecast plots. "
+        "Past performance → current board → strategy discovery → upcoming picks → line movement → forecast plots. "
         "CFB Picker is intentionally inactive until its 2026 feed is available.",
         class_="app-subtitle",
     ),
@@ -283,7 +288,8 @@ app_ui = ui.page_fluid(
                     ui.tags.li(ui.strong("Choose one or more finalists on Page 3."), " The selected combinations become C1, C2, C3, and so on for the current session."),
                     ui.tags.li(ui.strong("Apply them on Page 4."), " Each combination independently forms a mean projected spread, an SD across its component models, and a BET/PASS decision. The page also summarizes agreement across combinations."),
                     ui.tags.li(ui.strong("Patrick\'s one-click recipe on Page 4."), " After Page 2 is refreshed, it takes the top 35 currently posting models by discovery Wilson lower bound (minimum 25 bets/model), holds out 6 sufficiently covered completed weeks, searches set sizes 3–6 at k = 0.75 SD, ranks combinations by discovery ATS, applies the top 50, tunes each finalist's k on discovery data, and builds the overlap-adjusted META backtest."),
-                    ui.tags.li(ui.strong("Visualize the hierarchy on Page 5."), " Pick any current game to see every mapped model projection, the selected finalist-combination forecasts, and the final portfolio/meta estimate against the market line."),
+                    ui.tags.li(ui.strong("Diagnose line movement on Page 5."), " Separate price effects from selection effects, inspect Open→Midweek→Updated signal migration/CLV, and optionally rebuild three independent line-specific discovery pipelines."),
+                    ui.tags.li(ui.strong("Visualize the hierarchy on Page 6."), " Pick any current game to see every mapped model projection, the selected finalist-combination forecasts, and the final portfolio/meta estimate against the market line."),
                 ),
             ),
             ui.layout_columns(
@@ -824,7 +830,114 @@ app_ui = ui.page_fluid(
         # Page 5
         # ------------------------------------------------------------------
         ui.nav_panel(
-            "5 · Forecast Plots",
+            "5 · Line Movement",
+            ui.p(
+                "This page separates three questions that were mixed together in the simple Open/Midweek/Updated re-grade: "
+                "(1) what happens to the exact same bets when only the price changes, (2) how much the selected bet set itself changes across line references, and "
+                "(3) whether a strategy built independently for each line reference behaves differently on untouched holdout data.",
+                class_="muted",
+            ),
+            ui.layout_columns(
+                ui.input_select(
+                    "line_movement_entity", "Consortium",
+                    choices={"Diversified META":"Diversified META"}, selected="Diversified META",
+                ),
+                ui.input_radio_buttons(
+                    "line_movement_period", "Backtest period",
+                    choices={"Discovery":"Discovery", "Holdout":"Holdout"}, selected="Holdout", inline=True,
+                ),
+                ui.input_numeric(
+                    "line_qc_move_threshold", "QC: flag open→updated move ≥",
+                    10.0, min=3.0, max=30.0, step=0.5,
+                ),
+                col_widths=(5, 4, 3),
+            ),
+            ui.card(
+                ui.card_header("Opening-line quality control"),
+                ui.p(
+                    "Before interpreting any opening-line result, inspect missingness and extreme moves. Large moves can be real in college football, so the threshold is a review flag rather than an automatic exclusion. "
+                    "The table is sorted with flagged and largest Open→Updated moves first.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("line_qc_summary_table"),
+                ui.output_data_frame("line_qc_table"),
+            ),
+            ui.card(
+                ui.card_header("Fixed-bet repricing: same game + same side, different line"),
+                ui.p(
+                    "The selection reference freezes the exact games and sides using the consortium's frozen k. Those same bets are then re-graded at Open, Midweek, and PT Updated. "
+                    "This isolates the value of the price itself; eligibility and side are NOT recomputed when the grading line changes.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("line_fixed_reprice_table"),
+                ui.h5("How much the selected portfolios actually overlap"),
+                ui.p(
+                    "Jaccard is computed on game+side selections. A low Open-vs-Updated value means the earlier table was comparing materially different portfolios, not merely different prices on the same wagers.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("line_betset_overlap_table"),
+            ),
+            ui.card(
+                ui.card_header("Open → Midweek → Updated signal migration and CLV"),
+                ui.layout_columns(
+                    ui.value_box("Open bets", ui.output_text("line_open_bets")),
+                    ui.value_box("Mean Open→Updated CLV", ui.output_text("line_open_clv")),
+                    ui.value_box("Positive CLV", ui.output_text("line_positive_clv")),
+                    ui.value_box("Open↔Updated bet Jaccard", ui.output_text("line_open_close_jaccard")),
+                    col_widths=(3,3,3,3),
+                ),
+                ui.p(
+                    "CLV is directional in the app's home-margin convention: sign(Open model edge) × (Updated margin − Open margin). Positive means the later market moved toward the side the model preferred at Open. "
+                    "Migration classes show whether the signal existed only early, persisted, emerged late, or changed direction.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("line_migration_summary_table"),
+                ui.h5("Game-level migration detail"),
+                ui.output_data_frame("line_migration_detail_table"),
+            ),
+            ui.card(
+                ui.card_header("Individual models on the same discovery / holdout split"),
+                ui.p(
+                    "This uses the currently active consortium's chronology split and independently re-grades each standalone model against Open, Midweek, and PT Updated. It is descriptive; historical model publication timestamps remain unavailable.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("line_individual_period_table"),
+            ),
+            ui.card(
+                ui.card_header("Fully independent Open / Midweek / Updated model-building pipelines"),
+                ui.p(
+                    "This is the clean selection-bias test. Each line reference separately re-ranks eligible current-week models on discovery data, takes its own Top 35, exhaustively searches sizes 3–6 at the 0.75-SD anchor, freezes its own top 50, tunes finalist/META k on discovery only, and then evaluates the same untouched holdout weeks. "
+                    "It runs three multi-million-combination searches, so use this after the Patrick recipe has established the active holdout split.",
+                    class_="muted",
+                ),
+                ui.input_task_button(
+                    "run_line_pipelines",
+                    "Run independent Open / Midweek / Updated pipelines",
+                    label_busy="Running three exact line-reference searches…",
+                    type="primary",
+                ),
+                ui.output_ui("line_pipeline_progress_bar"),
+                ui.output_text("line_pipeline_status"),
+                ui.h5("Independent META holdout comparison"),
+                ui.output_data_frame("line_pipeline_summary_table"),
+                ui.h5("Top-35 candidate-pool overlap"),
+                ui.output_data_frame("line_pipeline_candidate_overlap_table"),
+                ui.h5("Top-50 finalist overlap"),
+                ui.output_data_frame("line_pipeline_finalist_overlap_table"),
+                ui.h5("Line-specific candidate rankings"),
+                ui.output_data_frame("line_pipeline_candidate_table"),
+            ),
+            ui.p(
+                "Historical Open/Midweek results remain retrospective price-sensitivity analyses because exact model publication timestamps are unavailable. The timestamped 2026 PredictionTracker snapshots collected on Page 2 will support a genuinely prospective version of these tests going forward.",
+                class_="muted",
+            ),
+        ),
+
+        # ------------------------------------------------------------------
+        # Page 6
+        # ------------------------------------------------------------------
+        ui.nav_panel(
+            "6 · Forecast Plots",
             ui.p(
                 "Visualizes the complete current forecast hierarchy for one game at a time: every mapped model posting for the game → "
                 "every selected finalist ensemble → the diversity-adjusted META estimate. Models do not need to belong to a finalist to appear. Alternate lines entered on Page 4 are reflected automatically.",
@@ -890,6 +1003,18 @@ def server(input, output, session):
         "phase": "idle",
         "message": "Refresh Page 2, then run the one-click recommended recipe.",
     })
+    line_pipeline_progress = {
+        "done": 0, "total": 0, "label": "", "started": None, "updated": None,
+    }
+    line_pipeline_progress_lock = threading.Lock()
+
+    def set_line_pipeline_progress(**kwargs):
+        with line_pipeline_progress_lock:
+            line_pipeline_progress.update(kwargs)
+
+    def get_line_pipeline_progress():
+        with line_pipeline_progress_lock:
+            return dict(line_pipeline_progress)
 
     def set_auto_progress(**kwargs):
         with auto_progress_lock:
@@ -973,7 +1098,7 @@ def server(input, output, session):
         d = INDIVIDUAL_LINE_HISTORY.copy()
         if d.empty:
             msg = pd.DataFrame([{
-                "Status": "PredictionTracker historical line files were not bundled. Rebuild the Connect repo with v3.5.22 so data/historical/ncaa*.csv is included."
+                "Status": "PredictionTracker historical line files were not bundled. Rebuild the Connect repo with v3.5.23 so data/historical/ncaa*.csv is included."
             }])
             return render.DataGrid(msg, filters=False)
         d = _pct_frame(d, ["ats_pct", "roi", "wilson_low"])
@@ -3021,6 +3146,324 @@ def server(input, output, session):
             "ats_pct":"ATS %","roi":"ROI %","wilson_low":"Wilson LB %","model_mae":"Forecast MAE","market_mae":"Market MAE","mean_abs_edge":"Mean |edge|",
         }), filters=True, height="650px")
 
+    # ------------------------------------------------------------------
+    # Page 5: line-movement diagnostics
+    # ------------------------------------------------------------------
+    @reactive.calc
+    def line_movement_bundle():
+        a = _active_committee_analysis()
+        combos = list(a.get("combinations", [])) if a else []
+        if not combos or PT_LINE_HISTORY is None or PT_LINE_HISTORY.empty:
+            return {
+                "selection": pd.DataFrame(), "fixed": pd.DataFrame(),
+                "overlap": pd.DataFrame(), "migration_detail": pd.DataFrame(),
+                "migration_summary": pd.DataFrame(), "individual": pd.DataFrame(),
+            }
+        discovery_periods = tuple(a.get("discovery_periods", ()))
+        holdout_periods = tuple(a.get("holdout_periods", ()))
+        min_n = int(strategy.get().get("min_available_models", PATRICK_MIN_AVAILABLE))
+        min_comm = int(a.get("min_meta_communities", PATRICK_META_MIN_COMMUNITIES))
+        selection = build_selection_detail(
+            DATA, PT_LINE_HISTORY, combos,
+            discovery_periods, holdout_periods,
+            a.get("combo_k_selected", pd.DataFrame()),
+            a.get("meta_selected", pd.DataFrame()),
+            min_available_models=min_n,
+            min_meta_communities=min_comm,
+        )
+        migration_detail = signal_migration_detail(selection)
+        return {
+            "selection": selection,
+            "fixed": fixed_bet_repricing(selection, standard_price=-110),
+            "overlap": bet_set_overlap(selection),
+            "migration_detail": migration_detail,
+            "migration_summary": signal_migration_summary(migration_detail),
+            "individual": individual_line_reference_by_period(
+                DATA, PT_LINE_HISTORY, discovery_periods, holdout_periods,
+                standard_price=-110,
+            ),
+        }
+
+    @reactive.effect
+    def update_line_movement_entity_choices():
+        b = line_movement_bundle()
+        d = b.get("selection", pd.DataFrame())
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return
+        entities = d["entity"].dropna().astype(str).drop_duplicates().tolist()
+        entities = sorted(entities, key=lambda x: (x != "Diversified META", int(x[1:]) if x.startswith("C") and x[1:].isdigit() else 9999, x))
+        choices = {x: x for x in entities}
+        selected = "Diversified META" if "Diversified META" in choices else entities[0]
+        current = str(input.line_movement_entity() or "")
+        if current in choices:
+            selected = current
+        ui.update_select("line_movement_entity", choices=choices, selected=selected)
+
+    def _line_selected_entity_period(df: pd.DataFrame) -> pd.DataFrame:
+        if not isinstance(df, pd.DataFrame) or df.empty:
+            return pd.DataFrame()
+        entity = str(input.line_movement_entity() or "Diversified META")
+        period = str(input.line_movement_period() or "Holdout")
+        q = df.copy()
+        if "entity" in q.columns:
+            q = q[q["entity"].astype(str).eq(entity)]
+        if "period" in q.columns:
+            q = q[q["period"].astype(str).eq(period)]
+        return q.copy()
+
+    @render.data_frame
+    def line_qc_summary_table():
+        summary, _ = opening_line_qc(
+            PT_LINE_HISTORY, DATA,
+            move_threshold=float(input.line_qc_move_threshold()),
+        )
+        if summary.empty:
+            return render.DataGrid(pd.DataFrame([{"Status":"No mapped PredictionTracker line history is available."}]))
+        d = summary.copy()
+        d = _pct_frame(d, ["availability_pct"])
+        for c in ["market_mae", "median_abs_error"]:
+            if c in d.columns:
+                d[c] = pd.to_numeric(d[c], errors="coerce").round(2)
+        keep = [c for c in ["line_reference","games_available","availability_pct","market_mae","median_abs_error","flagged_games","move_threshold"] if c in d.columns]
+        return render.DataGrid(d[keep].rename(columns={
+            "line_reference":"Line reference","games_available":"Games available","availability_pct":"Availability %",
+            "market_mae":"Market MAE","median_abs_error":"Median |error|","flagged_games":"QC-flagged games","move_threshold":"Move flag (pts)",
+        }), filters=False, height="210px")
+
+    @render.data_frame
+    def line_qc_table():
+        _, detail = opening_line_qc(
+            PT_LINE_HISTORY, DATA,
+            move_threshold=float(input.line_qc_move_threshold()),
+        )
+        if detail.empty:
+            return render.DataGrid(pd.DataFrame())
+        for c in ["open_margin","midweek_margin","close_margin","open_to_midweek","midweek_to_close","open_to_close","abs_open_close_move"]:
+            if c in detail.columns:
+                detail[c] = pd.to_numeric(detail[c], errors="coerce").round(1)
+        keep=[c for c in ["season","week","game","open_margin","midweek_margin","close_margin","open_to_midweek","midweek_to_close","open_to_close","abs_open_close_move","qc_flags"] if c in detail.columns]
+        return render.DataGrid(detail[keep].rename(columns={
+            "season":"Season","week":"Week","game":"Game","open_margin":"Open","midweek_margin":"Midweek","close_margin":"PT Updated",
+            "open_to_midweek":"Open→Mid","midweek_to_close":"Mid→Updated","open_to_close":"Open→Updated","abs_open_close_move":"|Open→Updated|","qc_flags":"QC flags",
+        }), filters=True, height="410px")
+
+    @render.data_frame
+    def line_fixed_reprice_table():
+        d = _line_selected_entity_period(line_movement_bundle().get("fixed", pd.DataFrame()))
+        if d.empty:
+            return render.DataGrid(pd.DataFrame([{"Status":"Run Patrick's recommended settings on Page 4 first."}]))
+        d = _pct_frame(d, ["ats_pct","roi","wilson_low"])
+        for c in ["mean_signed_market_move","median_signed_market_move"]:
+            if c in d.columns:
+                d[c] = pd.to_numeric(d[c], errors="coerce").round(2)
+        keep=["selection_reference","grade_reference","selected_n","bets","wins","losses","pushes","ats_pct","roi","wilson_low","mean_signed_market_move","median_signed_market_move"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "selection_reference":"Bets selected at","grade_reference":"Same bets graded at","selected_n":"Selected","bets":"Graded bets","wins":"Wins","losses":"Losses","pushes":"Pushes",
+            "ats_pct":"ATS %","roi":"ROI %","wilson_low":"Wilson LB %","mean_signed_market_move":"Mean signed line move","median_signed_market_move":"Median signed line move",
+        }), filters=False, height="330px")
+
+    @render.data_frame
+    def line_betset_overlap_table():
+        d = _line_selected_entity_period(line_movement_bundle().get("overlap", pd.DataFrame()))
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = _pct_frame(d, ["jaccard"])
+        keep=["reference_a","reference_b","bets_a","bets_b","same_side_common","common_games","side_flips","jaccard"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "reference_a":"Reference A","reference_b":"Reference B","bets_a":"A bets","bets_b":"B bets","same_side_common":"Same-side common","common_games":"Common games","side_flips":"Side flips","jaccard":"Game+side Jaccard %",
+        }), filters=False, height="220px")
+
+    def _selected_migration_detail() -> pd.DataFrame:
+        return _line_selected_entity_period(line_movement_bundle().get("migration_detail", pd.DataFrame()))
+
+    @render.text
+    def line_open_bets():
+        d = _selected_migration_detail()
+        return f"{int(d['open_bet'].fillna(False).sum()):,}" if len(d) else "—"
+
+    @render.text
+    def line_open_clv():
+        d = _selected_migration_detail()
+        if d.empty: return "—"
+        x = pd.to_numeric(d["open_clv_pts"], errors="coerce").dropna()
+        return f"{float(x.mean()):+.2f} pts" if len(x) else "—"
+
+    @render.text
+    def line_positive_clv():
+        d = _selected_migration_detail()
+        if d.empty: return "—"
+        x = pd.to_numeric(d["open_clv_pts"], errors="coerce").dropna()
+        return f"{100.0*float((x>0).mean()):.1f}%" if len(x) else "—"
+
+    @render.text
+    def line_open_close_jaccard():
+        d = _line_selected_entity_period(line_movement_bundle().get("overlap", pd.DataFrame()))
+        if d.empty: return "—"
+        q = d[(d["reference_a"].astype(str)=="Open") & (d["reference_b"].astype(str)=="Close (PT Updated/final)")]
+        if q.empty: return "—"
+        v = pd.to_numeric(pd.Series([q.iloc[0].get("jaccard")]), errors="coerce").iloc[0]
+        return f"{100.0*float(v):.1f}%" if np.isfinite(v) else "—"
+
+    @render.data_frame
+    def line_migration_summary_table():
+        d = _line_selected_entity_period(line_movement_bundle().get("migration_summary", pd.DataFrame()))
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = _pct_frame(d, ["open_ats_pct","midweek_ats_pct","close_ats_pct","positive_open_clv_pct"])
+        for c in ["mean_open_clv_pts","median_open_clv_pts"]:
+            if c in d.columns:
+                d[c] = pd.to_numeric(d[c], errors="coerce").round(2)
+        order={"Open only":1,"Open + Midweek":2,"All three":3,"Open + Close":4,"Midweek only":5,"Midweek + Close":6,"Close only":7}
+        d["_order"] = d["migration_class"].map(order).fillna(99)
+        d=d.sort_values(["_order","games"], ascending=[True,False])
+        keep=["migration_class","games","open_bets","open_ats_pct","midweek_bets","midweek_ats_pct","close_bets","close_ats_pct","mean_open_clv_pts","positive_open_clv_pct","side_flip_games"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "migration_class":"Signal path","games":"Games","open_bets":"Open bets","open_ats_pct":"Open ATS %","midweek_bets":"Mid bets","midweek_ats_pct":"Mid ATS %","close_bets":"Updated bets","close_ats_pct":"Updated ATS %","mean_open_clv_pts":"Mean Open→Updated CLV","positive_open_clv_pct":"Positive CLV %","side_flip_games":"Side flips",
+        }), filters=False, height="330px")
+
+    @render.data_frame
+    def line_migration_detail_table():
+        d = _selected_migration_detail()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        # Human-readable matchup labels from canonical data.
+        meta_cols=[c for c in ["game_key","road","away","home"] if c in DATA.columns]
+        if meta_cols:
+            m=DATA[meta_cols].drop_duplicates("game_key")
+            d=d.merge(m,on="game_key",how="left")
+            away_col="road" if "road" in d.columns else ("away" if "away" in d.columns else None)
+            if away_col and "home" in d.columns:
+                d["Game"]=d[away_col].astype(str)+" @ "+d["home"].astype(str)
+        if "Game" not in d.columns: d["Game"]=d["game_key"].astype(str)
+        d=d[d["migration_class"].astype(str).ne("None")].copy()
+        d=d.sort_values("abs_open_close_move",ascending=False,na_position="last")
+        for c in ["open_margin","midweek_margin","close_margin","forecast","forecast_sd","open_edge","midweek_edge","close_edge","open_signal","midweek_signal","close_signal","open_clv_pts","abs_open_close_move"]:
+            if c in d.columns: d[c]=pd.to_numeric(d[c],errors="coerce").round(2)
+        keep=["Game","migration_class","forecast","forecast_sd","selected_k","open_margin","midweek_margin","close_margin","open_signal","midweek_signal","close_signal","open_bet","midweek_bet","close_bet","open_clv_pts","abs_open_close_move","side_flip_any"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "migration_class":"Signal path","forecast":"Forecast","forecast_sd":"SD","selected_k":"k","open_margin":"Open","midweek_margin":"Midweek","close_margin":"PT Updated","open_signal":"Open ×SD","midweek_signal":"Mid ×SD","close_signal":"Updated ×SD","open_bet":"Open BET","midweek_bet":"Mid BET","close_bet":"Updated BET","open_clv_pts":"Open→Updated CLV","abs_open_close_move":"|Line move|","side_flip_any":"Side flip",
+        }), filters=True, height="480px")
+
+    @render.data_frame
+    def line_individual_period_table():
+        d = line_movement_bundle().get("individual", pd.DataFrame()).copy()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d=d[d["period"].astype(str).eq(str(input.line_movement_period() or "Holdout"))].copy()
+        d=_pct_frame(d,["ats_pct","roi","wilson_low"])
+        for c in ["mae","bias"]:
+            if c in d.columns: d[c]=pd.to_numeric(d[c],errors="coerce").round(2)
+        keep=["model_name","line_reference","bets","wins","losses","pushes","ats_pct","roi","wilson_low","mae","bias"]
+        d=d.sort_values(["line_reference","wilson_low","bets"],ascending=[True,False,False],na_position="last")
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "model_name":"Model","line_reference":"Line reference","bets":"Bets","wins":"Wins","losses":"Losses","pushes":"Pushes","ats_pct":"ATS %","roi":"ROI %","wilson_low":"Wilson LB %","mae":"Forecast MAE","bias":"Forecast bias",
+        }), filters=True, height="520px")
+
+    @ui.bind_task_button(button_id="run_line_pipelines")
+    @reactive.extended_task
+    async def line_pipeline_task(live_ids: list[str], discovery_periods: tuple, holdout_periods: tuple):
+        def compute():
+            start=time.monotonic()
+            set_line_pipeline_progress(done=0,total=0,label="Preparing line-specific candidate rankings…",started=start,updated=start)
+            def progress(done,total,label):
+                set_line_pipeline_progress(done=int(done),total=int(total),label=str(label),updated=time.monotonic())
+                if int(done)==int(total) or int(done)%100000 < 512:
+                    print(f"[Line movement] {done:,}/{total:,} · {label}", flush=True)
+            return run_line_specific_pipelines(
+                DATA, PT_LINE_HISTORY, live_ids, MODEL_NAME_MAP,
+                discovery_periods, holdout_periods,
+                pool_n=PATRICK_POOL_N, pool_min_bets=PATRICK_POOL_MIN_BETS,
+                min_size=PATRICK_MIN_SIZE, max_size=PATRICK_MAX_SIZE,
+                search_k=PATRICK_K, min_available_models=PATRICK_MIN_AVAILABLE,
+                min_search_bets=PATRICK_MIN_SEARCH_BETS, finalists=PATRICK_FINALISTS,
+                overlap_threshold=PATRICK_OVERLAP_THRESHOLD,
+                min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
+                thresholds=K_GRID, max_combinations=EXACT_SEARCH_DEFAULT_MAX,
+                standard_price=-110, progress_callback=progress,
+            )
+        return await asyncio.to_thread(compute)
+
+    @reactive.effect
+    @reactive.event(input.run_line_pipelines)
+    def start_line_pipelines():
+        if line_pipeline_task.status()=="running":
+            return
+        a=_active_committee_analysis()
+        if not a or not a.get("combinations"):
+            ui.notification_show("Run Patrick's recommended settings on Page 4 first so the discovery/holdout split is frozen.",type="error",duration=10)
+            return
+        live_ids, live_ready, _ = current_week_available_model_ids()
+        if not live_ready or not live_ids:
+            ui.notification_show("Refresh PredictionTracker on Page 2 first.",type="error")
+            return
+        line_pipeline_task(sorted(live_ids),tuple(a.get("discovery_periods",())),tuple(a.get("holdout_periods",())))
+
+    def line_pipeline_result():
+        if line_pipeline_task.status()!="success": return None
+        return line_pipeline_task.result()
+
+    @render.ui
+    def line_pipeline_progress_bar():
+        st=line_pipeline_task.status()
+        if st not in {"running","success"}: return ui.div()
+        if st=="running": reactive.invalidate_later(0.5)
+        p=get_line_pipeline_progress(); total=int(p.get("total") or 0); done=int(p.get("done") or 0)
+        pct=100.0*done/total if total else (100.0 if st=="success" else 0.0)
+        return ui.div(ui.div(class_="search-progress-fill",style=f"width: {max(0,min(100,pct)):.1f}%"),class_="search-progress-track")
+
+    @render.text
+    def line_pipeline_status():
+        st=line_pipeline_task.status()
+        if st=="initial": return "Run after the Patrick recipe to compare three independently selected line-reference pipelines."
+        if st=="running":
+            reactive.invalidate_later(0.5)
+            p=get_line_pipeline_progress(); done=int(p.get("done") or 0); total=int(p.get("total") or 0); started=p.get("started")
+            elapsed=max(0.0,time.monotonic()-started) if started else 0.0; pct=100.0*done/total if total else 0.0
+            rate=done/elapsed if elapsed>0 and done>0 else 0.0; remain=(total-done)/rate if rate>0 and total>=done else np.nan
+            eta=f" · est. {remain:.0f}s remaining" if np.isfinite(remain) and remain>1 else ""
+            return f"{done:,}/{total:,} ({pct:.1f}%) · elapsed {elapsed:.1f}s{eta} · {p.get('label','')}"
+        if st=="success": return "Complete. Each line reference had its own discovery ranking, Top 35, exact combination search, Top 50, automatic k, overlap communities, and untouched holdout evaluation."
+        if st=="error": return "Line-specific pipeline search failed; see the notification / Connect log for details."
+        return str(st)
+
+    @reactive.effect
+    def show_line_pipeline_error():
+        if line_pipeline_task.status()=="error":
+            try: line_pipeline_task.result()
+            except Exception as exc: ui.notification_show(f"Line-movement pipeline error: {exc}",type="error",duration=15)
+
+    @render.data_frame
+    def line_pipeline_summary_table():
+        r=line_pipeline_result(); d=r.get("summary",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty: return render.DataGrid(pd.DataFrame())
+        d=_pct_frame(d,["max_effective_model_weight","discovery_ats_pct","discovery_roi","discovery_wilson_low","holdout_ats_pct","holdout_roi","holdout_wilson_low"])
+        keep=["line_reference","candidate_models","evaluated_combinations","eligible_combinations","finalists","communities","max_effective_model_weight","meta_k","discovery_bets","discovery_ats_pct","discovery_roi","discovery_wilson_low","holdout_bets","holdout_ats_pct","holdout_roi","holdout_wilson_low"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "line_reference":"Pipeline built vs","candidate_models":"Top pool N","evaluated_combinations":"Evaluated","eligible_combinations":"Eligible","finalists":"Finalists","communities":"Communities","max_effective_model_weight":"Max model weight %","meta_k":"META k","discovery_bets":"Discovery bets","discovery_ats_pct":"Discovery ATS %","discovery_roi":"Discovery ROI %","discovery_wilson_low":"Discovery Wilson LB %","holdout_bets":"Holdout bets","holdout_ats_pct":"Holdout ATS %","holdout_roi":"Holdout ROI %","holdout_wilson_low":"Holdout Wilson LB %",
+        }),filters=False,height="260px")
+
+    @render.data_frame
+    def line_pipeline_candidate_overlap_table():
+        r=line_pipeline_result(); d=r.get("candidate_overlap",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        d=_pct_frame(d,["candidate_jaccard"])
+        return render.DataGrid(d.rename(columns={"reference_a":"Reference A","reference_b":"Reference B","candidate_a":"A pool","candidate_b":"B pool","shared_candidates":"Shared models","candidate_jaccard":"Top-pool Jaccard %"}),filters=False,height="200px")
+
+    @render.data_frame
+    def line_pipeline_finalist_overlap_table():
+        r=line_pipeline_result(); d=r.get("finalist_overlap",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        d=_pct_frame(d,["exact_finalist_jaccard","mean_nearest_combo_jaccard"])
+        return render.DataGrid(d.rename(columns={"reference_a":"Reference A","reference_b":"Reference B","finalists_a":"A finalists","finalists_b":"B finalists","exact_shared_finalists":"Exact shared sets","exact_finalist_jaccard":"Exact-set Jaccard %","mean_nearest_combo_jaccard":"Mean nearest-set Jaccard %"}),filters=False,height="200px")
+
+    @render.data_frame
+    def line_pipeline_candidate_table():
+        r=line_pipeline_result(); d=r.get("candidate_table",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        d=_pct_frame(d,["ats_pct","roi","wilson_low"])
+        keep=["line_reference","pool_rank","model_name","bets","ats_pct","roi","wilson_low","mae"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={"line_reference":"Pipeline","pool_rank":"Pool rank","model_name":"Model","bets":"Discovery bets","ats_pct":"ATS %","roi":"ROI %","wilson_low":"Wilson LB %","mae":"MAE"}),filters=True,height="520px")
+
     @render.data_frame
     def strategy_combo_summary_table():
         r = strategy_current_view_result()
@@ -3155,7 +3598,7 @@ def server(input, output, session):
 
 
     # ------------------------------------------------------------------
-    # Page 5: forecast hierarchy plots
+    # Page 6: forecast hierarchy plots
     # ------------------------------------------------------------------
     @reactive.effect
     def update_forecast_plot_games():
