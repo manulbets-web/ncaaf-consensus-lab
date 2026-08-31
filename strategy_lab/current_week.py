@@ -841,7 +841,7 @@ def _download_raw_github(url: str, timeout: int = 45) -> bytes:
         full,
         timeout=timeout,
         headers={
-            "User-Agent": "ncaaf-consensus-lab/3.5.19",
+            "User-Agent": "ncaaf-consensus-lab/3.5.20",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
             "Accept": "*/*",

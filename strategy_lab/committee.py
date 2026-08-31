@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from collections import Counter
 from typing import Iterable
+from pathlib import Path
 import math
+import re
 
 import numpy as np
 import pandas as pd
@@ -406,7 +408,7 @@ def jaccard(a: Iterable[str], b: Iterable[str]) -> float:
 
 def assign_overlap_communities(
     combinations: list[dict],
-    threshold: float = 0.60,
+    threshold: float = 0.50,
 ) -> tuple[list[dict], pd.DataFrame, pd.DataFrame, dict]:
     """Greedy rank-ordered communities using the best-ranked member as representative.
 
@@ -436,7 +438,9 @@ def assign_overlap_communities(
         else:
             cid = len(communities) + 1
             c["community"] = cid
-            c["jaccard_to_representative"] = 1.0
+            # A representative is not meaningfully "100% overlapping" with
+            # another finalist; keep this missing and label its role explicitly.
+            c["jaccard_to_representative"] = np.nan
             communities.append({
                 "community": cid,
                 "representative_rank": int(c["rank"]),
@@ -447,33 +451,88 @@ def assign_overlap_communities(
     # Restore user's C1/C2 order, not rank-sort order.
     combos.sort(key=lambda x: int(x.get("portfolio_combo", 10**9)))
 
-    rows = []
-    for c in combos:
-        rows.append({
-            "combo": f"C{int(c['portfolio_combo'])}",
-            "portfolio_combo": int(c["portfolio_combo"]),
-            "search_rank": int(c["rank"]),
-            "community": int(c["community"]),
-            "combo_size": len(c["model_ids"]),
-            "jaccard_to_representative": float(c["jaccard_to_representative"]),
-            "model_ids": "|".join(c["model_ids"]),
-        })
-    community_table = pd.DataFrame(rows)
-
+    # Pairwise similarities are also used to show each finalist's nearest *other*
+    # relative. This avoids the misleading self-Jaccard=100% display.
     pair_rows = []
+    nearest = {}
+    for i in range(len(combos)):
+        best = None
+        for j in range(len(combos)):
+            if i == j:
+                continue
+            jac = jaccard(combos[i]["model_ids"], combos[j]["model_ids"])
+            shared_ids = sorted(set(combos[i]["model_ids"]) & set(combos[j]["model_ids"]))
+            candidate = (jac, -int(combos[j].get("rank", 10**9)), int(combos[j]["portfolio_combo"]), shared_ids)
+            if best is None or candidate[:3] > best[:3]:
+                best = candidate
+        if best is not None:
+            nearest[int(combos[i]["portfolio_combo"])] = {
+                "nearest_other_jaccard": float(best[0]),
+                "nearest_other_combo": f"C{int(best[2])}",
+                "nearest_shared_ids": "|".join(best[3]),
+                "nearest_shared_n": len(best[3]),
+            }
     for i in range(len(combos)):
         for j in range(i + 1, len(combos)):
             pair_rows.append({
                 "combo_a": f"C{int(combos[i]['portfolio_combo'])}",
                 "combo_b": f"C{int(combos[j]['portfolio_combo'])}",
                 "jaccard": jaccard(combos[i]["model_ids"], combos[j]["model_ids"]),
+                "shared_models": len(set(combos[i]["model_ids"]) & set(combos[j]["model_ids"])),
                 "same_community": int(combos[i]["community"]) == int(combos[j]["community"]),
             })
     pairwise = pd.DataFrame(pair_rows)
+
+    rows = []
+    rep_by_community = {int(q["community"]): int(q["members"][0]["portfolio_combo"]) for q in communities}
+    for c in combos:
+        pid = int(c["portfolio_combo"])
+        ninfo = nearest.get(pid, {})
+        is_rep = rep_by_community.get(int(c["community"])) == pid
+        rows.append({
+            "combo": f"C{pid}",
+            "portfolio_combo": pid,
+            "search_rank": int(c["rank"]),
+            "community": int(c["community"]),
+            "combo_size": len(c["model_ids"]),
+            "role": "Representative" if is_rep else "Member",
+            "jaccard_to_representative": float(c["jaccard_to_representative"]) if np.isfinite(c.get("jaccard_to_representative", np.nan)) else np.nan,
+            "nearest_other_combo": ninfo.get("nearest_other_combo", ""),
+            "nearest_other_jaccard": ninfo.get("nearest_other_jaccard", np.nan),
+            "nearest_shared_n": ninfo.get("nearest_shared_n", 0),
+            "nearest_shared_ids": ninfo.get("nearest_shared_ids", ""),
+            "model_ids": "|".join(c["model_ids"]),
+        })
+    community_table = pd.DataFrame(rows)
+
+    # Structural effective META exposure when every model is present:
+    # equal community weight -> equal combo weight within community -> equal model
+    # weight within combo. This is the exact nominal influence implied by the
+    # diversified META hierarchy before game-specific missingness.
     counts = Counter(mid for c in combos for mid in c["model_ids"])
-    model_freq = pd.DataFrame(
-        [{"canonical_model_id": mid, "combo_count": n, "combo_share": n / len(combos)} for mid, n in counts.items()]
-    ).sort_values(["combo_count", "canonical_model_id"], ascending=[False, True]) if counts else pd.DataFrame()
+    community_sets = {}
+    structural_weight = Counter()
+    G = max(1, len(communities))
+    for q in communities:
+        members = q["members"]
+        nc = max(1, len(members))
+        for c in members:
+            nm = max(1, len(c["model_ids"]))
+            w = 1.0 / G / nc / nm
+            for mid in c["model_ids"]:
+                structural_weight[mid] += w
+                community_sets.setdefault(mid, set()).add(int(q["community"]))
+    model_freq = pd.DataFrame([
+        {
+            "canonical_model_id": mid,
+            "combo_count": int(n),
+            "combo_share": n / len(combos),
+            "community_count": len(community_sets.get(mid, set())),
+            "community_share": len(community_sets.get(mid, set())) / G,
+            "effective_meta_weight": float(structural_weight.get(mid, 0.0)),
+        }
+        for mid, n in counts.items()
+    ]).sort_values(["effective_meta_weight", "combo_count", "canonical_model_id"], ascending=[False, False, True]) if counts else pd.DataFrame()
     summary = {
         "raw_combos": len(combos),
         "communities": len(communities),
@@ -481,6 +540,7 @@ def assign_overlap_communities(
         "mean_pairwise_jaccard": float(pairwise["jaccard"].mean()) if len(pairwise) else np.nan,
         "max_pairwise_jaccard": float(pairwise["jaccard"].max()) if len(pairwise) else np.nan,
         "overlap_threshold": float(threshold),
+        "max_effective_model_weight": float(model_freq["effective_meta_weight"].max()) if len(model_freq) else np.nan,
     }
     return combos, community_table, pairwise, {"summary": summary, "model_frequency": model_freq}
 
@@ -713,9 +773,10 @@ def analyze_finalist_portfolio(
     thresholds: Iterable[float] = DEFAULT_K_GRID,
     combo_min_bets: int = 50,
     meta_min_bets: int = 30,
-    overlap_threshold: float = 0.60,
+    overlap_threshold: float = 0.50,
     min_meta_communities: int = 2,
     standard_price: int = -110,
+    line_history: pd.DataFrame | None = None,
 ) -> dict:
     # 1) Let every frozen finalist select a stable discovery-only k.
     tuned = tune_combination_thresholds(
@@ -828,12 +889,57 @@ def analyze_finalist_portfolio(
     meta_spread_scale = pd.concat(spread_rows, ignore_index=True) if spread_rows else pd.DataFrame()
 
     overlap_summary = overlap_extra["summary"]
+
+    # Sensitivity check requested for the new 0.50 rule: compare the exact same
+    # frozen finalists under 0.50 and the previous 0.60 community definition.
+    # Each threshold gets its own discovery-only META k; holdout remains untouched.
+    sensitivity_rows = []
+    for ov in sorted({0.50, 0.60, float(overlap_threshold)}):
+        oc, _, _, oe = assign_overlap_communities(tuned["combinations"], threshold=float(ov))
+        disc = _meta_game_frame(data, oc, discovery_periods, min_available_models=min_available_models, diversified=True)
+        val = _meta_game_frame(data, oc, holdout_periods, min_available_models=min_available_models, diversified=True) if tuple(holdout_periods) else pd.DataFrame()
+        prof = _profile_meta(disc, thresholds, min_active_units=min_meta_communities, standard_price=standard_price)
+        choice = _choose_stable_k(prof, min_bets=meta_min_bets) if len(prof) else {"selected_k": np.nan}
+        sk = float(choice.get("selected_k", np.nan))
+        if not np.isfinite(sk): sk = 0.50
+        row = {
+            "overlap_threshold": float(ov),
+            "live_rule": bool(abs(float(ov)-float(overlap_threshold)) < 1e-12),
+            "communities": int(oe["summary"].get("communities",0)),
+            "max_effective_model_weight": float(oe["summary"].get("max_effective_model_weight",np.nan)),
+            "selected_k": sk,
+        }
+        for label, frame in (("discovery", disc), ("holdout", val)):
+            if frame is None or frame.empty:
+                st={"bets":0,"ats_pct":np.nan,"roi":np.nan,"wilson_low":np.nan}
+            else:
+                edge=pd.to_numeric(frame["meta_edge"],errors="coerce").to_numpy(float)
+                sig=pd.to_numeric(frame["meta_signal"],errors="coerce").to_numpy(float)
+                cover=pd.to_numeric(frame["cover"],errors="coerce").to_numpy(float)
+                gate=pd.to_numeric(frame["active_units"],errors="coerce").fillna(0).to_numpy(float)>=int(min_meta_communities)
+                st=_threshold_stats(edge,sig,cover,sk,standard_price=standard_price,extra_gate=gate)
+            row.update({f"{label}_bets":st.get("bets",0),f"{label}_ats_pct":st.get("ats_pct",np.nan),f"{label}_roi":st.get("roi",np.nan),f"{label}_wilson_low":st.get("wilson_low",np.nan)})
+        sensitivity_rows.append(row)
+    overlap_sensitivity = pd.DataFrame(sensitivity_rows)
+
+    line_reference_performance = pd.DataFrame()
+    if isinstance(line_history, pd.DataFrame) and not line_history.empty:
+        line_reference_performance = consortium_line_reference_performance(
+            data, line_history, combos, discovery_periods, holdout_periods,
+            selected_k, selected_meta_df,
+            min_available_models=min_available_models,
+            min_meta_communities=min_meta_communities,
+            standard_price=standard_price,
+        )
+
     return {
         "combinations": combos,
         "overlap_summary": overlap_summary,
         "community_table": community_table,
         "pairwise": pairwise,
         "model_frequency": overlap_extra["model_frequency"],
+        "overlap_sensitivity": overlap_sensitivity,
+        "line_reference_performance": line_reference_performance,
         "combo_k_detail": tuned["detail"],
         "combo_k_selected": selected_k,
         "meta_discovery_grid": pd.concat(discovery_profiles, ignore_index=True) if discovery_profiles else pd.DataFrame(),
@@ -843,4 +949,188 @@ def analyze_finalist_portfolio(
         "meta_spread_scale": meta_spread_scale,
         "overlap_threshold": float(overlap_threshold),
         "min_meta_communities": int(min_meta_communities),
+        "discovery_periods": tuple((int(y), int(w)) for y, w in discovery_periods),
+        "holdout_periods": tuple((int(y), int(w)) for y, w in holdout_periods),
     }
+
+
+# ===========================================================================
+# v3.5.21 — PredictionTracker opening / midweek / updated-final line analysis
+# ===========================================================================
+
+def _team_slug(value) -> str:
+    x = str(value or "").lower().replace("&", " and ")
+    x = re.sub(r"[^a-z0-9]+", " ", x)
+    return re.sub(r"\s+", " ", x).strip()
+
+
+def load_predictiontracker_line_history(root: str | Path, data: pd.DataFrame) -> pd.DataFrame:
+    """Map PT's lineopen/linemidweek/line fields onto canonical game orientation.
+
+    `line` is the archive's final Updated field. We expose it as the close proxy
+    but label it explicitly in the UI; it is not claimed to be a sportsbook
+    timestamped closing snapshot.
+    """
+    root = Path(root)
+    paths = sorted((root / "data" / "historical").glob("ncaa*.csv"))
+    if not paths or data is None or data.empty:
+        return pd.DataFrame()
+
+    raw_frames = []
+    for path in paths:
+        try:
+            z = pd.read_csv(path, low_memory=False)
+        except Exception:
+            continue
+        z.columns = [str(c).strip().lower() for c in z.columns]
+        if not {"road", "home", "week"}.issubset(z.columns):
+            continue
+        if "season" not in z.columns:
+            m = re.search(r"ncaa(\d{4})", path.name.lower())
+            if not m:
+                continue
+            z["season"] = int(m.group(1))
+        for c in ["season", "week", "lineopen", "linemidweek", "line"]:
+            if c in z.columns:
+                z[c] = pd.to_numeric(z[c], errors="coerce")
+        z["road_slug"] = z["road"].map(_team_slug)
+        z["home_slug"] = z["home"].map(_team_slug)
+        raw_frames.append(z)
+    if not raw_frames:
+        return pd.DataFrame()
+    raw = pd.concat(raw_frames, ignore_index=True, sort=False)
+
+    d = data.copy()
+    for c in ["season", "week", "pair_orientation"]:
+        d[c] = pd.to_numeric(d.get(c), errors="coerce")
+    d["road_slug"] = d.get("road", "").map(_team_slug)
+    d["home_slug"] = d.get("home", "").map(_team_slug)
+    source_col = "selected_source" if "selected_source" in d.columns else ("source" if "source" in d.columns else None)
+    if source_col:
+        pt = d[d[source_col].astype(str).eq("predictiontracker")].copy()
+        if pt.empty:
+            pt = d.copy()
+    else:
+        pt = d.copy()
+    gm = (
+        pt.sort_values(["season", "week", "game_key"])
+        .drop_duplicates("game_key")
+        [[c for c in ["game_key", "season", "week", "road_slug", "home_slug", "pair_orientation", "actual_margin"] if c in pt.columns]]
+    )
+    if "pair_orientation" not in gm.columns:
+        gm["pair_orientation"] = 1.0
+    gm["pair_orientation"] = pd.to_numeric(gm["pair_orientation"], errors="coerce").fillna(1.0)
+    key = ["season", "week", "road_slug", "home_slug"]
+    raw = raw.merge(gm, on=key, how="inner")
+    if raw.empty:
+        return pd.DataFrame()
+    out = raw.drop_duplicates("game_key").copy()
+    orient = pd.to_numeric(out["pair_orientation"], errors="coerce").fillna(1.0)
+    for src, dst in [("lineopen", "open_margin"), ("linemidweek", "midweek_margin"), ("line", "close_margin")]:
+        vals = pd.to_numeric(out[src], errors="coerce") if src in out.columns else pd.Series(np.nan, index=out.index)
+        out[dst] = vals * orient
+    keep = ["game_key", "season", "week", "open_margin", "midweek_margin", "close_margin"]
+    return out[keep].reset_index(drop=True)
+
+
+def _line_reference_summary(edge, cover, prediction, actual, market, *, standard_price=-110, k=None, signal=None, gate=None):
+    edge = np.asarray(edge, dtype=float); cover = np.asarray(cover, dtype=float)
+    prediction = np.asarray(prediction, dtype=float); actual = np.asarray(actual, dtype=float); market = np.asarray(market, dtype=float)
+    if k is None:
+        decision = np.isfinite(edge) & (np.abs(edge) >= 1e-12)
+        valid = decision & np.isfinite(cover) & (np.abs(cover) > 1e-12)
+        win = valid & ((edge * cover) > 0); loss = valid & ((edge * cover) < 0)
+        push = decision & np.isfinite(cover) & (np.abs(cover) <= 1e-12)
+        wins, losses, pushes = int(win.sum()), int(loss.sum()), int(push.sum())
+        units = float(_unit_result(win, loss, standard_price).sum())
+        bets = wins + losses
+        stats = {"bets": bets, "wins": wins, "losses": losses, "pushes": pushes,
+                 "ats_pct": wins / bets if bets else np.nan, "units": units,
+                 "roi": units / bets if bets else np.nan, "wilson_low": _wilson_lower(wins, bets)}
+    else:
+        stats = _threshold_stats(edge, np.asarray(signal, dtype=float), cover, float(k), standard_price=standard_price, extra_gate=gate)
+    fmask = np.isfinite(prediction) & np.isfinite(actual)
+    mmask = np.isfinite(market) & np.isfinite(actual)
+    emask = np.isfinite(edge)
+    model_mae = float(np.mean(np.abs(prediction[fmask] - actual[fmask]))) if fmask.any() else np.nan
+    market_mae = float(np.mean(np.abs(market[mmask] - actual[mmask]))) if mmask.any() else np.nan
+    stats.update({
+        "scorable_games": int((fmask & np.isfinite(market)).sum()),
+        "model_mae": model_mae,
+        "market_mae": market_mae,
+        "delta_mae_vs_market": model_mae - market_mae if np.isfinite(model_mae) and np.isfinite(market_mae) else np.nan,
+        "mean_abs_edge": float(np.mean(np.abs(edge[emask]))) if emask.any() else np.nan,
+    })
+    return stats
+
+
+def individual_model_line_reference_performance(data: pd.DataFrame, line_history: pd.DataFrame, *, standard_price=-110) -> pd.DataFrame:
+    if data is None or data.empty or line_history is None or line_history.empty:
+        return pd.DataFrame()
+    cols = ["game_key", "canonical_model_id", "model_name", "prediction_margin", "actual_margin"]
+    d = data[[c for c in cols if c in data.columns]].drop_duplicates(["game_key", "canonical_model_id"]).copy()
+    d = d.merge(line_history, on="game_key", how="inner")
+    if d.empty:
+        return pd.DataFrame()
+    rows=[]
+    refs=[("Open", "open_margin"), ("Midweek", "midweek_margin"), ("Close (PT Updated/final)", "close_margin")]
+    for (mid, name), g in d.groupby(["canonical_model_id", "model_name"], dropna=False):
+        pred=pd.to_numeric(g["prediction_margin"], errors="coerce").to_numpy(float)
+        actual=pd.to_numeric(g["actual_margin"], errors="coerce").to_numpy(float)
+        for label,col in refs:
+            market=pd.to_numeric(g[col], errors="coerce").to_numpy(float)
+            edge=pred-market; cover=actual-market
+            st=_line_reference_summary(edge, cover, pred, actual, market, standard_price=standard_price)
+            rows.append({"canonical_model_id":str(mid), "model_name":str(name), "line_reference":label, **st})
+    return pd.DataFrame(rows)
+
+
+def consortium_line_reference_performance(
+    data: pd.DataFrame, line_history: pd.DataFrame, combinations: list[dict],
+    discovery_periods, holdout_periods, combo_k_selected: pd.DataFrame, meta_selected: pd.DataFrame,
+    *, min_available_models=3, min_meta_communities=2, standard_price=-110,
+) -> pd.DataFrame:
+    if not combinations or line_history is None or line_history.empty:
+        return pd.DataFrame()
+    kmap={}
+    if isinstance(combo_k_selected, pd.DataFrame) and len(combo_k_selected):
+        for r in combo_k_selected.itertuples(index=False):
+            try: kmap[int(getattr(r,"portfolio_combo"))]=float(getattr(r,"selected_k"))
+            except Exception: pass
+    meta_k=0.75
+    if isinstance(meta_selected, pd.DataFrame) and len(meta_selected):
+        q=meta_selected[meta_selected["method"].astype(str).eq("Diversified META")]
+        if len(q):
+            v=pd.to_numeric(pd.Series([q.iloc[0].get("selected_k")]), errors="coerce").iloc[0]
+            if np.isfinite(v): meta_k=float(v)
+    refs=[("Open", "open_margin"), ("Midweek", "midweek_margin"), ("Close (PT Updated/final)", "close_margin")]
+    rows=[]
+    union=list(dict.fromkeys(mid for c in combinations for mid in map(str,c.get("model_ids",[]))))
+    for period_name, periods in [("Discovery", tuple(discovery_periods)), ("Holdout", tuple(holdout_periods))]:
+        if not periods: continue
+        pred, meta=_matrix_and_meta(data, union, periods)
+        if pred.empty: continue
+        lh=line_history.set_index("game_key").reindex(pred.index)
+        actual=pd.to_numeric(meta["actual_margin"], errors="coerce").to_numpy(float)
+        for i,c in enumerate(combinations,start=1):
+            count, mean, sd=_combo_forecast_arrays(pred,c.get("model_ids",[]),min_available_models)
+            k=float(kmap.get(i,c.get("k",0.75) if np.isfinite(pd.to_numeric(pd.Series([c.get("k",np.nan)]), errors="coerce").iloc[0]) else 0.75))
+            for label,col in refs:
+                market=pd.to_numeric(lh[col], errors="coerce").to_numpy(float)
+                edge=mean-market; cover=actual-market; sig=_signal(edge,sd)
+                st=_line_reference_summary(edge,cover,mean,actual,market,standard_price=standard_price,k=k,signal=sig)
+                rows.append({"period":period_name,"entity":f"C{i}","search_rank":int(c.get("rank",i)),"community":int(c.get("community",i)),"selected_k":k,"line_reference":label,**st})
+        mf=_meta_game_frame(data,combinations,periods,min_available_models=min_available_models,diversified=True)
+        if len(mf):
+            mfi=mf.set_index("game_key")
+            lh2=line_history.set_index("game_key").reindex(mfi.index)
+            mean=pd.to_numeric(mfi["meta_mean"],errors="coerce").to_numpy(float)
+            sd=pd.to_numeric(mfi["meta_sd"],errors="coerce").to_numpy(float)
+            actual2=pd.to_numeric(mfi["actual_margin"],errors="coerce").to_numpy(float)
+            gate=pd.to_numeric(mfi["active_units"],errors="coerce").fillna(0).to_numpy(float)>=int(min_meta_communities)
+            for label,col in refs:
+                market=pd.to_numeric(lh2[col],errors="coerce").to_numpy(float)
+                edge=mean-market; cover=actual2-market; sig=_signal(edge,sd)
+                st=_line_reference_summary(edge,cover,mean,actual2,market,standard_price=standard_price,k=meta_k,signal=sig,gate=gate)
+                rows.append({"period":period_name,"entity":"Diversified META","search_rank":np.nan,"community":np.nan,"selected_k":meta_k,"line_reference":label,**st})
+    return pd.DataFrame(rows)

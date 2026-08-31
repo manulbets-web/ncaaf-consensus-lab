@@ -13,7 +13,11 @@ from shiny import App, reactive, render, ui
 
 from engine import load_strategy_data
 from forecast_plots import build_forecast_plot
-from committee import analyze_finalist_portfolio, meta_spread_bucket_label
+from committee import (
+    analyze_finalist_portfolio, meta_spread_bucket_label,
+    load_predictiontracker_line_history, individual_model_line_reference_performance,
+    consortium_line_reference_performance,
+)
 from current_week import (
     refresh_and_build_current_week,
     build_current_board_from_cached_sources,
@@ -113,7 +117,7 @@ PATRICK_POOL_MIN_BETS = 25
 PATRICK_MIN_AVAILABLE = 3
 PATRICK_MIN_SEARCH_BETS = 50
 PATRICK_RANK_METRIC = "ats"
-PATRICK_OVERLAP_THRESHOLD = 0.60
+PATRICK_OVERLAP_THRESHOLD = 0.50
 PATRICK_META_MIN_COMMUNITIES = 2
 PATRICK_HOLDOUT_MIN_SCORABLE_GAMES = 10
 
@@ -138,6 +142,10 @@ else:
 DEFAULT_MANUAL_IDS = DEFAULT_AUTO_IDS[: min(10, len(DEFAULT_AUTO_IDS))]
 
 INDIVIDUAL_HISTORY = individual_model_performance(DATA, standard_price=-110)
+PT_LINE_HISTORY = load_predictiontracker_line_history(PROJECT_ROOT, DATA)
+INDIVIDUAL_LINE_HISTORY = individual_model_line_reference_performance(
+    DATA, PT_LINE_HISTORY, standard_price=-110
+)
 
 
 def _saved_strategy() -> dict:
@@ -296,7 +304,7 @@ app_ui = ui.page_fluid(
                     ui.tags.ul(
                         ui.tags.li(ui.strong("C1, C2, ..."), ": the finalist combinations you selected on Page 3. Search rank remains available in the detailed table, but the short labels are used throughout Page 4."),
                         ui.tags.li(ui.strong("Portfolio mean ± SD"), ": the old raw equal-weight summary across C1–C12, retained as a benchmark."),
-                        ui.tags.li(ui.strong("Diversified META"), ": near-duplicate combinations are grouped by 0.60 Jaccard model overlap; each overlap community gets equal influence. META consensus SD combines uncertainty in the ensemble means with disagreement between independent overlap communities; raw within-model dispersion is not counted a second time at full strength."),
+                        ui.tags.li(ui.strong("Diversified META"), ": near-duplicate combinations are grouped by 0.50 Jaccard model overlap; each overlap community gets equal influence. META consensus SD combines uncertainty in the ensemble means with disagreement between independent overlap communities; raw within-model dispersion is not counted a second time at full strength."),
                         ui.tags.li(ui.strong("Automatic k"), ": each frozen finalist is evaluated across 0.25–2.00 SD on discovery data only. The app requires a centered three-k stability plateau (so 0.25 and 2.00 cannot win from one-sided endpoint evidence), then favors the lower/more-supported k when robust Wilson performance is essentially tied. The frozen k is tested on holdout."),
                         ui.tags.li(ui.strong("Mean direction"), ": how many combination means lie on each side of the current betting line."),
                         ui.tags.li(ui.strong("Bet direction"), ": how many combinations actually clear their k×SD threshold in each direction."),
@@ -359,6 +367,17 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Season-by-season model performance"),
                 ui.output_data_frame("historical_season_table"),
+            ),
+            ui.card(
+                ui.card_header("Individual models vs opening, midweek, and close"),
+                ui.p(
+                    "Re-grades each model against PredictionTracker's stored Opening, Midweek, and final Updated line. "
+                    "The final Updated field is shown as the close proxy; it is not a timestamped sportsbook close. "
+                    "Because historical model publication timestamps are unavailable, Open/Midweek rows are retrospective price-sensitivity tests, not claims that every model prediction was executable at that earlier line. "
+                    "Every non-zero model-vs-line edge is graded, matching the standalone Page 1 convention.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("historical_model_line_reference_table"),
             ),
         ),
 
@@ -648,7 +667,7 @@ app_ui = ui.page_fluid(
                     "One-click current-week recipe: Top 35 currently posting models by discovery Wilson lower bound (minimum 25 discovery bets/model); "
                     "latest 6 completed weeks with adequate candidate-model coverage held out; combination sizes 3–6; 0.75 SD search anchor; "
                     "combinations ranked by discovery ATS and top 50 frozen, then each finalist gets an automatic stable k from 0.25–2.00 SD. "
-                    "Near-duplicate combinations are collapsed into overlap communities for the final META estimate and backtest. Models inside every individual ensemble are equal-weighted.",
+                    "Near-duplicate combinations are collapsed at Jaccard ≥ 0.50 into overlap communities for the final META estimate and backtest. Models inside every individual ensemble are equal-weighted.",
                     class_="muted",
                 ),
                 ui.input_action_button(
@@ -677,7 +696,7 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Final consensus: overlap, automatic k, and META backtest"),
                 ui.p(
-                    "The top combinations are often close relatives. A 0.60 Jaccard overlap groups near-duplicates into communities so one core model family cannot masquerade as many independent votes. "
+                    "The top combinations are often close relatives. A 0.50 Jaccard overlap groups near-duplicates into communities so one core model family cannot masquerade as many independent votes. "
                     "Each finalist's k is selected from 0.25–2.00 SD using discovery data only with a centered three-k stability rule; endpoint k values cannot be selected merely from one-sided evidence, and near-tied plateaus favor the more-supported/lower threshold. The six completed-week holdout remains untouched until those choices are frozen. "
                     "The diversified META forecast gives each overlap community equal influence and uses a consensus-uncertainty scale based on uncertainty of ensemble means plus between-community disagreement, avoiding the overly conservative double-counting of raw within-ensemble SD.",
                     class_="muted",
@@ -701,7 +720,30 @@ app_ui = ui.page_fluid(
                 ui.h5("Automatic k by finalist"),
                 ui.output_data_frame("committee_combo_k_table"),
                 ui.h5("Overlap communities"),
+                ui.p(
+                    "Representatives are labeled rather than shown as 100% self-overlap. Nearest-other overlap shows the closest distinct finalist; with a 0.50 threshold, two 3-model sets sharing 2 of 3 models are treated as relatives.",
+                    class_="muted",
+                ),
                 ui.output_data_frame("committee_overlap_table"),
+                ui.h5("Effective underlying-model exposure"),
+                ui.p(
+                    "Nominal META weight is propagated through the actual hierarchy: equal community weight → equal finalist weight within community → equal model weight within finalist. This reveals when one model appears across many nominally distinct communities.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("committee_model_exposure_table"),
+                ui.h5("Overlap-threshold sensitivity: 0.50 vs previous 0.60"),
+                ui.p(
+                    "Uses the same frozen finalist sets. Each overlap rule selects its META k on discovery only, then reports the untouched holdout. This is the direct check that moving to 0.50 improves redundancy handling rather than merely changing the number of communities.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("committee_overlap_sensitivity_table"),
+                ui.h5("Finalists and META vs opening, midweek, and close"),
+                ui.p(
+                    "Frozen finalist memberships and discovery-selected k values are re-graded separately against each PredictionTracker line reference, with edge/signal recomputed at that line while k stays frozen. Discovery and untouched holdout are shown separately. "
+                    "Because historical model publication timestamps are unavailable, Open/Midweek are retrospective price-sensitivity tests rather than executable-timing claims. The 'close' column is PT's final Updated archive field, not a timestamped sportsbook close.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("committee_line_reference_table"),
             ),
             ui.card(
                 ui.card_header("Absolute spread trust check"),
@@ -925,6 +967,25 @@ def server(input, output, session):
         cols = [c for c in rename if c in d.columns]
         d = d[cols].rename(columns=rename)
         return render.DataGrid(d, filters=True, height="600px")
+
+    @render.data_frame
+    def historical_model_line_reference_table():
+        d = INDIVIDUAL_LINE_HISTORY.copy()
+        if d.empty:
+            msg = pd.DataFrame([{
+                "Status": "PredictionTracker historical line files were not bundled. Rebuild the Connect repo with v3.5.21 so data/historical/ncaa*.csv is included."
+            }])
+            return render.DataGrid(msg, filters=False)
+        d = _pct_frame(d, ["ats_pct", "roi", "wilson_low"])
+        d["ΔMAE vs market"] = pd.to_numeric(d["delta_mae_vs_market"], errors="coerce").round(3)
+        keep = ["model_name", "line_reference", "scorable_games", "bets", "wins", "losses", "pushes", "ats_pct", "roi", "wilson_low", "model_mae", "market_mae", "ΔMAE vs market", "mean_abs_edge"]
+        d = d[[c for c in keep if c in d.columns]].rename(columns={
+            "model_name":"Model", "line_reference":"Line reference", "scorable_games":"Games",
+            "bets":"Bets", "wins":"Wins", "losses":"Losses", "pushes":"Pushes",
+            "ats_pct":"ATS %", "roi":"ROI %", "wilson_low":"Wilson LB %",
+            "model_mae":"Model MAE", "market_mae":"Market MAE", "mean_abs_edge":"Mean |edge|",
+        })
+        return render.DataGrid(d, filters=True, height="650px")
 
     # ------------------------------------------------------------------
     # Page 2: PredictionTracker raw upcoming board
@@ -2023,6 +2084,7 @@ def server(input, output, session):
             overlap_threshold=PATRICK_OVERLAP_THRESHOLD,
             min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
             standard_price=-110,
+            line_history=PT_LINE_HISTORY,
         )
         combos = list(committee_analysis.get("combinations", combos))
         # Union is retained for display/backward compatibility; Page 4 scores each combo separately.
@@ -2284,6 +2346,7 @@ def server(input, output, session):
                 overlap_threshold=PATRICK_OVERLAP_THRESHOLD,
                 min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
                 standard_price=-110,
+                line_history=PT_LINE_HISTORY,
             )
             combos = list(committee_analysis.get("combinations", combos))[:PATRICK_FINALISTS]
             # Hard-cap the one-click preset to its documented finalist count.
@@ -2891,11 +2954,72 @@ def server(input, output, session):
         if not isinstance(d, pd.DataFrame) or d.empty:
             return render.DataGrid(pd.DataFrame())
         d["Models"] = d["model_ids"].astype(str).apply(lambda x: ", ".join(MODEL_NAME_MAP.get(mid, mid) for mid in x.split("|") if mid))
-        d["Overlap to representative %"] = 100 * pd.to_numeric(d["jaccard_to_representative"], errors="coerce")
-        keep = ["combo", "search_rank", "community", "combo_size", "Overlap to representative %", "Models"]
-        return render.DataGrid(d[keep].rename(columns={
-            "combo": "Combo", "search_rank": "Search rank", "community": "Community", "combo_size": "N",
-        }), filters=True, height="360px")
+        d["Nearest shared models"] = d.get("nearest_shared_ids", "").astype(str).apply(lambda x: ", ".join(MODEL_NAME_MAP.get(mid, mid) for mid in x.split("|") if mid))
+        d["Nearest other overlap %"] = 100 * pd.to_numeric(d.get("nearest_other_jaccard"), errors="coerce")
+        d["Overlap to representative"] = [
+            "Representative" if str(role) == "Representative" else (f"{100*float(v):.0f}%" if np.isfinite(pd.to_numeric(pd.Series([v]), errors="coerce").iloc[0]) else "—")
+            for role, v in zip(d.get("role", ""), d.get("jaccard_to_representative", np.nan))
+        ]
+        keep = ["combo", "search_rank", "community", "combo_size", "role", "Overlap to representative", "nearest_other_combo", "Nearest other overlap %", "nearest_shared_n", "Nearest shared models", "Models"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "combo":"Combo", "search_rank":"Search rank", "community":"Community", "combo_size":"N",
+            "role":"Role", "nearest_other_combo":"Nearest other", "nearest_shared_n":"Shared N",
+        }), filters=True, height="430px")
+
+    @render.data_frame
+    def committee_model_exposure_table():
+        a = _active_committee_analysis()
+        d = a.get("model_frequency", pd.DataFrame()).copy() if a else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d["Model"] = d["canonical_model_id"].astype(str).map(lambda x: MODEL_NAME_MAP.get(x, x))
+        for c in ["combo_share", "community_share", "effective_meta_weight"]:
+            if c in d.columns: d[c] = 100 * pd.to_numeric(d[c], errors="coerce")
+        keep=["Model","combo_count","combo_share","community_count","community_share","effective_meta_weight"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "combo_count":"Finalists", "combo_share":"Finalist share %", "community_count":"Communities",
+            "community_share":"Community share %", "effective_meta_weight":"Effective META weight %",
+        }), filters=True, height="430px")
+
+    @render.data_frame
+    def committee_overlap_sensitivity_table():
+        a = _active_committee_analysis()
+        d = a.get("overlap_sensitivity", pd.DataFrame()).copy() if a else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = _pct_frame(d, ["max_effective_model_weight", "discovery_ats_pct", "discovery_roi", "discovery_wilson_low", "holdout_ats_pct", "holdout_roi", "holdout_wilson_low"])
+        keep=["live_rule","overlap_threshold","communities","max_effective_model_weight","selected_k","discovery_bets","discovery_ats_pct","discovery_roi","discovery_wilson_low","holdout_bets","holdout_ats_pct","holdout_roi","holdout_wilson_low"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "live_rule":"Live","overlap_threshold":"Jaccard threshold","communities":"Communities","max_effective_model_weight":"Max model weight %","selected_k":"META k",
+            "discovery_bets":"Discovery bets","discovery_ats_pct":"Discovery ATS %","discovery_roi":"Discovery ROI %","discovery_wilson_low":"Discovery Wilson LB %",
+            "holdout_bets":"Holdout bets","holdout_ats_pct":"Holdout ATS %","holdout_roi":"Holdout ROI %","holdout_wilson_low":"Holdout Wilson LB %",
+        }), filters=False, height="260px")
+
+    @render.data_frame
+    def committee_line_reference_table():
+        a = _active_committee_analysis()
+        if not a:
+            return render.DataGrid(pd.DataFrame())
+        d = a.get("line_reference_performance", pd.DataFrame()).copy()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            d = consortium_line_reference_performance(
+                DATA, PT_LINE_HISTORY, a.get("combinations", []),
+                a.get("discovery_periods", ()), a.get("holdout_periods", ()),
+                a.get("combo_k_selected", pd.DataFrame()), a.get("meta_selected", pd.DataFrame()),
+                min_available_models=int(strategy.get().get("min_available_models", PATRICK_MIN_AVAILABLE)),
+                min_meta_communities=int(a.get("min_meta_communities", PATRICK_META_MIN_COMMUNITIES)),
+                standard_price=-110,
+            )
+        if d.empty:
+            return render.DataGrid(pd.DataFrame([{"Status":"No mapped PredictionTracker opening/midweek/final line history is available in this deployment."}]))
+        d = _pct_frame(d, ["ats_pct", "roi", "wilson_low"])
+        d["ΔMAE vs market"] = pd.to_numeric(d["delta_mae_vs_market"], errors="coerce").round(3)
+        keep=["period","entity","search_rank","community","selected_k","line_reference","scorable_games","bets","wins","losses","pushes","ats_pct","roi","wilson_low","model_mae","market_mae","ΔMAE vs market","mean_abs_edge"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "period":"Period","entity":"Consortium","search_rank":"Search rank","community":"Community","selected_k":"Frozen k",
+            "line_reference":"Line reference","scorable_games":"Games","bets":"Bets","wins":"Wins","losses":"Losses","pushes":"Pushes",
+            "ats_pct":"ATS %","roi":"ROI %","wilson_low":"Wilson LB %","model_mae":"Forecast MAE","market_mae":"Market MAE","mean_abs_edge":"Mean |edge|",
+        }), filters=True, height="650px")
 
     @render.data_frame
     def strategy_combo_summary_table():

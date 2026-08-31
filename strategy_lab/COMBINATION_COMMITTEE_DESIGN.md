@@ -115,7 +115,7 @@ base-model mean.
 
 ## Implemented in v3.5.8
 
-The first committee implementation uses a rank-ordered 0.60 Jaccard community rule. A combination joins an existing community only when its model membership overlaps that community's best-ranked representative by at least 0.60; otherwise it starts a new community. This avoids transitive graph chaining.
+The first committee implementation uses a rank-ordered 0.50 Jaccard community rule. A combination joins an existing community only when its model membership overlaps that community's best-ranked representative by at least 0.50; otherwise it starts a new community. This avoids transitive graph chaining.
 
 Each frozen finalist is evaluated over k = 0.25, 0.50, ..., 2.00 on discovery data only. The selected k maximizes a neighboring-threshold Wilson-floor criterion (with bet-count gates and volume tie-breaks), rather than maximizing one isolated historical point. The chosen k is frozen before holdout scoring.
 

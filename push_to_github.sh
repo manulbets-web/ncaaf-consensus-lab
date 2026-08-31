@@ -21,7 +21,7 @@ else
   git remote add origin "$REPO_URL"
 fi
 
-echo "Preflight: verifying v3.5.19 Patrick preset..."
+echo "Preflight: verifying v3.5.21 Patrick preset..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -37,6 +37,9 @@ expected = [
     "PATRICK_MIN_AVAILABLE = 3",
     "PATRICK_MIN_SEARCH_BETS = 50",
     'PATRICK_RANK_METRIC = "ats"',
+    'PATRICK_OVERLAP_THRESHOLD = 0.50',
+    'committee_model_exposure_table',
+    'committee_line_reference_table',
 ]
 missing = [x for x in expected if x not in s]
 if missing:
@@ -54,13 +57,13 @@ if "save_prospective_current_week_snapshot" not in current_week:
 if "PT_MIRROR_CSV_URL" not in current_week:
     refresh_missing.append("GitHub mirror fallback")
 if refresh_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.19 refresh code detected:\n  " + "\n  ".join(refresh_missing))
-print("Verified: Top 35 | Wilson | min 25 | sizes 3–6 | ATS rank | 50 finalists | strict PT mirror fallback + persistent snapshots")
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.21 refresh code detected:\n  " + "\n  ".join(refresh_missing))
+print("Verified: Top 35 | Wilson | min 25 | sizes 3–6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | open/midweek/close grading | strict PT mirror + snapshots")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.19"
+  git commit -m "Deploy NCAAF Consensus Lab v3.5.21"
 else
   echo "No new changes to commit."
 fi
