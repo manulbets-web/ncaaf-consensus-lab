@@ -27,7 +27,7 @@ from line_movement import (
     build_selection_detail, fixed_bet_repricing, bet_set_overlap,
     signal_migration_detail, signal_migration_summary, opening_line_qc,
     clean_line_history_for_analysis, individual_line_reference_by_period,
-    run_line_specific_pipelines,
+    run_line_specific_pipelines, LINE_REFS,
 )
 from streamlined_engine import (
     StreamlinedBacktestConfig,
@@ -930,8 +930,28 @@ app_ui = ui.page_fluid(
                 ui.output_text("line_pipeline_status"),
                 ui.h5("Independent META holdout comparison"),
                 ui.output_data_frame("line_pipeline_summary_table"),
+                ui.h5("3×3 selection architecture × execution-line holdout matrix"),
+                ui.p(
+                    "Rows freeze the models, finalists, overlap communities, and discovery-selected META k from the pipeline named at left. Columns change only the market reference used to recompute edge/signal and choose bets on the untouched holdout. "
+                    "This is the production-style question: can an Open- or Midweek-selected META remain useful when it must execute against a later/current line?",
+                    class_="muted",
+                ),
+                ui.output_data_frame("line_pipeline_cross_matrix_table"),
+                ui.h5("Fixed holdout portfolio price decay"),
+                ui.p(
+                    "For each independently built META, the exact holdout games + sides are selected once at that pipeline's native reference. Those identical wagers are then repriced at Open, Midweek, and PT Updated. "
+                    "Unlike the 3×3 matrix above, eligibility and side do not change here; this isolates pure price capture / decay.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("line_pipeline_fixed_reprice_table"),
                 ui.h5("Top-35 candidate-pool overlap"),
                 ui.output_data_frame("line_pipeline_candidate_overlap_table"),
+                ui.h5("Underlying-model selection + effective META exposure"),
+                ui.p(
+                    "Shows which models enter each Top 35 and how much nominal weight each ultimately receives after Top-50 finalist clustering. This helps distinguish a genuinely different early-line model family from the same models being reweighted.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("line_pipeline_model_selection_table"),
                 ui.h5("Top-50 finalist overlap"),
                 ui.output_data_frame("line_pipeline_finalist_overlap_table"),
                 ui.h5("Line-specific candidate rankings"),
@@ -3523,7 +3543,7 @@ def server(input, output, session):
             rate=done/elapsed if elapsed>0 and done>0 else 0.0; remain=(total-done)/rate if rate>0 and total>=done else np.nan
             eta=f" · est. {remain:.0f}s remaining" if np.isfinite(remain) and remain>1 else ""
             return f"{done:,}/{total:,} ({pct:.1f}%) · elapsed {elapsed:.1f}s{eta} · {p.get('label','')}"
-        if st=="success": return "Complete. Each line reference had its own discovery ranking, Top 35, exact combination search, Top 50, automatic k, overlap communities, and untouched holdout evaluation."
+        if st=="success": return "Complete. Each line reference had its own discovery ranking, Top 35, exact combination search, Top 50, automatic k, overlap communities, untouched holdout evaluation, 3×3 cross-line execution test, and fixed-portfolio repricing."
         if st=="error": return "Line-specific pipeline search failed; see the notification / Connect log for details."
         return str(st)
 
@@ -3542,6 +3562,59 @@ def server(input, output, session):
         return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
             "line_reference":"Pipeline built vs","candidate_models":"Top pool N","evaluated_combinations":"Evaluated","eligible_combinations":"Eligible","finalists":"Finalists","communities":"Communities","max_effective_model_weight":"Max model weight %","meta_k":"META k","discovery_bets":"Discovery bets","discovery_ats_pct":"Discovery ATS %","discovery_roi":"Discovery ROI %","discovery_wilson_low":"Discovery Wilson LB %","holdout_bets":"Holdout bets","holdout_ats_pct":"Holdout ATS %","holdout_roi":"Holdout ROI %","holdout_wilson_low":"Holdout Wilson LB %",
         }),filters=False,height="260px")
+
+    @render.data_frame
+    def line_pipeline_cross_matrix_table():
+        r=line_pipeline_result(); d=r.get("cross_reference",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        rows=[]
+        order=[x[0] for x in LINE_REFS]
+        for sel in order:
+            q=d[d["selection_reference"].astype(str).eq(sel)].copy()
+            row={"Models selected / tuned vs":sel}
+            for grade in order:
+                z=q[q["grading_reference"].astype(str).eq(grade)]
+                key={"Open":"Open", "Midweek":"Midweek", "Close (PT Updated/final)":"PT Updated"}[grade]
+                if z.empty:
+                    row[key]="—"
+                    continue
+                rr=z.iloc[0]
+                ats=pd.to_numeric(pd.Series([rr.get("ats_pct")]),errors="coerce").iloc[0]
+                roi=pd.to_numeric(pd.Series([rr.get("roi")]),errors="coerce").iloc[0]
+                bets=int(pd.to_numeric(pd.Series([rr.get("bets",0)]),errors="coerce").fillna(0).iloc[0])
+                if np.isfinite(ats):
+                    row[key]=f"{100*ats:.1f}% ATS | {100*roi:+.1f}% ROI | n={bets}" if np.isfinite(roi) else f"{100*ats:.1f}% ATS | n={bets}"
+                else:
+                    row[key]=f"n={bets}"
+            rows.append(row)
+        return render.DataGrid(pd.DataFrame(rows),filters=False,height="190px")
+
+    @render.data_frame
+    def line_pipeline_fixed_reprice_table():
+        r=line_pipeline_result(); d=r.get("fixed_repricing",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        d=_pct_frame(d,["ats_pct","roi","wilson_low","ats_delta_vs_native"])
+        if "mean_signed_line_change_pts" in d.columns:
+            d["mean_signed_line_change_pts"]=pd.to_numeric(d["mean_signed_line_change_pts"],errors="coerce").round(2)
+        keep=["selection_reference","grading_reference","meta_k","native_selected_n","bets","wins","losses","pushes","ats_pct","roi","wilson_low","ats_delta_vs_native","mean_signed_line_change_pts"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "selection_reference":"Portfolio selected at","grading_reference":"Same bets graded at","meta_k":"Frozen META k","native_selected_n":"Native selected","bets":"Bets","wins":"Wins","losses":"Losses","pushes":"Pushes","ats_pct":"ATS %","roi":"ROI %","wilson_low":"Wilson LB %","ats_delta_vs_native":"Δ ATS vs native pp","mean_signed_line_change_pts":"Signed line change pts",
+        }),filters=False,height="330px")
+
+    @render.data_frame
+    def line_pipeline_model_selection_table():
+        r=line_pipeline_result(); d=r.get("model_selection_comparison",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        for c in ["open_effective_weight","midweek_effective_weight","close_effective_weight"]:
+            if c in d.columns:
+                d[c]=100*pd.to_numeric(d[c],errors="coerce")
+        def mark(x): return "✓" if bool(x) else ""
+        for c in ["open_top35","midweek_top35","close_top35"]:
+            if c in d.columns:d[c]=d[c].map(mark)
+        keep=["model_name","top35_membership","open_top35","open_pool_rank","open_effective_weight","midweek_top35","midweek_pool_rank","midweek_effective_weight","close_top35","close_pool_rank","close_effective_weight","open_combo_count","midweek_combo_count","close_combo_count"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "model_name":"Model","top35_membership":"Top-35 membership","open_top35":"Open Top35","open_pool_rank":"Open rank","open_effective_weight":"Open META wt %","midweek_top35":"Mid Top35","midweek_pool_rank":"Mid rank","midweek_effective_weight":"Mid META wt %","close_top35":"Updated Top35","close_pool_rank":"Updated rank","close_effective_weight":"Updated META wt %","open_combo_count":"Open finalists","midweek_combo_count":"Mid finalists","close_combo_count":"Updated finalists",
+        }),filters=True,height="560px")
 
     @render.data_frame
     def line_pipeline_candidate_overlap_table():

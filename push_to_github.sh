@@ -21,7 +21,7 @@ else
   git remote add origin "$REPO_URL"
 fi
 
-# v3.5.24: release rebuilds must never delete the verified PredictionTracker
+# v3.5.25: release rebuilds must never delete the verified PredictionTracker
 # mirror. If the working tree is missing mirror metadata, recover the newest
 # historical commit that still contains it, together with the matching CSV and
 # prospective mirror snapshots. This also self-heals repos affected by v3.5.21.
@@ -90,7 +90,7 @@ else:
     print("PredictionTracker mirror metadata not present; direct cloud refresh may remain blocked until a local mirror is created.")
 PYMIRROR
 
-echo "Preflight: verifying v3.5.24 Patrick preset..."
+echo "Preflight: verifying v3.5.25 Patrick preset..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -113,6 +113,9 @@ expected = [
     'line_fixed_reprice_table',
     'line_migration_summary_table',
     'run_line_pipelines',
+    'line_pipeline_cross_matrix_table',
+    'line_pipeline_fixed_reprice_table',
+    'line_pipeline_model_selection_table',
 ]
 missing = [x for x in expected if x not in s]
 if missing:
@@ -130,7 +133,7 @@ if "save_prospective_current_week_snapshot" not in current_week:
 if "PT_MIRROR_CSV_URL" not in current_week:
     refresh_missing.append("GitHub mirror fallback")
 if refresh_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.24 refresh code detected:\n  " + "\n  ".join(refresh_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.25 refresh code detected:\n  " + "\n  ".join(refresh_missing))
 line_path = Path("strategy_lab/line_movement.py")
 if not line_path.exists():
     raise SystemExit("REFUSING TO PUSH: strategy_lab/line_movement.py is missing")
@@ -138,19 +141,20 @@ line_text = line_path.read_text(encoding="utf-8")
 line_missing = [x for x in [
     "fixed_bet_repricing", "bet_set_overlap", "signal_migration_detail",
     "opening_line_qc", "clean_line_history_for_analysis",
-    "classify_open_line_anomalies", "run_line_specific_pipelines"
+    "classify_open_line_anomalies", "run_line_specific_pipelines",
+    "cross_reference", "fixed_repricing", "model_selection_comparison"
 ] if x not in line_text]
 for x in ["line_active_strategy_status", '"discovery_periods": tuple(search_periods)', 'result["search_periods"]', "analysis_line_history()"]:
     if x not in s:
         line_missing.append(x)
 if line_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.24 line-movement module detected:\n  " + "\n  ".join(line_missing))
-print("Verified: Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | Open-line anomaly QC | frozen usable-week split | fixed-bet repricing | signal migration/CLV | independent line pipelines | strict PT mirror + snapshots")
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.25 line-movement module detected:\n  " + "\n  ".join(line_missing))
+print("Verified: Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | Open-line anomaly QC | frozen usable-week split | fixed-bet repricing | signal migration/CLV | independent line pipelines | 3x3 architecture/execution matrix | pipeline price decay | cross-pipeline model weights | strict PT mirror + snapshots")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.24"
+  git commit -m "Deploy NCAAF Consensus Lab v3.5.25"
 else
   echo "No new changes to commit."
 fi

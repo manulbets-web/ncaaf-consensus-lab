@@ -12,6 +12,7 @@ from committee import (
     _combo_forecast_arrays,
     _meta_game_frame,
     _signal,
+    _threshold_stats,
     _wilson_lower,
     _unit_result,
     analyze_finalist_portfolio,
@@ -731,7 +732,13 @@ def run_line_specific_pipelines(
             t = top.copy()
             t["line_reference"] = label
             finalist_rows.append(t)
-        results[label] = {"ranked": ranked, "combinations": combos}
+        results[label] = {
+            "ranked": ranked,
+            "combinations": combos,
+            "analysis": analysis,
+            "meta_k": float(row.get("meta_k", np.nan)),
+            "model_frequency": analysis.get("model_frequency", pd.DataFrame()).copy(),
+        }
         done_before += nwork
         if progress_callback is not None:
             progress_callback(done_before, max(1,total_work), f"{label}: complete")
@@ -777,12 +784,177 @@ def run_line_specific_pipelines(
                 "mean_nearest_combo_jaccard":float(np.mean(nearest)) if nearest else np.nan,
             })
     finalist_overlap = pd.DataFrame(final_overlap_rows)
+
+    # ------------------------------------------------------------------
+    # Cross-reference evaluation: freeze the *model-selection architecture*
+    # from each native pipeline, then recompute the current signal against
+    # each alternative market reference. This is the production-style test:
+    # "select the models using Open/Midweek/Updated history, but execute
+    # against whatever line is available now."  The META k stays frozen at
+    # the discovery-selected value from the native pipeline.
+    # ------------------------------------------------------------------
+    cross_rows = []
+    fixed_rows = []
+    model_union = set()
+
+    for selection_label, selection_col in LINE_REFS:
+        rr = results.get(selection_label, {})
+        combos = list(rr.get("combinations", []))
+        analysis = rr.get("analysis", {}) or {}
+        if not combos:
+            continue
+
+        meta_k = pd.to_numeric(pd.Series([rr.get("meta_k", np.nan)]), errors="coerce").iloc[0]
+        if not np.isfinite(meta_k):
+            ms = analysis.get("meta_selected", pd.DataFrame())
+            if isinstance(ms, pd.DataFrame) and len(ms):
+                q = ms[ms["method"].astype(str).eq("Diversified META")]
+                if len(q):
+                    meta_k = pd.to_numeric(pd.Series([q.iloc[0].get("selected_k")]), errors="coerce").iloc[0]
+        if not np.isfinite(meta_k):
+            meta_k = 0.50
+        meta_k = float(meta_k)
+
+        # 3x3 architecture x execution-line matrix on untouched holdout.
+        for grade_label, grade_col in LINE_REFS:
+            grade_data = data_for_line_reference(data, line_history, grade_col)
+            mf = _meta_game_frame(
+                grade_data, combos, holdout_periods,
+                min_available_models=int(min_available_models), diversified=True,
+            )
+            if mf is None or mf.empty:
+                st = {"bets": 0, "wins": 0, "losses": 0, "pushes": 0,
+                      "ats_pct": np.nan, "units": 0.0, "roi": np.nan,
+                      "wilson_low": np.nan}
+                scorable = 0
+                model_mae = market_mae = np.nan
+            else:
+                edge = pd.to_numeric(mf["meta_edge"], errors="coerce").to_numpy(float)
+                sig = pd.to_numeric(mf["meta_signal"], errors="coerce").to_numpy(float)
+                cover = pd.to_numeric(mf["cover"], errors="coerce").to_numpy(float)
+                gate = pd.to_numeric(mf["active_units"], errors="coerce").fillna(0).to_numpy(float) >= int(min_meta_communities)
+                st = _threshold_stats(edge, sig, cover, meta_k, standard_price=standard_price, extra_gate=gate)
+                scorable = int(gate.sum())
+                pred = pd.to_numeric(mf["meta_mean"], errors="coerce").to_numpy(float)
+                actual = pd.to_numeric(mf["actual_margin"], errors="coerce").to_numpy(float)
+                market = pd.to_numeric(mf["market_margin"], errors="coerce").to_numpy(float)
+                pm = np.isfinite(pred) & np.isfinite(actual)
+                mm = np.isfinite(market) & np.isfinite(actual)
+                model_mae = float(np.mean(np.abs(pred[pm] - actual[pm]))) if pm.any() else np.nan
+                market_mae = float(np.mean(np.abs(market[mm] - actual[mm]))) if mm.any() else np.nan
+            cross_rows.append({
+                "selection_reference": selection_label,
+                "grading_reference": grade_label,
+                "native_reference": bool(selection_label == grade_label),
+                "meta_k": meta_k,
+                "scorable_games": scorable,
+                "model_mae": model_mae,
+                "market_mae": market_mae,
+                **{k: st.get(k, np.nan) for k in ("bets", "wins", "losses", "pushes", "ats_pct", "units", "roi", "wilson_low")},
+            })
+
+        # Fixed-portfolio repricing. Select game + side only at the pipeline's
+        # native reference, then hold both fixed while changing the grading
+        # price. This isolates price capture / decay from signal reselection.
+        native_data = data_for_line_reference(data, line_history, selection_col)
+        native = _meta_game_frame(
+            native_data, combos, holdout_periods,
+            min_available_models=int(min_available_models), diversified=True,
+        )
+        if native is not None and len(native):
+            n = native.copy()
+            edge = pd.to_numeric(n["meta_edge"], errors="coerce").to_numpy(float)
+            sig = pd.to_numeric(n["meta_signal"], errors="coerce").to_numpy(float)
+            active = pd.to_numeric(n["active_units"], errors="coerce").fillna(0).to_numpy(float) >= int(min_meta_communities)
+            selected = active & np.isfinite(edge) & np.isfinite(sig) & (sig >= meta_k) & (np.abs(edge) > 1e-12)
+            side = np.where(selected, np.sign(edge), 0.0)
+            actual = pd.to_numeric(n["actual_margin"], errors="coerce").to_numpy(float)
+            native_market = pd.to_numeric(n["market_margin"], errors="coerce").to_numpy(float)
+            lh = line_history.drop_duplicates("game_key").set_index("game_key").reindex(n["game_key"].astype(str))
+            native_stats = _fixed_outcome_stats(side, actual, native_market, selected, standard_price=standard_price)
+            native_ats = native_stats.get("ats_pct", np.nan)
+            for grade_label, grade_col in LINE_REFS:
+                grade_market = pd.to_numeric(lh[grade_col], errors="coerce").to_numpy(float)
+                st = _fixed_outcome_stats(side, actual, grade_market, selected, standard_price=standard_price)
+                finite_move = selected & np.isfinite(side) & np.isfinite(native_market) & np.isfinite(grade_market)
+                signed_move = side * (grade_market - native_market)
+                mean_signed = float(np.mean(signed_move[finite_move])) if finite_move.any() else np.nan
+                fixed_rows.append({
+                    "selection_reference": selection_label,
+                    "grading_reference": grade_label,
+                    "native_reference": bool(selection_label == grade_label),
+                    "meta_k": meta_k,
+                    "native_selected_n": int(selected.sum()),
+                    "mean_signed_line_change_pts": mean_signed,
+                    "ats_delta_vs_native": (st.get("ats_pct", np.nan) - native_ats)
+                        if np.isfinite(st.get("ats_pct", np.nan)) and np.isfinite(native_ats) else np.nan,
+                    **st,
+                })
+
+        ranked = rr.get("ranked", pd.DataFrame())
+        if isinstance(ranked, pd.DataFrame) and len(ranked):
+            model_union.update(ranked["canonical_model_id"].astype(str).tolist())
+        mfreq = rr.get("model_frequency", pd.DataFrame())
+        if isinstance(mfreq, pd.DataFrame) and len(mfreq):
+            model_union.update(mfreq["canonical_model_id"].astype(str).tolist())
+
+    cross_reference = pd.DataFrame(cross_rows)
+    fixed_repricing = pd.DataFrame(fixed_rows)
+
+    # Wide underlying-model comparison across the three independently selected
+    # architectures: Top-35 membership/rank + nominal effective META weight.
+    model_rows = []
+    for mid in sorted(model_union):
+        row = {"canonical_model_id": mid, "model_name": model_name_map.get(mid, mid)}
+        membership = []
+        for label, _ in LINE_REFS:
+            short = SHORT_REF[label]
+            rr = results.get(label, {})
+            ranked = rr.get("ranked", pd.DataFrame())
+            rank = np.nan
+            if isinstance(ranked, pd.DataFrame) and len(ranked):
+                q = ranked[ranked["canonical_model_id"].astype(str).eq(mid)]
+                if len(q):
+                    rank = pd.to_numeric(pd.Series([q.iloc[0].get("pool_rank")]), errors="coerce").iloc[0]
+                    nm = q.iloc[0].get("model_name")
+                    if pd.notna(nm) and str(nm).strip():
+                        row["model_name"] = str(nm)
+            in_pool = bool(np.isfinite(rank))
+            row[f"{short}_top35"] = in_pool
+            row[f"{short}_pool_rank"] = int(rank) if in_pool else np.nan
+            if in_pool:
+                membership.append(short.capitalize())
+            mfreq = rr.get("model_frequency", pd.DataFrame())
+            weight = np.nan
+            combo_count = 0
+            community_count = 0
+            if isinstance(mfreq, pd.DataFrame) and len(mfreq):
+                q = mfreq[mfreq["canonical_model_id"].astype(str).eq(mid)]
+                if len(q):
+                    weight = pd.to_numeric(pd.Series([q.iloc[0].get("effective_meta_weight")]), errors="coerce").iloc[0]
+                    combo_count = int(pd.to_numeric(pd.Series([q.iloc[0].get("combo_count", 0)]), errors="coerce").fillna(0).iloc[0])
+                    community_count = int(pd.to_numeric(pd.Series([q.iloc[0].get("community_count", 0)]), errors="coerce").fillna(0).iloc[0])
+            row[f"{short}_effective_weight"] = float(weight) if np.isfinite(weight) else 0.0
+            row[f"{short}_combo_count"] = combo_count
+            row[f"{short}_community_count"] = community_count
+        row["top35_membership"] = " + ".join(membership) if membership else "None"
+        row["max_effective_weight"] = max(row.get("open_effective_weight",0.0), row.get("midweek_effective_weight",0.0), row.get("close_effective_weight",0.0))
+        model_rows.append(row)
+    model_selection_comparison = pd.DataFrame(model_rows)
+    if len(model_selection_comparison):
+        model_selection_comparison = model_selection_comparison.sort_values(
+            ["max_effective_weight", "model_name"], ascending=[False, True]
+        ).reset_index(drop=True)
+
     return {
         "summary": pd.DataFrame(summary_rows),
         "candidate_table": candidate_table,
         "candidate_overlap": candidate_overlap,
         "finalist_table": finalist_table,
         "finalist_overlap": finalist_overlap,
+        "cross_reference": cross_reference,
+        "fixed_repricing": fixed_repricing,
+        "model_selection_comparison": model_selection_comparison,
         "results": results,
         "total_work": total_work,
     }
