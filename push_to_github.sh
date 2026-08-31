@@ -21,7 +21,7 @@ else
   git remote add origin "$REPO_URL"
 fi
 
-# v3.5.27: release rebuilds must never delete the verified PredictionTracker
+# v3.5.28: release rebuilds must never delete the verified PredictionTracker
 # mirror. If the working tree is missing mirror metadata, recover the newest
 # historical commit that still contains it, together with the matching CSV and
 # prospective mirror snapshots. This also self-heals repos affected by v3.5.21.
@@ -90,7 +90,7 @@ else:
     print("PredictionTracker mirror metadata not present; direct cloud refresh may remain blocked until a local mirror is created.")
 PYMIRROR
 
-echo "Preflight: verifying v3.5.27 Patrick preset..."
+echo "Preflight: verifying v3.5.28 Patrick preset..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -139,7 +139,7 @@ if "save_prospective_current_week_snapshot" not in current_week:
 if "PT_MIRROR_CSV_URL" not in current_week:
     refresh_missing.append("GitHub mirror fallback")
 if refresh_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.27 refresh code detected:\n  " + "\n  ".join(refresh_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.28 refresh code detected:\n  " + "\n  ".join(refresh_missing))
 line_path = Path("strategy_lab/line_movement.py")
 if not line_path.exists():
     raise SystemExit("REFUSING TO PUSH: strategy_lab/line_movement.py is missing")
@@ -158,13 +158,21 @@ for x in ["line_active_strategy_status", '"discovery_periods": tuple(search_peri
     if x not in s:
         line_missing.append(x)
 if line_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.27 line-movement module detected:\n  " + "\n  ".join(line_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.28 line-movement module detected:\n  " + "\n  ".join(line_missing))
+fs_start = s.find("async def forward_stability_task(")
+fs_end = s.find("@reactive.effect", fs_start)
+fs_body = s[fs_start:fs_end] if fs_start >= 0 and fs_end > fs_start else ""
+if "input." in fs_body:
+    raise SystemExit("REFUSING TO PUSH: forward_stability_task reads Shiny reactive input inside Extended Task")
+for token in ["min_discovery: int, min_games: int", "min_discovery_periods=int(min_discovery)", "min_games_per_period=int(min_games)"]:
+    if token not in s:
+        raise SystemExit(f"REFUSING TO PUSH: v3.5.28 Extended Task hotfix marker missing: {token}")
 print("Verified: Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | Open-line anomaly QC | frozen usable-week split | fixed-bet repricing | signal migration/CLV | independent line pipelines | 3x3 architecture/execution matrix | pipeline price decay | cross-pipeline model weights | rolling chronological OOS validation | nested forward-stability selection | strict PT mirror + snapshots")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.27"
+  git commit -m "Deploy NCAAF Consensus Lab v3.5.28"
 else
   echo "No new changes to commit."
 fi

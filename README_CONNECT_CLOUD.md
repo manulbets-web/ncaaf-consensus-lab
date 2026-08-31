@@ -1,4 +1,4 @@
-# NCAAF Consensus Lab v3.5.27 — Posit Connect Cloud bundle
+# NCAAF Consensus Lab v3.5.28 — Posit Connect Cloud bundle
 
 This directory was generated from:
 
@@ -11,7 +11,7 @@ The deployment is public-session safe: strategy selections and alternate-line ov
 PredictionTracker currently blocks Posit Connect Cloud worker IPs. The deployed app therefore falls back to a strict season/week-tagged GitHub mirror refreshed from the user's Mac.
 Use `./refresh_predictiontracker_local_and_push.sh SEASON WEEK` whenever PredictionTracker changes; the helper also persists unique source snapshots in Git.
 
-Page 5 includes the v3.5.26 repeated chronological stress test plus the v3.5.27 nested forward-stability experiment. The latter compares pooled ATS, pooled Wilson, forward-stability, and recency-weighted stability selection using untouched outer OOS blocks at PT Updated execution.
+Page 5 includes the v3.5.26 repeated chronological stress test plus the v3.5.28 nested forward-stability experiment. The latter compares pooled ATS, pooled Wilson, forward-stability, and recency-weighted stability selection using untouched outer OOS blocks at PT Updated execution.
 
 ## Local smoke test
 

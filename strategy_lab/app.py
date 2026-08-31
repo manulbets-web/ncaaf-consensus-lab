@@ -3977,7 +3977,7 @@ def server(input, output, session):
 
 
     # ------------------------------------------------------------------
-    # Page 5: nested forward-stability selection (v3.5.27)
+    # Page 5: nested forward-stability selection (v3.5.28 reactive-source hotfix)
     # ------------------------------------------------------------------
     @ui.bind_task_button(button_id="run_forward_stability")
     @reactive.extended_task
@@ -3985,6 +3985,7 @@ def server(input, output, session):
         live_ids: list[str], period_scope: tuple, line_history: pd.DataFrame,
         outer_blocks: int, outer_size: int, inner_blocks: int, inner_size: int,
         pool_n: int, half_life: float, min_inner_bets: int, min_block_bets: int,
+        min_discovery: int, min_games: int,
     ):
         def compute():
             start=time.monotonic()
@@ -3996,7 +3997,7 @@ def server(input, output, session):
             return run_forward_stability_validation(
                 DATA,line_history,live_ids,MODEL_NAME_MAP,period_scope=period_scope,
                 outer_blocks=int(outer_blocks),outer_block_size=int(outer_size),
-                min_discovery_periods=int(input.rolling_line_min_discovery()),min_games_per_period=int(input.rolling_line_min_games()),
+                min_discovery_periods=int(min_discovery),min_games_per_period=int(min_games),
                 inner_blocks=int(inner_blocks),inner_block_size=int(inner_size),inner_min_prior_periods=12,
                 stability_pool_n=int(pool_n),pool_min_bets=PATRICK_POOL_MIN_BETS,
                 min_size=PATRICK_MIN_SIZE,max_size=PATRICK_MAX_SIZE,search_k=PATRICK_K,
@@ -4029,6 +4030,7 @@ def server(input, output, session):
             int(input.forward_stability_inner_blocks()),int(input.forward_stability_inner_size()),
             int(input.forward_stability_pool_n()),float(input.forward_stability_half_life()),
             int(input.forward_stability_min_inner_bets()),int(input.forward_stability_min_block_bets()),
+            int(input.rolling_line_min_discovery()),int(input.rolling_line_min_games()),
         )
 
     def forward_stability_result():
