@@ -1026,10 +1026,28 @@ def load_predictiontracker_line_history(root: str | Path, data: pd.DataFrame) ->
         return pd.DataFrame()
     out = raw.drop_duplicates("game_key").copy()
     orient = pd.to_numeric(out["pair_orientation"], errors="coerce").fillna(1.0)
-    for src, dst in [("lineopen", "open_margin"), ("linemidweek", "midweek_margin"), ("line", "close_margin")]:
+
+    # Preserve the literal PredictionTracker values as well as the canonical
+    # orientation used by the modeling engine.  The raw home-margin fields are
+    # useful for auditing archive anomalies because the public PT convention is
+    # expressed relative to the listed home team, while the canonical engine can
+    # reverse a matchup through pair_orientation.
+    out["pt_road"] = out.get("road", pd.Series("", index=out.index)).astype(str)
+    out["pt_home"] = out.get("home", pd.Series("", index=out.index)).astype(str)
+    out["pair_orientation"] = orient
+    for src, dst, raw_dst in [
+        ("lineopen", "open_margin", "open_home_margin_raw"),
+        ("linemidweek", "midweek_margin", "midweek_home_margin_raw"),
+        ("line", "close_margin", "close_home_margin_raw"),
+    ]:
         vals = pd.to_numeric(out[src], errors="coerce") if src in out.columns else pd.Series(np.nan, index=out.index)
+        out[raw_dst] = vals
         out[dst] = vals * orient
-    keep = ["game_key", "season", "week", "open_margin", "midweek_margin", "close_margin"]
+    keep = [
+        "game_key", "season", "week", "pt_road", "pt_home", "pair_orientation",
+        "open_home_margin_raw", "midweek_home_margin_raw", "close_home_margin_raw",
+        "open_margin", "midweek_margin", "close_margin",
+    ]
     return out[keep].reset_index(drop=True)
 
 

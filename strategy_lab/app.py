@@ -26,7 +26,8 @@ from current_week import (
 from line_movement import (
     build_selection_detail, fixed_bet_repricing, bet_set_overlap,
     signal_migration_detail, signal_migration_summary, opening_line_qc,
-    individual_line_reference_by_period, run_line_specific_pipelines,
+    clean_line_history_for_analysis, individual_line_reference_by_period,
+    run_line_specific_pipelines,
 )
 from streamlined_engine import (
     StreamlinedBacktestConfig,
@@ -147,9 +148,12 @@ else:
 DEFAULT_MANUAL_IDS = DEFAULT_AUTO_IDS[: min(10, len(DEFAULT_AUTO_IDS))]
 
 INDIVIDUAL_HISTORY = individual_model_performance(DATA, standard_price=-110)
-PT_LINE_HISTORY = load_predictiontracker_line_history(PROJECT_ROOT, DATA)
+PT_LINE_HISTORY_RAW = load_predictiontracker_line_history(PROJECT_ROOT, DATA)
+# Preserve the literal archive mapping for QC.  Primary line-movement analyses
+# apply a reactive Open-line anomaly filter rather than mutating source data.
+PT_LINE_HISTORY = PT_LINE_HISTORY_RAW
 INDIVIDUAL_LINE_HISTORY = individual_model_line_reference_performance(
-    DATA, PT_LINE_HISTORY, standard_price=-110
+    DATA, PT_LINE_HISTORY_RAW, standard_price=-110
 )
 
 
@@ -380,7 +384,8 @@ app_ui = ui.page_fluid(
                     "Re-grades each model against PredictionTracker's stored Opening, Midweek, and final Updated line. "
                     "The final Updated field is shown as the close proxy; it is not a timestamped sportsbook close. "
                     "Because historical model publication timestamps are unavailable, Open/Midweek rows are retrospective price-sensitivity tests, not claims that every model prediction was executable at that earlier line. "
-                    "Every non-zero model-vs-line edge is graded, matching the standalone Page 1 convention.",
+                    "Every non-zero model-vs-line edge is graded, matching the standalone Page 1 convention. "
+                    "The Open rows use the same anomaly filter configured on Page 5; suspect raw PT opening values are excluded by default.",
                     class_="muted",
                 ),
                 ui.output_data_frame("historical_model_line_reference_table"),
@@ -847,16 +852,21 @@ app_ui = ui.page_fluid(
                     choices={"Discovery":"Discovery", "Holdout":"Holdout"}, selected="Holdout", inline=True,
                 ),
                 ui.input_numeric(
-                    "line_qc_move_threshold", "QC: flag open→updated move ≥",
+                    "line_qc_move_threshold", "Open-line anomaly threshold",
                     10.0, min=3.0, max=30.0, step=0.5,
                 ),
-                col_widths=(5, 4, 3),
+                ui.input_checkbox(
+                    "line_qc_exclude_suspect", "Exclude clearly suspect Opens", True,
+                ),
+                col_widths=(4, 3, 3, 2),
             ),
+            ui.output_text("line_active_strategy_status"),
             ui.card(
                 ui.card_header("Opening-line quality control"),
                 ui.p(
-                    "Before interpreting any opening-line result, inspect missingness and extreme moves. Large moves can be real in college football, so the threshold is a review flag rather than an automatic exclusion. "
-                    "The table is sorted with flagged and largest Open→Updated moves first.",
+                    "PredictionTracker's historical archive contains a small number of opening-line anomalies. The table shows the literal PT home-margin values for audit. "
+                    "Primary Open analyses conservatively omit only values classified as suspect (large favorite flips, gross gaps, or an Open value far from a stable Midweek/Updated pair); no replacement line is invented. "
+                    "Turn off the exclusion checkbox to run the raw-archive sensitivity instead.",
                     class_="muted",
                 ),
                 ui.output_data_frame("line_qc_summary_table"),
@@ -1095,10 +1105,12 @@ def server(input, output, session):
 
     @render.data_frame
     def historical_model_line_reference_table():
-        d = INDIVIDUAL_LINE_HISTORY.copy()
+        d = individual_model_line_reference_performance(
+            DATA, analysis_line_history(), standard_price=-110
+        )
         if d.empty:
             msg = pd.DataFrame([{
-                "Status": "PredictionTracker historical line files were not bundled. Rebuild the Connect repo with v3.5.23 so data/historical/ncaa*.csv is included."
+                "Status": "PredictionTracker historical line files were not bundled. Rebuild the Connect repo with v3.5.24 so data/historical/ncaa*.csv is included."
             }])
             return render.DataGrid(msg, filters=False)
         d = _pct_frame(d, ["ats_pct", "roi", "wilson_low"])
@@ -1720,6 +1732,10 @@ def server(input, output, session):
                 thresholds=K_GRID,
                 top_n=int(config_values["top_n"]),
             )
+            # Carry the exact discovery/validation chronology through the async
+            # boundary so downstream pages cannot silently reconstruct a different split.
+            result["search_periods"] = tuple(config_values.get("search_periods", ()))
+            result["validation_periods"] = tuple(config_values.get("validation_periods", ()))
             set_auto_progress(phase="Complete", label="Search and finalist validation complete.", updated=time.monotonic())
             return result
         return await asyncio.to_thread(compute)
@@ -1981,6 +1997,11 @@ def server(input, output, session):
         patrick_state.set({
             "phase": "searching",
             "message": f"Searching {total:,} exact combinations from {len(ids)} current-week candidates · holdout {holdout_label}…",
+            # Persist the *usable* chronology chosen above. v3.5.23 accidentally
+            # recomputed the last six raw weeks after the search finished, which
+            # could replace the actual held-out weeks with sparse/no-data periods.
+            "discovery_periods": tuple(search_periods),
+            "holdout_periods": tuple(val_periods),
         })
         print(
             f"[Patrick recipe] starting exact search: {len(ids)} candidates, sizes "
@@ -2459,9 +2480,22 @@ def server(input, output, session):
                 patrick_state.set({"phase": "error", "message": "The recommended finalist combinations could not be resolved."})
                 return
 
-            periods = tuple((y, w) for y, w in HISTORICAL_PERIODS if y in set(HISTORICAL_SEASONS))
-            discovery_periods = periods[:-PATRICK_HOLDOUT_WEEKS]
-            holdout_periods = periods[-PATRICK_HOLDOUT_WEEKS:]
+            # Use the exact usable-week split chosen when the Patrick search
+            # started.  Fall back to the async result metadata only for sessions
+            # created before this state field existed.
+            state_now = patrick_state.get()
+            discovery_periods = tuple(state_now.get("discovery_periods", ()))
+            holdout_periods = tuple(state_now.get("holdout_periods", ()))
+            if not discovery_periods:
+                discovery_periods = tuple(r.get("search_periods", ()))
+            if not holdout_periods:
+                holdout_periods = tuple(r.get("validation_periods", ()))
+            if not discovery_periods or not holdout_periods:
+                patrick_state.set({
+                    "phase": "error",
+                    "message": "Could not recover the frozen discovery/holdout chronology from the recommended search.",
+                })
+                return
             committee_analysis = analyze_finalist_portfolio(
                 DATA, combos, discovery_periods, holdout_periods,
                 min_available_models=PATRICK_MIN_AVAILABLE,
@@ -2484,7 +2518,7 @@ def server(input, output, session):
                 "primary_k": PATRICK_K,
                 "min_available_models": PATRICK_MIN_AVAILABLE,
                 "committee_analysis": committee_analysis,
-                    "discovery_periods": tuple(discovery_periods),
+                "discovery_periods": tuple(discovery_periods),
                 "holdout_periods": tuple(holdout_periods),
             })
             ui.update_selectize(
@@ -3125,16 +3159,17 @@ def server(input, output, session):
         a = _active_committee_analysis()
         if not a:
             return render.DataGrid(pd.DataFrame())
-        d = a.get("line_reference_performance", pd.DataFrame()).copy()
-        if not isinstance(d, pd.DataFrame) or d.empty:
-            d = consortium_line_reference_performance(
-                DATA, PT_LINE_HISTORY, a.get("combinations", []),
-                a.get("discovery_periods", ()), a.get("holdout_periods", ()),
-                a.get("combo_k_selected", pd.DataFrame()), a.get("meta_selected", pd.DataFrame()),
-                min_available_models=int(strategy.get().get("min_available_models", PATRICK_MIN_AVAILABLE)),
-                min_meta_communities=int(a.get("min_meta_communities", PATRICK_META_MIN_COMMUNITIES)),
-                standard_price=-110,
-            )
+        s_active = strategy.get()
+        discovery_periods = tuple(s_active.get("discovery_periods") or a.get("discovery_periods", ()))
+        holdout_periods = tuple(s_active.get("holdout_periods") or a.get("holdout_periods", ()))
+        d = consortium_line_reference_performance(
+            DATA, analysis_line_history(), a.get("combinations", []),
+            discovery_periods, holdout_periods,
+            a.get("combo_k_selected", pd.DataFrame()), a.get("meta_selected", pd.DataFrame()),
+            min_available_models=int(s_active.get("min_available_models", PATRICK_MIN_AVAILABLE)),
+            min_meta_communities=int(a.get("min_meta_communities", PATRICK_META_MIN_COMMUNITIES)),
+            standard_price=-110,
+        )
         if d.empty:
             return render.DataGrid(pd.DataFrame([{"Status":"No mapped PredictionTracker opening/midweek/final line history is available in this deployment."}]))
         d = _pct_frame(d, ["ats_pct", "roi", "wilson_low"])
@@ -3150,21 +3185,54 @@ def server(input, output, session):
     # Page 5: line-movement diagnostics
     # ------------------------------------------------------------------
     @reactive.calc
+    def analysis_line_history():
+        """Line history used by Page 4/5 analyses after the active Open-QC rule."""
+        return clean_line_history_for_analysis(
+            PT_LINE_HISTORY_RAW,
+            move_threshold=float(input.line_qc_move_threshold()),
+            exclude_suspect_open=bool(input.line_qc_exclude_suspect()),
+        )
+
+    @render.text
+    def line_active_strategy_status():
+        s_active = strategy.get()
+        a = _active_committee_analysis()
+        combos = list(a.get("combinations", [])) if a else []
+        if not combos:
+            return "No frozen finalist portfolio is registered yet. Run Patrick's recommended settings first."
+        discovery = tuple(s_active.get("discovery_periods") or a.get("discovery_periods", ()))
+        holdout = tuple(s_active.get("holdout_periods") or a.get("holdout_periods", ()))
+        def fmt_periods(periods):
+            if not periods:
+                return "none"
+            if len(periods) == 1:
+                return f"{periods[0][0]} W{periods[0][1]}"
+            return f"{periods[0][0]} W{periods[0][1]} → {periods[-1][0]} W{periods[-1][1]} ({len(periods)} weeks)"
+        source = str(s_active.get("source", "selected"))
+        qc = "suspect Opens excluded" if bool(input.line_qc_exclude_suspect()) else "raw Opens included"
+        return (
+            f"Active strategy registered: {source} · {len(combos)} finalists · "
+            f"Discovery {fmt_periods(discovery)} · Holdout {fmt_periods(holdout)} · {qc}."
+        )
+
+    @reactive.calc
     def line_movement_bundle():
         a = _active_committee_analysis()
         combos = list(a.get("combinations", [])) if a else []
-        if not combos or PT_LINE_HISTORY is None or PT_LINE_HISTORY.empty:
+        line_history = analysis_line_history()
+        if not combos or line_history is None or line_history.empty:
             return {
                 "selection": pd.DataFrame(), "fixed": pd.DataFrame(),
                 "overlap": pd.DataFrame(), "migration_detail": pd.DataFrame(),
                 "migration_summary": pd.DataFrame(), "individual": pd.DataFrame(),
             }
-        discovery_periods = tuple(a.get("discovery_periods", ()))
-        holdout_periods = tuple(a.get("holdout_periods", ()))
-        min_n = int(strategy.get().get("min_available_models", PATRICK_MIN_AVAILABLE))
+        s_active = strategy.get()
+        discovery_periods = tuple(s_active.get("discovery_periods") or a.get("discovery_periods", ()))
+        holdout_periods = tuple(s_active.get("holdout_periods") or a.get("holdout_periods", ()))
+        min_n = int(s_active.get("min_available_models", PATRICK_MIN_AVAILABLE))
         min_comm = int(a.get("min_meta_communities", PATRICK_META_MIN_COMMUNITIES))
         selection = build_selection_detail(
-            DATA, PT_LINE_HISTORY, combos,
+            DATA, line_history, combos,
             discovery_periods, holdout_periods,
             a.get("combo_k_selected", pd.DataFrame()),
             a.get("meta_selected", pd.DataFrame()),
@@ -3179,7 +3247,7 @@ def server(input, output, session):
             "migration_detail": migration_detail,
             "migration_summary": signal_migration_summary(migration_detail),
             "individual": individual_line_reference_by_period(
-                DATA, PT_LINE_HISTORY, discovery_periods, holdout_periods,
+                DATA, line_history, discovery_periods, holdout_periods,
                 standard_price=-110,
             ),
         }
@@ -3214,44 +3282,67 @@ def server(input, output, session):
     @render.data_frame
     def line_qc_summary_table():
         summary, _ = opening_line_qc(
-            PT_LINE_HISTORY, DATA,
+            PT_LINE_HISTORY_RAW, DATA,
             move_threshold=float(input.line_qc_move_threshold()),
+            exclude_suspect_open=bool(input.line_qc_exclude_suspect()),
         )
         if summary.empty:
             return render.DataGrid(pd.DataFrame([{"Status":"No mapped PredictionTracker line history is available."}]))
         d = summary.copy()
         d = _pct_frame(d, ["availability_pct"])
-        for c in ["market_mae", "median_abs_error"]:
+        for c in ["raw_market_mae", "analysis_market_mae", "analysis_median_abs_error"]:
             if c in d.columns:
                 d[c] = pd.to_numeric(d[c], errors="coerce").round(2)
-        keep = [c for c in ["line_reference","games_available","availability_pct","market_mae","median_abs_error","flagged_games","move_threshold"] if c in d.columns]
+        keep = [c for c in [
+            "line_reference","raw_games_available","analysis_games_available","availability_pct",
+            "raw_market_mae","analysis_market_mae","analysis_median_abs_error",
+            "suspect_open_games","review_flagged_games","move_threshold"
+        ] if c in d.columns]
         return render.DataGrid(d[keep].rename(columns={
-            "line_reference":"Line reference","games_available":"Games available","availability_pct":"Availability %",
-            "market_mae":"Market MAE","median_abs_error":"Median |error|","flagged_games":"QC-flagged games","move_threshold":"Move flag (pts)",
-        }), filters=False, height="210px")
+            "line_reference":"Line reference","raw_games_available":"Raw games","analysis_games_available":"Used in analysis",
+            "availability_pct":"Analysis availability %","raw_market_mae":"Raw market MAE",
+            "analysis_market_mae":"Analysis market MAE","analysis_median_abs_error":"Analysis median |error|",
+            "suspect_open_games":"Suspect Opens","review_flagged_games":"Review flags","move_threshold":"Review threshold (pts)",
+        }), filters=False, height="230px")
 
     @render.data_frame
     def line_qc_table():
         _, detail = opening_line_qc(
-            PT_LINE_HISTORY, DATA,
+            PT_LINE_HISTORY_RAW, DATA,
             move_threshold=float(input.line_qc_move_threshold()),
+            exclude_suspect_open=bool(input.line_qc_exclude_suspect()),
         )
         if detail.empty:
             return render.DataGrid(pd.DataFrame())
-        for c in ["open_margin","midweek_margin","close_margin","open_to_midweek","midweek_to_close","open_to_close","abs_open_close_move"]:
+        for c in ["open_display","midweek_display","close_display","open_to_midweek","midweek_to_close","open_to_close","abs_open_close_move"]:
             if c in detail.columns:
                 detail[c] = pd.to_numeric(detail[c], errors="coerce").round(1)
-        keep=[c for c in ["season","week","game","open_margin","midweek_margin","close_margin","open_to_midweek","midweek_to_close","open_to_close","abs_open_close_move","qc_flags"] if c in detail.columns]
+        keep=[c for c in [
+            "season","week","game","open_display","midweek_display","close_display",
+            "open_to_midweek","midweek_to_close","open_to_close","abs_open_close_move",
+            "open_suspect","open_used_in_analysis","open_exclusion_reason","qc_flags"
+        ] if c in detail.columns]
         return render.DataGrid(detail[keep].rename(columns={
-            "season":"Season","week":"Week","game":"Game","open_margin":"Open","midweek_margin":"Midweek","close_margin":"PT Updated",
-            "open_to_midweek":"Open→Mid","midweek_to_close":"Mid→Updated","open_to_close":"Open→Updated","abs_open_close_move":"|Open→Updated|","qc_flags":"QC flags",
-        }), filters=True, height="410px")
+            "season":"Season","week":"Week","game":"Game","open_display":"Open (raw PT)",
+            "midweek_display":"Midweek (raw PT)","close_display":"PT Updated (raw PT)",
+            "open_to_midweek":"Open→Mid","midweek_to_close":"Mid→Updated","open_to_close":"Open→Updated",
+            "abs_open_close_move":"|Open→Updated|","open_suspect":"Suspect Open","open_used_in_analysis":"Open used",
+            "open_exclusion_reason":"Exclusion reason","qc_flags":"Review flags",
+        }), filters=True, height="430px")
 
     @render.data_frame
     def line_fixed_reprice_table():
         d = _line_selected_entity_period(line_movement_bundle().get("fixed", pd.DataFrame()))
         if d.empty:
-            return render.DataGrid(pd.DataFrame([{"Status":"Run Patrick's recommended settings on Page 4 first."}]))
+            a = _active_committee_analysis()
+            if not a or not a.get("combinations"):
+                msg = "No frozen finalist portfolio is registered. Run Patrick's recommended settings first."
+            else:
+                msg = (
+                    f"The active portfolio is registered, but no scorable {str(input.line_movement_period() or 'Holdout')} "
+                    f"rows are available for {str(input.line_movement_entity() or 'Diversified META')} under the current line/QC filter."
+                )
+            return render.DataGrid(pd.DataFrame([{"Status":msg}]))
         d = _pct_frame(d, ["ats_pct","roi","wilson_low"])
         for c in ["mean_signed_market_move","median_signed_market_move"]:
             if c in d.columns:
@@ -3361,7 +3452,9 @@ def server(input, output, session):
 
     @ui.bind_task_button(button_id="run_line_pipelines")
     @reactive.extended_task
-    async def line_pipeline_task(live_ids: list[str], discovery_periods: tuple, holdout_periods: tuple):
+    async def line_pipeline_task(
+        live_ids: list[str], discovery_periods: tuple, holdout_periods: tuple, line_history: pd.DataFrame
+    ):
         def compute():
             start=time.monotonic()
             set_line_pipeline_progress(done=0,total=0,label="Preparing line-specific candidate rankings…",started=start,updated=start)
@@ -3370,7 +3463,7 @@ def server(input, output, session):
                 if int(done)==int(total) or int(done)%100000 < 512:
                     print(f"[Line movement] {done:,}/{total:,} · {label}", flush=True)
             return run_line_specific_pipelines(
-                DATA, PT_LINE_HISTORY, live_ids, MODEL_NAME_MAP,
+                DATA, line_history, live_ids, MODEL_NAME_MAP,
                 discovery_periods, holdout_periods,
                 pool_n=PATRICK_POOL_N, pool_min_bets=PATRICK_POOL_MIN_BETS,
                 min_size=PATRICK_MIN_SIZE, max_size=PATRICK_MAX_SIZE,
@@ -3396,7 +3489,15 @@ def server(input, output, session):
         if not live_ready or not live_ids:
             ui.notification_show("Refresh PredictionTracker on Page 2 first.",type="error")
             return
-        line_pipeline_task(sorted(live_ids),tuple(a.get("discovery_periods",())),tuple(a.get("holdout_periods",())))
+        s_active = strategy.get()
+        discovery_periods = tuple(s_active.get("discovery_periods") or a.get("discovery_periods", ()))
+        holdout_periods = tuple(s_active.get("holdout_periods") or a.get("holdout_periods", ()))
+        if not discovery_periods or not holdout_periods:
+            ui.notification_show("The active portfolio has no frozen discovery/holdout chronology. Re-run Patrick's recommended settings once.", type="error", duration=12)
+            return
+        line_pipeline_task(
+            sorted(live_ids), discovery_periods, holdout_periods, analysis_line_history().copy()
+        )
 
     def line_pipeline_result():
         if line_pipeline_task.status()!="success": return None

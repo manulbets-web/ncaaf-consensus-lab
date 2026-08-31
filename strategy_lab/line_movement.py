@@ -387,42 +387,168 @@ def signal_migration_summary(detail: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def opening_line_qc(line_history: pd.DataFrame, data: pd.DataFrame, *, move_threshold: float = 10.0) -> tuple[pd.DataFrame, pd.DataFrame]:
+def classify_open_line_anomalies(
+    line_history: pd.DataFrame,
+    *,
+    move_threshold: float = 10.0,
+    stable_mid_close_tolerance: float = 2.5,
+) -> pd.DataFrame:
+    """Annotate suspicious historical PT opening-line values.
+
+    PredictionTracker's archive contains a small number of opening values that
+    are plainly incompatible with the rest of the same game's market history.
+    We do *not* repair them or infer a replacement.  Instead we mark a
+    conservative subset as suspect so primary Open analyses can omit only the
+    opening quote while retaining that game's Midweek/Updated observations.
+
+    The raw PT home-margin fields are preferred for audit logic when available;
+    canonical-orientation fields are mathematically equivalent for move size.
+    """
+    if line_history is None or line_history.empty:
+        return pd.DataFrame()
+    lh = line_history.drop_duplicates("game_key").copy()
+    thr = float(move_threshold)
+    raw_cols = {
+        "open": "open_home_margin_raw" if "open_home_margin_raw" in lh.columns else "open_margin",
+        "mid": "midweek_home_margin_raw" if "midweek_home_margin_raw" in lh.columns else "midweek_margin",
+        "close": "close_home_margin_raw" if "close_home_margin_raw" in lh.columns else "close_margin",
+    }
+    for c in set(raw_cols.values()) | {"open_margin", "midweek_margin", "close_margin"}:
+        if c in lh.columns:
+            lh[c] = pd.to_numeric(lh[c], errors="coerce")
+
+    o = pd.to_numeric(lh[raw_cols["open"]], errors="coerce")
+    m = pd.to_numeric(lh[raw_cols["mid"]], errors="coerce")
+    c = pd.to_numeric(lh[raw_cols["close"]], errors="coerce")
+    lh["qc_open_display"] = o
+    lh["qc_midweek_display"] = m
+    lh["qc_close_display"] = c
+    lh["qc_open_to_midweek"] = m - o
+    lh["qc_midweek_to_close"] = c - m
+    lh["qc_open_to_close"] = c - o
+    lh["qc_abs_open_close_move"] = (c - o).abs()
+
+    review_flags = []
+    suspect_flags = []
+    for ov, mv, cv in zip(o.to_numpy(float), m.to_numpy(float), c.to_numpy(float)):
+        review = []
+        suspect = []
+        if not np.isfinite(ov):
+            review.append("missing open")
+        if not np.isfinite(mv):
+            review.append("missing midweek")
+        if not np.isfinite(cv):
+            review.append("missing updated")
+
+        if np.isfinite(ov) and np.isfinite(cv):
+            gap = abs(cv - ov)
+            if gap >= thr:
+                review.append(f"open→updated ≥{thr:g}")
+            # A favorite-direction reversal of this size is rare enough that it
+            # should not drive the primary retrospective Open backtest without
+            # an independently verified market source.
+            if gap >= thr and np.sign(ov) != np.sign(cv) and abs(ov) >= 2.5 and abs(cv) >= 2.5:
+                suspect.append("large favorite flip")
+            # Do not automatically throw out an ordinary large market move.
+            # Same-direction moves of ~10 points can be real in college football.
+            # Reserve automatic exclusion for truly extreme discrepancies.
+            if gap >= max(30.0, 3.0 * thr):
+                suspect.append("gross open→updated gap")
+
+        if np.isfinite(ov) and abs(ov) >= 50:
+            review.append("|open| ≥50")
+            # 50+ point favorites do exist, so magnitude alone is only a review
+            # flag.  It becomes suspect when the later market is dramatically
+            # smaller, which is the signature of the source typo we observed.
+            if np.isfinite(cv) and abs(cv) <= 25 and abs(cv - ov) >= 25:
+                suspect.append("extreme opening magnitude mismatch")
+
+        if np.isfinite(ov) and np.isfinite(mv) and np.isfinite(cv):
+            if abs(mv - cv) <= float(stable_mid_close_tolerance):
+                later_center = 0.5 * (mv + cv)
+                # A stable Midweek/Updated pair is useful corroboration, but a
+                # 10-point Open move can still be legitimate.  Require a much
+                # larger discrepancy before excluding it automatically.
+                if abs(ov - later_center) >= max(20.0, 2.0 * thr):
+                    suspect.append("open far from stable mid/update")
+
+        # Preserve order while removing duplicates.
+        review_flags.append("; ".join(dict.fromkeys(review)))
+        suspect_flags.append("; ".join(dict.fromkeys(suspect)))
+
+    lh["qc_flags"] = review_flags
+    lh["open_exclusion_reason"] = suspect_flags
+    lh["open_suspect"] = lh["open_exclusion_reason"].astype(str).str.len() > 0
+    lh["flagged"] = (lh["qc_flags"].astype(str).str.len() > 0) | lh["open_suspect"]
+    return lh
+
+
+def clean_line_history_for_analysis(
+    line_history: pd.DataFrame,
+    *,
+    move_threshold: float = 10.0,
+    exclude_suspect_open: bool = True,
+) -> pd.DataFrame:
+    """Return line history for modeling, optionally nulling suspect Open values.
+
+    Midweek and Updated values are never discarded because an opening anomaly is
+    present.  No replacement opening line is fabricated.
+    """
+    lh = classify_open_line_anomalies(line_history, move_threshold=move_threshold)
+    if lh.empty:
+        return lh
+    lh["open_used_in_analysis"] = pd.to_numeric(lh.get("open_margin"), errors="coerce").notna()
+    if bool(exclude_suspect_open):
+        bad = lh["open_suspect"].fillna(False).astype(bool)
+        lh.loc[bad, "open_margin"] = np.nan
+        lh.loc[bad, "open_used_in_analysis"] = False
+    return lh
+
+
+def opening_line_qc(
+    line_history: pd.DataFrame,
+    data: pd.DataFrame,
+    *,
+    move_threshold: float = 10.0,
+    exclude_suspect_open: bool = True,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     if line_history is None or line_history.empty:
         return pd.DataFrame(), pd.DataFrame()
-    lh = line_history.drop_duplicates("game_key").copy()
-    # Attach human-readable matchup and actual margin if available.
+    lh = classify_open_line_anomalies(line_history, move_threshold=move_threshold)
+    if lh.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    # Attach human-readable matchup and actual margin if available. Prefer the
+    # literal PT home/road labels retained by v3.5.24; they match the raw line
+    # signs shown in this audit table.
     meta_cols = [c for c in ["game_key", "season", "week", "road", "away", "home", "actual_margin"] if c in data.columns]
     if meta_cols:
         meta = data[meta_cols].sort_values([c for c in ["season", "week", "game_key"] if c in meta_cols]).drop_duplicates("game_key")
-        # season/week already exist in line history; keep one copy.
         merge_cols = [c for c in meta_cols if c not in {"season", "week"}]
         lh = lh.merge(meta[merge_cols], on="game_key", how="left")
-    away_col = "road" if "road" in lh.columns else ("away" if "away" in lh.columns else None)
-    if away_col:
-        lh["game"] = lh[away_col].astype(str) + " @ " + lh.get("home", "").astype(str)
+    if "pt_road" in lh.columns and "pt_home" in lh.columns:
+        lh["game"] = lh["pt_road"].astype(str) + " @ " + lh["pt_home"].astype(str)
     else:
-        lh["game"] = lh["game_key"].astype(str)
-    for c in ["open_margin", "midweek_margin", "close_margin", "actual_margin"]:
-        if c in lh.columns:
-            lh[c] = pd.to_numeric(lh[c], errors="coerce")
-    lh["open_to_midweek"] = lh["midweek_margin"] - lh["open_margin"]
-    lh["midweek_to_close"] = lh["close_margin"] - lh["midweek_margin"]
-    lh["open_to_close"] = lh["close_margin"] - lh["open_margin"]
-    lh["abs_open_close_move"] = lh["open_to_close"].abs()
-    flags = []
-    for r in lh.itertuples(index=False):
-        f = []
-        o = getattr(r, "open_margin", np.nan); m = getattr(r, "midweek_margin", np.nan); c = getattr(r, "close_margin", np.nan)
-        if not np.isfinite(o): f.append("missing open")
-        if not np.isfinite(m): f.append("missing midweek")
-        if not np.isfinite(c): f.append("missing close")
-        if np.isfinite(o) and np.isfinite(c) and abs(c-o) >= float(move_threshold): f.append(f"open→close ≥{float(move_threshold):g}")
-        if np.isfinite(o) and abs(o) >= 50: f.append("|open| ≥50")
-        if np.isfinite(o) and np.isfinite(c) and np.sign(o) != np.sign(c) and abs(c-o) >= 7: f.append("large favorite flip")
-        flags.append("; ".join(f))
-    lh["qc_flags"] = flags
-    lh["flagged"] = lh["qc_flags"].astype(str).str.len() > 0
+        away_col = "road" if "road" in lh.columns else ("away" if "away" in lh.columns else None)
+        if away_col:
+            lh["game"] = lh[away_col].astype(str) + " @ " + lh.get("home", "").astype(str)
+        else:
+            lh["game"] = lh["game_key"].astype(str)
+
+    # Display raw PT home-margin values when available.  Canonical values remain
+    # in open_margin/midweek_margin/close_margin for model grading.
+    lh["open_display"] = pd.to_numeric(lh["qc_open_display"], errors="coerce")
+    lh["midweek_display"] = pd.to_numeric(lh["qc_midweek_display"], errors="coerce")
+    lh["close_display"] = pd.to_numeric(lh["qc_close_display"], errors="coerce")
+    lh["open_to_midweek"] = pd.to_numeric(lh["qc_open_to_midweek"], errors="coerce")
+    lh["midweek_to_close"] = pd.to_numeric(lh["qc_midweek_to_close"], errors="coerce")
+    lh["open_to_close"] = pd.to_numeric(lh["qc_open_to_close"], errors="coerce")
+    lh["abs_open_close_move"] = pd.to_numeric(lh["qc_abs_open_close_move"], errors="coerce")
+    raw_open_available = pd.to_numeric(lh.get("open_margin"), errors="coerce").notna()
+    if bool(exclude_suspect_open):
+        lh["open_used_in_analysis"] = raw_open_available & ~lh["open_suspect"].fillna(False)
+    else:
+        lh["open_used_in_analysis"] = raw_open_available
 
     summary_rows = []
     actual = pd.to_numeric(lh.get("actual_margin"), errors="coerce") if "actual_margin" in lh.columns else pd.Series(np.nan, index=lh.index)
@@ -430,17 +556,28 @@ def opening_line_qc(line_history: pd.DataFrame, data: pd.DataFrame, *, move_thre
         x = pd.to_numeric(lh[col], errors="coerce")
         valid = x.notna()
         scored = valid & actual.notna()
-        summary_rows.append({
+        raw_mae = float((x[scored]-actual[scored]).abs().mean()) if scored.any() else np.nan
+        raw_med = float((x[scored]-actual[scored]).abs().median()) if scored.any() else np.nan
+        if label == "Open" and bool(exclude_suspect_open):
+            active_valid = valid & ~lh["open_suspect"].fillna(False)
+        else:
+            active_valid = valid
+        active_scored = active_valid & actual.notna()
+        row = {
             "line_reference": label,
-            "games_available": int(valid.sum()),
-            "availability_pct": float(valid.mean()) if len(valid) else np.nan,
-            "market_mae": float((x[scored]-actual[scored]).abs().mean()) if scored.any() else np.nan,
-            "median_abs_error": float((x[scored]-actual[scored]).abs().median()) if scored.any() else np.nan,
-        })
+            "raw_games_available": int(valid.sum()),
+            "analysis_games_available": int(active_valid.sum()),
+            "availability_pct": float(active_valid.mean()) if len(active_valid) else np.nan,
+            "raw_market_mae": raw_mae,
+            "analysis_market_mae": float((x[active_scored]-actual[active_scored]).abs().mean()) if active_scored.any() else np.nan,
+            "analysis_median_abs_error": float((x[active_scored]-actual[active_scored]).abs().median()) if active_scored.any() else np.nan,
+            "suspect_open_games": int(lh["open_suspect"].sum()) if label == "Open" else 0,
+        }
+        summary_rows.append(row)
     summary = pd.DataFrame(summary_rows)
-    summary["flagged_games"] = int(lh["flagged"].sum())
+    summary["review_flagged_games"] = int(lh["flagged"].sum())
     summary["move_threshold"] = float(move_threshold)
-    lh = lh.sort_values(["flagged", "abs_open_close_move"], ascending=[False, False], na_position="last").reset_index(drop=True)
+    lh = lh.sort_values(["open_suspect", "flagged", "abs_open_close_move"], ascending=[False, False, False], na_position="last").reset_index(drop=True)
     return summary, lh
 
 
