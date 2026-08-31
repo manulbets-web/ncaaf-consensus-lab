@@ -27,7 +27,8 @@ from line_movement import (
     build_selection_detail, fixed_bet_repricing, bet_set_overlap,
     signal_migration_detail, signal_migration_summary, opening_line_qc,
     clean_line_history_for_analysis, individual_line_reference_by_period,
-    run_line_specific_pipelines, run_rolling_line_selection_validation, LINE_REFS,
+    run_line_specific_pipelines, run_rolling_line_selection_validation,
+    run_forward_stability_validation, FORWARD_STABILITY_METHODS, LINE_REFS,
 )
 from streamlined_engine import (
     StreamlinedBacktestConfig,
@@ -1005,6 +1006,54 @@ app_ui = ui.page_fluid(
                 ui.h5("Chronology used"),
                 ui.output_data_frame("rolling_line_folds_table"),
             ),
+            ui.card(
+                ui.card_header("Forward-facing stable combination selection"),
+                ui.p(
+                    "Nested walk-forward experiment motivated by the repeated-OOS result above. Every outer block is untouched. Before each outer block, candidate 3–6 model sets are scored only on earlier forward blocks, then the selected finalist portfolio is frozen and evaluated on the next future block at PT Updated. "
+                    "Four selection rules are compared on identical outer blocks: pooled ATS, pooled Wilson, forward stability (mean block ATS − 1 SD), and forward stability with exponential recency weighting. Jaccard clustering and META-k tuning occur only inside the pre-outer history.",
+                    class_="muted",
+                ),
+                ui.layout_columns(
+                    ui.input_numeric("forward_stability_outer_blocks", "Outer OOS blocks", 8, min=3, max=12, step=1),
+                    ui.input_numeric("forward_stability_outer_size", "Weeks / outer block", 6, min=2, max=10, step=1),
+                    ui.input_numeric("forward_stability_inner_blocks", "Inner forward blocks", 4, min=2, max=8, step=1),
+                    ui.input_numeric("forward_stability_inner_size", "Weeks / inner block", 4, min=2, max=8, step=1),
+                    col_widths=(3,3,3,3),
+                ),
+                ui.layout_columns(
+                    ui.input_numeric("forward_stability_pool_n", "Stability candidate models", 24, min=8, max=24, step=1),
+                    ui.input_numeric("forward_stability_half_life", "Recency half-life (blocks)", 2.0, min=0.5, max=6.0, step=0.5),
+                    ui.input_numeric("forward_stability_min_inner_bets", "Minimum pooled inner bets", 40, min=10, max=200, step=10),
+                    ui.input_numeric("forward_stability_min_block_bets", "Minimum bets / inner block", 5, min=1, max=30, step=1),
+                    col_widths=(3,3,3,3),
+                ),
+                ui.input_task_button(
+                    "run_forward_stability",
+                    "Run nested forward-stability backtest",
+                    label_busy="Selecting stable combination sets through time…",
+                    type="primary",
+                ),
+                ui.output_ui("forward_stability_progress_bar"),
+                ui.output_text("forward_stability_status"),
+                ui.h5("Aggregate untouched outer-OOS performance"),
+                ui.p(
+                    "All methods execute against the same PT Updated reference. This is the primary comparison; none of the outer outcomes are used to choose that block's models, combinations, communities, or k.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("forward_stability_aggregate_table"),
+                ui.h5("Outer block-by-block performance"),
+                ui.output_data_frame("forward_stability_fold_table"),
+                ui.h5("Paired selection-method comparison"),
+                ui.output_data_frame("forward_stability_paired_table"),
+                ui.h5("Selected finalist diagnostics"),
+                ui.p(
+                    "Shows the combinations actually selected within each historical cutoff, including their pooled historical metrics and their forward-block stability diagnostics. Use the filters to inspect one method or outer block.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("forward_stability_finalists_table"),
+                ui.h5("Nested chronology used"),
+                ui.output_data_frame("forward_stability_chronology_table"),
+            ),
             ui.p(
                 "Historical Open/Midweek results remain retrospective price-sensitivity analyses because exact model publication timestamps are unavailable. The timestamped 2026 PredictionTracker snapshots collected on Page 2 will support a genuinely prospective version of these tests going forward.",
                 class_="muted",
@@ -1089,6 +1138,18 @@ def server(input, output, session):
         "done": 0, "total": 0, "label": "", "started": None, "updated": None,
     }
     rolling_line_progress_lock = threading.Lock()
+    forward_stability_progress = {
+        "done": 0, "total": 0, "label": "", "started": None, "updated": None,
+    }
+    forward_stability_progress_lock = threading.Lock()
+
+    def set_forward_stability_progress(**kwargs):
+        with forward_stability_progress_lock:
+            forward_stability_progress.update(kwargs)
+
+    def get_forward_stability_progress():
+        with forward_stability_progress_lock:
+            return dict(forward_stability_progress)
 
     def set_rolling_line_progress(**kwargs):
         with rolling_line_progress_lock:
@@ -3913,6 +3974,135 @@ def server(input, output, session):
         return render.DataGrid(d.rename(columns={
             "fold":"Block","status":"Status","discovery_periods":"Discovery periods","discovery_start":"Discovery start","discovery_end":"Discovery end","validation_start":"OOS start","validation_end":"OOS end","validation_periods":"OOS periods",
         }), filters=False, height="300px")
+
+
+    # ------------------------------------------------------------------
+    # Page 5: nested forward-stability selection (v3.5.27)
+    # ------------------------------------------------------------------
+    @ui.bind_task_button(button_id="run_forward_stability")
+    @reactive.extended_task
+    async def forward_stability_task(
+        live_ids: list[str], period_scope: tuple, line_history: pd.DataFrame,
+        outer_blocks: int, outer_size: int, inner_blocks: int, inner_size: int,
+        pool_n: int, half_life: float, min_inner_bets: int, min_block_bets: int,
+    ):
+        def compute():
+            start=time.monotonic()
+            set_forward_stability_progress(done=0,total=max(1,int(outer_blocks)*1000),label="Preparing nested chronology…",started=start,updated=start)
+            def progress(done,total,label):
+                set_forward_stability_progress(done=int(done),total=int(total),label=str(label),updated=time.monotonic())
+                if int(done)==int(total) or int(done)%250<5:
+                    print(f"[Forward stability] {done:,}/{total:,} · {label}",flush=True)
+            return run_forward_stability_validation(
+                DATA,line_history,live_ids,MODEL_NAME_MAP,period_scope=period_scope,
+                outer_blocks=int(outer_blocks),outer_block_size=int(outer_size),
+                min_discovery_periods=int(input.rolling_line_min_discovery()),min_games_per_period=int(input.rolling_line_min_games()),
+                inner_blocks=int(inner_blocks),inner_block_size=int(inner_size),inner_min_prior_periods=12,
+                stability_pool_n=int(pool_n),pool_min_bets=PATRICK_POOL_MIN_BETS,
+                min_size=PATRICK_MIN_SIZE,max_size=PATRICK_MAX_SIZE,search_k=PATRICK_K,
+                min_available_models=PATRICK_MIN_AVAILABLE,min_search_bets=PATRICK_MIN_SEARCH_BETS,finalists=PATRICK_FINALISTS,
+                overlap_threshold=PATRICK_OVERLAP_THRESHOLD,min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
+                thresholds=K_GRID,max_combinations=EXACT_SEARCH_DEFAULT_MAX,standard_price=-110,
+                recency_half_life_blocks=float(half_life),min_bets_per_inner_block=int(min_block_bets),
+                min_scorable_inner_blocks=max(2,min(3,int(inner_blocks))),min_inner_bets=int(min_inner_bets),retain_candidate_cap=250000,
+                progress_callback=progress,
+            )
+        return await asyncio.to_thread(compute)
+
+    @reactive.effect
+    @reactive.event(input.run_forward_stability)
+    def start_forward_stability():
+        if forward_stability_task.status()=="running":return
+        a=_active_committee_analysis()
+        if not a or not a.get("combinations"):
+            ui.notification_show("Run Patrick's recommended settings on Page 4 first so the historical chronology and model universe are frozen.",type="error",duration=12);return
+        live_ids,live_ready,_=current_week_available_model_ids()
+        if not live_ready or not live_ids:
+            ui.notification_show("Refresh PredictionTracker on Page 2 first.",type="error");return
+        s_active=strategy.get();discovery=tuple(s_active.get("discovery_periods") or a.get("discovery_periods",()));holdout=tuple(s_active.get("holdout_periods") or a.get("holdout_periods",()))
+        period_scope=tuple(sorted(set(tuple(discovery)+tuple(holdout))))
+        if not period_scope:
+            ui.notification_show("No frozen historical chronology is registered. Re-run Patrick's recommended settings once.",type="error",duration=12);return
+        forward_stability_task(
+            sorted(live_ids),period_scope,analysis_line_history().copy(),
+            int(input.forward_stability_outer_blocks()),int(input.forward_stability_outer_size()),
+            int(input.forward_stability_inner_blocks()),int(input.forward_stability_inner_size()),
+            int(input.forward_stability_pool_n()),float(input.forward_stability_half_life()),
+            int(input.forward_stability_min_inner_bets()),int(input.forward_stability_min_block_bets()),
+        )
+
+    def forward_stability_result():
+        if forward_stability_task.status()!="success":return None
+        return forward_stability_task.result()
+
+    @render.ui
+    def forward_stability_progress_bar():
+        st=forward_stability_task.status()
+        if st not in {"running","success"}:return ui.div()
+        if st=="running":reactive.invalidate_later(0.5)
+        p=get_forward_stability_progress();total=int(p.get("total") or 0);done=int(p.get("done") or 0)
+        pct=100.0*done/total if total else (100.0 if st=="success" else 0.0)
+        return ui.div(ui.div(class_="search-progress-fill",style=f"width: {max(0,min(100,pct)):.1f}%"),class_="search-progress-track")
+
+    @render.text
+    def forward_stability_status():
+        st=forward_stability_task.status()
+        if st=="initial":return "This is the final historical selection experiment: selection is forward-facing inside each untouched outer block."
+        if st=="running":
+            reactive.invalidate_later(0.5);p=get_forward_stability_progress();done=int(p.get("done") or 0);total=int(p.get("total") or 0);started=p.get("started");elapsed=max(0.0,time.monotonic()-started) if started else 0.0
+            pct=100.0*done/total if total else 0.0;rate=done/elapsed if elapsed>0 and done>0 else 0.0;remain=(total-done)/rate if rate>0 and total>=done else np.nan
+            eta=f" · est. {remain/60:.1f} min remaining" if np.isfinite(remain) and remain>60 else (f" · est. {remain:.0f}s remaining" if np.isfinite(remain) and remain>1 else "")
+            return f"{done:,}/{total:,} ({pct:.1f}%) · elapsed {elapsed/60:.1f} min{eta} · {p.get('label','')}"
+        if st=="success":
+            r=forward_stability_result() or {}
+            return f"Complete: {int(r.get('completed_folds',0))} untouched outer blocks. Stable = {r.get('stability_definition','')}; recency = {r.get('recency_definition','')}."
+        if st=="error":return "Forward-stability validation failed; see the notification / Connect log for details."
+        return str(st)
+
+    @reactive.effect
+    def show_forward_stability_error():
+        if forward_stability_task.status()=="error":
+            try:forward_stability_task.result()
+            except Exception as exc:ui.notification_show(f"Forward-stability error: {exc}",type="error",duration=18)
+
+    @render.data_frame
+    def forward_stability_aggregate_table():
+        r=forward_stability_result();d=r.get("aggregate",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        d=_pct_frame(d,["ats_pct","roi","wilson_low","profitable_block_rate","median_block_roi","sd_block_roi","worst_block_roi"])
+        keep=["selection_method","folds","bets","wins","losses","pushes","ats_pct","roi","wilson_low","profitable_blocks","profitable_block_rate","median_block_roi","sd_block_roi","worst_block_roi","max_drawdown_units"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "selection_method":"Selection rule","folds":"Outer blocks","bets":"Bets","wins":"Wins","losses":"Losses","pushes":"Pushes","ats_pct":"ATS %","roi":"ROI %","wilson_low":"Wilson LB %","profitable_blocks":"Profitable blocks","profitable_block_rate":"Profitable block %","median_block_roi":"Median block ROI %","sd_block_roi":"Block ROI SD pp","worst_block_roi":"Worst block ROI %","max_drawdown_units":"Max drawdown (u)",
+        }),filters=False,height="260px")
+
+    @render.data_frame
+    def forward_stability_fold_table():
+        r=forward_stability_result();d=r.get("fold_results",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        d=_pct_frame(d,["max_effective_model_weight","inner_tuning_ats_pct","ats_pct","roi","wilson_low"])
+        keep=["fold","validation_start","validation_end","selection_method","candidate_models","candidate_combinations","finalists","communities","max_effective_model_weight","meta_k","inner_tuning_bets","inner_tuning_ats_pct","bets","ats_pct","roi","wilson_low"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={"fold":"Outer block","validation_start":"Start","validation_end":"End","selection_method":"Selection rule","candidate_models":"Models","candidate_combinations":"Candidate sets","finalists":"Finalists","communities":"Communities","max_effective_model_weight":"Max model wt %","meta_k":"META k","inner_tuning_bets":"Inner META bets","inner_tuning_ats_pct":"Inner META ATS %","bets":"Outer bets","ats_pct":"Outer ATS %","roi":"Outer ROI %","wilson_low":"Outer Wilson LB %"}),filters=True,height="500px")
+
+    @render.data_frame
+    def forward_stability_paired_table():
+        r=forward_stability_result();d=r.get("paired",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        d=_pct_frame(d,["a_win_rate","mean_roi_diff"]);d["sign_test_p"]=pd.to_numeric(d.get("sign_test_p"),errors="coerce").round(4)
+        return render.DataGrid(d.rename(columns={"method_a":"Method A","method_b":"Method B","blocks":"Paired blocks","a_higher_roi_blocks":"A higher ROI","b_higher_roi_blocks":"B higher ROI","ties":"Ties","a_win_rate":"A wins %","sign_test_p":"Sign-test p","mean_roi_diff":"Mean ROI diff pp"}),filters=False,height="260px")
+
+    @render.data_frame
+    def forward_stability_finalists_table():
+        r=forward_stability_result();d=r.get("selected_finalists",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        d=_pct_frame(d,["ats_pct","wilson_low","inner_ats_pct","inner_wilson_low","mean_block_ats","sd_block_ats","profitable_block_rate","stable_score","recency_score"])
+        keep=["fold","selection_method","selection_rank","model_names","combo_size","bets","ats_pct","wilson_low","inner_bets","inner_ats_pct","inner_wilson_low","mean_block_ats","sd_block_ats","profitable_block_rate","stable_score","recency_score"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={"fold":"Outer block","selection_method":"Selection rule","selection_rank":"Rank","model_names":"Models","combo_size":"Size","bets":"Pooled hist bets","ats_pct":"Pooled hist ATS %","wilson_low":"Pooled hist Wilson %","inner_bets":"Inner bets","inner_ats_pct":"Inner ATS %","inner_wilson_low":"Inner Wilson %","mean_block_ats":"Mean block ATS %","sd_block_ats":"Block ATS SD pp","profitable_block_rate":"Profitable blocks %","stable_score":"Stable score %","recency_score":"Recency score %"}),filters=True,height="600px")
+
+    @render.data_frame
+    def forward_stability_chronology_table():
+        r=forward_stability_result();d=r.get("chronology",pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:return render.DataGrid(pd.DataFrame())
+        return render.DataGrid(d.rename(columns={"fold":"Outer block","status":"Status","discovery_periods":"Prior periods","discovery_start":"History start","discovery_end":"History cutoff","inner_blocks":"Inner blocks","inner_first":"Inner first","inner_last":"Inner last","outer_start":"OOS start","outer_end":"OOS end","candidate_models":"Models","candidate_combinations":"Candidate sets"}),filters=False,height="360px")
 
     @render.data_frame
     def strategy_combo_summary_table():

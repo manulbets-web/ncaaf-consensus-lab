@@ -21,6 +21,9 @@ from streamlined_engine import (
     CombinationSearchConfig,
     brute_force_combination_search,
     individual_model_performance,
+    combination_count,
+    _make_combo_matrix,
+    _evaluate_specific_combos,
 )
 
 
@@ -1346,4 +1349,474 @@ def run_rolling_line_selection_validation(
         "completed_folds": int(pd.DataFrame(fold_rows).get("status", pd.Series(dtype=str)).astype(str).eq("ok").sum()) if fold_rows else 0,
         "block_size": int(block_size),
         "min_games_per_period": int(min_games_per_period),
+    }
+
+
+# ---------------------------------------------------------------------------
+# v3.5.27: nested forward-stability combination selection
+# ---------------------------------------------------------------------------
+
+FORWARD_STABILITY_METHODS = (
+    "Naive ATS",
+    "Wilson",
+    "Forward stable",
+    "Forward stable + recency",
+)
+
+
+def _inner_stability_blocks(
+    usable_periods: Iterable[tuple[int, int]],
+    outer_first_period: tuple[int, int],
+    *,
+    n_blocks: int = 4,
+    block_size: int = 4,
+    min_prior_periods: int = 12,
+) -> list[tuple[tuple[int, int], ...]]:
+    """Return the latest non-overlapping forward blocks available before an outer test.
+
+    These blocks are used only to measure temporal persistence of *fixed* candidate
+    combinations. Every block is earlier than the untouched outer OOS block.
+    """
+    periods = sorted(set(_chronological_key(p) for p in usable_periods if _chronological_key(p) < _chronological_key(outer_first_period)))
+    n_blocks = max(2, int(n_blocks))
+    block_size = max(1, int(block_size))
+    min_prior_periods = max(1, int(min_prior_periods))
+    max_blocks = max(0, (len(periods) - min_prior_periods) // block_size)
+    take = min(n_blocks, max_blocks)
+    if take < 2:
+        return []
+    start = len(periods) - take * block_size
+    blocks = []
+    for j in range(take):
+        b = tuple(periods[start + j * block_size:start + (j + 1) * block_size])
+        if len(b) == block_size:
+            blocks.append(b)
+    return blocks
+
+
+def _weighted_mean_sd(values: np.ndarray, weights: np.ndarray) -> tuple[float, float]:
+    v = np.asarray(values, dtype=float)
+    w = np.asarray(weights, dtype=float)
+    ok = np.isfinite(v) & np.isfinite(w) & (w > 0)
+    if not np.any(ok):
+        return np.nan, np.nan
+    v = v[ok]; w = w[ok]
+    w = w / w.sum()
+    mu = float(np.sum(w * v))
+    var = float(np.sum(w * np.square(v - mu)))
+    return mu, float(math.sqrt(max(0.0, var)))
+
+
+def _combo_inner_stability_table(
+    data_ref: pd.DataFrame,
+    candidate_ids: list[str],
+    combo_frame: pd.DataFrame,
+    inner_blocks: list[tuple[tuple[int, int], ...]],
+    *,
+    search_k: float = 0.75,
+    min_available_models: int = 3,
+    standard_price: int = -110,
+    recency_half_life_blocks: float = 2.0,
+    min_bets_per_block: int = 5,
+    progress_callback: Callable[[int,int,str],None] | None = None,
+) -> pd.DataFrame:
+    """Evaluate every retained candidate on forward-only inner blocks.
+
+    Stability scores are intentionally transparent rather than fitted:
+      stable_score = mean(block ATS) - 1 SD(block ATS)
+      recency_score = exp-weighted mean(block ATS) - 1 weighted SD(block ATS)
+
+    Pooled Wilson is retained as a secondary ranking criterion. Blocks with fewer
+    than ``min_bets_per_block`` decisions do not contribute to stability moments.
+    """
+    if combo_frame is None or combo_frame.empty or not inner_blocks:
+        return pd.DataFrame()
+    combos = combo_frame.get("_combo_tuple")
+    if combos is None:
+        raise ValueError("Internal combination tuples were not retained for stability analysis.")
+    combo_tuples = [tuple(map(int, x)) for x in combos.tolist()]
+    base = combo_frame.copy().reset_index(drop=True)
+    base["_combo_key"] = base["_combo_tuple"].apply(lambda x: ",".join(map(str, tuple(x))))
+
+    per_block = []
+    total = len(inner_blocks)
+    for j, periods in enumerate(inner_blocks, start=1):
+        matrix = _make_combo_matrix(
+            data_ref, candidate_ids,
+            tuple(sorted(set(y for y, _ in periods))),
+            tuple(periods),
+        )
+        if matrix is None:
+            continue
+        cfg = CombinationSearchConfig(
+            search_seasons=tuple(sorted(set(y for y, _ in periods))),
+            validation_seasons=(), search_periods=tuple(periods), validation_periods=(),
+            min_size=1, max_size=max(1, max(len(x) for x in combo_tuples)),
+            primary_k=float(search_k), min_available_models=int(min_available_models),
+            min_search_bets=1, min_seasons_represented=1, min_distinct_weeks=1,
+            ranking_metric="ats", standard_price=int(standard_price), chunk_size=512,
+            top_n=1, max_combinations=max(1, len(combo_tuples)),
+        )
+        m = _evaluate_specific_combos(matrix, combo_tuples, cfg)
+        if m is None or m.empty:
+            continue
+        m = m.copy()
+        m["_combo_key"] = m["_combo_tuple"].apply(lambda x: ",".join(map(str, tuple(x))))
+        m["inner_block"] = j
+        m["inner_start"] = f"{periods[0][0]} W{periods[0][1]}"
+        m["inner_end"] = f"{periods[-1][0]} W{periods[-1][1]}"
+        per_block.append(m[[c for c in ["_combo_key","inner_block","bets","wins","losses","pushes","ats_pct","roi","wilson_low"] if c in m.columns]])
+        if progress_callback is not None:
+            progress_callback(j, total, f"inner forward block {j}/{total}")
+    if not per_block:
+        return pd.DataFrame()
+    long = pd.concat(per_block, ignore_index=True, sort=False)
+    long["bets"] = pd.to_numeric(long.get("bets"), errors="coerce").fillna(0)
+    long["wins"] = pd.to_numeric(long.get("wins"), errors="coerce").fillna(0)
+    long["losses"] = pd.to_numeric(long.get("losses"), errors="coerce").fillna(0)
+    long["pushes"] = pd.to_numeric(long.get("pushes"), errors="coerce").fillna(0)
+    long["ats_pct"] = pd.to_numeric(long.get("ats_pct"), errors="coerce")
+    long["roi"] = pd.to_numeric(long.get("roi"), errors="coerce")
+
+    rows = []
+    half = max(0.25, float(recency_half_life_blocks))
+    for key, q in long.groupby("_combo_key", sort=False):
+        q = q.sort_values("inner_block")
+        valid = q["bets"].ge(int(min_bets_per_block)) & q["ats_pct"].notna()
+        v = q.loc[valid, "ats_pct"].to_numpy(float)
+        if len(v):
+            mean_ats = float(np.mean(v))
+            sd_ats = float(np.std(v, ddof=1)) if len(v) >= 2 else 0.0
+            median_ats = float(np.median(v))
+            q25_ats = float(np.quantile(v, 0.25))
+            stable_score = mean_ats - sd_ats
+            idx = q.loc[valid, "inner_block"].to_numpy(float)
+            age = float(np.nanmax(idx)) - idx
+            weights = np.power(0.5, age / half)
+            rec_mu, rec_sd = _weighted_mean_sd(v, weights)
+            rec_score = rec_mu - rec_sd if np.isfinite(rec_mu) and np.isfinite(rec_sd) else np.nan
+        else:
+            mean_ats = sd_ats = median_ats = q25_ats = stable_score = rec_mu = rec_sd = rec_score = np.nan
+        wins = int(q["wins"].sum()); losses = int(q["losses"].sum()); pushes = int(q["pushes"].sum())
+        decisive = wins + losses
+        bets = int(q["bets"].sum())
+        units = float(np.nansum(pd.to_numeric(q.get("roi"), errors="coerce").to_numpy(float) * q["bets"].to_numpy(float)))
+        rows.append({
+            "_combo_key": key,
+            "inner_blocks": int(len(q)),
+            "scorable_inner_blocks": int(valid.sum()),
+            "inner_bets": bets,
+            "inner_wins": wins,
+            "inner_losses": losses,
+            "inner_pushes": pushes,
+            "inner_ats_pct": wins / decisive if decisive else np.nan,
+            "inner_roi": units / bets if bets else np.nan,
+            "inner_wilson_low": _wilson_lower(wins, decisive),
+            "mean_block_ats": mean_ats,
+            "median_block_ats": median_ats,
+            "q25_block_ats": q25_ats,
+            "sd_block_ats": sd_ats,
+            "profitable_block_rate": float((q.loc[valid, "roi"] > 0).mean()) if valid.any() else np.nan,
+            "stable_score": stable_score,
+            "recency_mean_ats": rec_mu,
+            "recency_sd_ats": rec_sd,
+            "recency_score": rec_score,
+        })
+    score = pd.DataFrame(rows)
+    out = base.merge(score, on="_combo_key", how="left")
+    return out
+
+
+def _select_forward_finalists(
+    scored: pd.DataFrame,
+    method: str,
+    *,
+    finalists: int = 50,
+    min_scorable_inner_blocks: int = 3,
+    min_inner_bets: int = 40,
+) -> pd.DataFrame:
+    if scored is None or scored.empty:
+        return pd.DataFrame()
+    d = scored.copy()
+    if method in {"Forward stable", "Forward stable + recency"}:
+        d = d[
+            pd.to_numeric(d.get("scorable_inner_blocks"), errors="coerce").fillna(0).ge(int(min_scorable_inner_blocks))
+            & pd.to_numeric(d.get("inner_bets"), errors="coerce").fillna(0).ge(int(min_inner_bets))
+        ].copy()
+    if d.empty:
+        return d
+    if method == "Naive ATS":
+        cols, asc = ["ats_pct","bets","wilson_low"], [False,False,False]
+    elif method == "Wilson":
+        cols, asc = ["wilson_low","bets","ats_pct"], [False,False,False]
+    elif method == "Forward stable + recency":
+        cols, asc = ["recency_score","inner_wilson_low","profitable_block_rate","inner_bets"], [False,False,False,False]
+    else:
+        cols, asc = ["stable_score","inner_wilson_low","profitable_block_rate","inner_bets"], [False,False,False,False]
+    cols = [c for c in cols if c in d.columns]
+    asc = asc[:len(cols)]
+    d = d.sort_values(cols, ascending=asc, na_position="last", kind="mergesort").head(int(finalists)).reset_index(drop=True)
+    d["selection_rank"] = np.arange(1, len(d)+1)
+    d["selection_method"] = method
+    return d
+
+
+def _combo_dicts_from_selected(selected: pd.DataFrame) -> list[dict]:
+    combos = []
+    if selected is None or selected.empty:
+        return combos
+    for j, r in selected.reset_index(drop=True).iterrows():
+        mids = [x for x in str(r.get("model_ids", "")).split("|") if x]
+        if not mids and isinstance(r.get("_combo_tuple"), (tuple,list,np.ndarray)):
+            mids = list(map(str, r.get("_combo_tuple")))
+        combos.append({"rank": int(r.get("selection_rank", j+1)), "model_ids": mids})
+    return combos
+
+
+def _meta_bet_rows(
+    analysis: dict,
+    method: str,
+    fold: int,
+    *,
+    standard_price: int = -110,
+    min_meta_communities: int = 2,
+) -> pd.DataFrame:
+    frame = analysis.get("meta_frames", {}).get(("Diversified META", "holdout"), pd.DataFrame()).copy()
+    ms = analysis.get("meta_summary", pd.DataFrame())
+    if frame.empty or not isinstance(ms, pd.DataFrame) or ms.empty:
+        return pd.DataFrame()
+    q = ms[(ms["method"].astype(str)=="Diversified META") & (ms["period"].astype(str)=="Holdout")]
+    if q.empty:
+        return pd.DataFrame()
+    k = pd.to_numeric(pd.Series([q.iloc[0].get("selected_k")]), errors="coerce").iloc[0]
+    if not np.isfinite(k):
+        return pd.DataFrame()
+    edge = pd.to_numeric(frame.get("meta_edge"), errors="coerce").to_numpy(float)
+    sig = pd.to_numeric(frame.get("meta_signal"), errors="coerce").to_numpy(float)
+    cover = pd.to_numeric(frame.get("cover"), errors="coerce").to_numpy(float)
+    active = pd.to_numeric(frame.get("active_units"), errors="coerce").fillna(0).to_numpy(float) >= int(min_meta_communities)
+    selected = active & np.isfinite(edge) & np.isfinite(sig) & (np.abs(edge)>0) & (sig >= float(k))
+    side = np.sign(edge)
+    signed_cover = side * cover
+    win = selected & (signed_cover > 0)
+    loss = selected & (signed_cover < 0)
+    push = selected & (signed_cover == 0)
+    units = _unit_result(win, loss, price=int(standard_price))
+    out = frame.loc[selected, [c for c in ["game_key","season","week","market_margin","actual_margin","meta_mean","meta_sd","meta_edge","meta_signal"] if c in frame.columns]].copy()
+    if out.empty:
+        return out
+    ix = np.flatnonzero(selected)
+    out["selection_method"] = method
+    out["fold"] = int(fold)
+    out["side"] = side[ix]
+    out["win"] = win[ix]
+    out["loss"] = loss[ix]
+    out["push"] = push[ix]
+    out["units"] = units[ix]
+    out["selected_k"] = float(k)
+    return out
+
+
+def _max_drawdown_from_units(units: Iterable[float]) -> float:
+    u = pd.to_numeric(pd.Series(list(units)), errors="coerce").fillna(0).to_numpy(float)
+    if len(u)==0:
+        return np.nan
+    equity = np.cumsum(u)
+    peaks = np.maximum.accumulate(np.r_[0.0, equity])[:-1]
+    dd = equity - peaks
+    return float(np.min(dd)) if len(dd) else 0.0
+
+
+def _aggregate_forward_stability(fold_results: pd.DataFrame, bet_rows: pd.DataFrame) -> pd.DataFrame:
+    if fold_results is None or fold_results.empty:
+        return pd.DataFrame()
+    rows=[]
+    for method, q in fold_results.groupby("selection_method", sort=False):
+        wins=int(pd.to_numeric(q.get("wins"),errors="coerce").fillna(0).sum())
+        losses=int(pd.to_numeric(q.get("losses"),errors="coerce").fillna(0).sum())
+        pushes=int(pd.to_numeric(q.get("pushes"),errors="coerce").fillna(0).sum())
+        bets=int(pd.to_numeric(q.get("bets"),errors="coerce").fillna(0).sum())
+        units=float(pd.to_numeric(q.get("units"),errors="coerce").fillna(0).sum())
+        decisive=wins+losses
+        qq=bet_rows[bet_rows["selection_method"].astype(str).eq(str(method))].copy() if isinstance(bet_rows,pd.DataFrame) and len(bet_rows) else pd.DataFrame()
+        if len(qq):
+            qq=qq.sort_values(["season","week","game_key"],kind="mergesort")
+            max_dd=_max_drawdown_from_units(qq["units"])
+        else:max_dd=np.nan
+        rois=pd.to_numeric(q.get("roi"),errors="coerce")
+        rows.append({
+            "selection_method":method,"folds":int(q["fold"].nunique()),"bets":bets,"wins":wins,"losses":losses,"pushes":pushes,
+            "ats_pct":wins/decisive if decisive else np.nan,"units":units,"roi":units/bets if bets else np.nan,
+            "wilson_low":_wilson_lower(wins,decisive),"profitable_blocks":int((pd.to_numeric(q.get("units"),errors="coerce")>0).sum()),
+            "profitable_block_rate":float((pd.to_numeric(q.get("units"),errors="coerce")>0).mean()),
+            "median_block_roi":float(rois.median()) if rois.notna().any() else np.nan,
+            "sd_block_roi":float(rois.std(ddof=1)) if rois.notna().sum()>=2 else np.nan,
+            "worst_block_roi":float(rois.min()) if rois.notna().any() else np.nan,
+            "max_drawdown_units":max_dd,
+        })
+    return pd.DataFrame(rows)
+
+
+def _paired_forward_methods(fold_results: pd.DataFrame) -> pd.DataFrame:
+    if fold_results is None or fold_results.empty:
+        return pd.DataFrame()
+    methods=[m for m in FORWARD_STABILITY_METHODS if m in set(fold_results["selection_method"].astype(str))]
+    rows=[]
+    for i,a in enumerate(methods):
+        for b in methods[i+1:]:
+            aa=fold_results[fold_results["selection_method"].astype(str).eq(a)].set_index("fold")
+            bb=fold_results[fold_results["selection_method"].astype(str).eq(b)].set_index("fold")
+            common=sorted(set(aa.index)&set(bb.index))
+            if not common:continue
+            ar=pd.to_numeric(aa.loc[common,"roi"],errors="coerce"); br=pd.to_numeric(bb.loc[common,"roi"],errors="coerce")
+            valid=ar.notna()&br.notna(); w=int((ar[valid]>br[valid]).sum()); l=int((ar[valid]<br[valid]).sum()); t=int((ar[valid]==br[valid]).sum())
+            rows.append({"method_a":a,"method_b":b,"blocks":len(common),"a_higher_roi_blocks":w,"b_higher_roi_blocks":l,"ties":t,
+                         "a_win_rate":w/(w+l) if w+l else np.nan,"sign_test_p":_exact_sign_test_two_sided(w,l),
+                         "mean_roi_diff":float((ar[valid]-br[valid]).mean()) if valid.any() else np.nan})
+    return pd.DataFrame(rows)
+
+
+def run_forward_stability_validation(
+    data: pd.DataFrame,
+    line_history: pd.DataFrame,
+    live_ids: Iterable[str],
+    model_name_map: dict[str,str],
+    *,
+    period_scope: Iterable[tuple[int,int]] | None = None,
+    outer_blocks: int = 8,
+    outer_block_size: int = 6,
+    min_discovery_periods: int = 24,
+    min_games_per_period: int = 10,
+    inner_blocks: int = 4,
+    inner_block_size: int = 4,
+    inner_min_prior_periods: int = 12,
+    stability_pool_n: int = 24,
+    pool_min_bets: int = 25,
+    min_size: int = 3,
+    max_size: int = 6,
+    search_k: float = 0.75,
+    min_available_models: int = 3,
+    min_search_bets: int = 50,
+    finalists: int = 50,
+    overlap_threshold: float = 0.50,
+    min_meta_communities: int = 2,
+    thresholds=(0.25,0.50,0.75,1.00,1.25,1.50,1.75,2.00),
+    max_combinations: int = 10_000_000,
+    standard_price: int = -110,
+    recency_half_life_blocks: float = 2.0,
+    min_bets_per_inner_block: int = 5,
+    min_scorable_inner_blocks: int = 3,
+    min_inner_bets: int = 40,
+    retain_candidate_cap: int = 250_000,
+    progress_callback: Callable[[int,int,str],None] | None = None,
+) -> dict:
+    """Nested walk-forward comparison of combination-selection objectives.
+
+    Outer blocks are untouched OOS tests. At every outer cutoff, all choices are
+    made from earlier data only. Candidate combinations are evaluated across
+    earlier non-overlapping forward blocks, then four frozen finalist portfolios
+    are compared on the same future Updated-line block:
+      1) pooled ATS ranking,
+      2) pooled Wilson ranking,
+      3) mean(inner-block ATS) - SD(inner-block ATS),
+      4) exponentially recency-weighted mean - weighted SD.
+
+    The stability methods therefore reward persistence through time rather than
+    the single best pooled historical estimate.
+    """
+    live_ids=list(dict.fromkeys(map(str,live_ids)))
+    # Production/reference line only for this experiment.
+    close_data=data_for_line_reference(data,line_history,"close_margin")
+    folds, coverage=build_rolling_validation_folds(
+        data,line_history,live_ids,period_scope=period_scope,block_size=int(outer_block_size),n_folds=int(outer_blocks),
+        min_discovery_periods=int(min_discovery_periods),min_games_per_period=int(min_games_per_period),min_available_models=int(min_available_models),
+    )
+    if not folds:raise ValueError("No outer walk-forward folds could be formed.")
+    usable_all=tuple((int(r.season),int(r.week)) for r in coverage.itertuples(index=False) if bool(r.usable))
+    fold_rows=[]; selected_rows=[]; chronology_rows=[]; bet_frames=[]
+    total_units=len(folds)*1000
+    for fi,fold in enumerate(folds,start=1):
+        base=(fi-1)*1000
+        def prog(local,label):
+            if progress_callback is not None:progress_callback(base+int(local),total_units,f"Outer {fi}/{len(folds)} · {label}")
+        prog(0,"candidate universe")
+        ranked=_rank_candidates_for_reference(close_data,fold["discovery_periods"],live_ids,pool_n=int(stability_pool_n),pool_min_bets=int(pool_min_bets),pool_metric="wilson",standard_price=int(standard_price))
+        ids=ranked["canonical_model_id"].astype(str).tolist() if len(ranked) else []
+        hi=min(int(max_size),len(ids))
+        if len(ids)<int(min_size):
+            chronology_rows.append({"fold":fi,"status":"too few candidate models"});continue
+        nwork=combination_count(len(ids),int(min_size),hi)
+        if nwork>int(retain_candidate_cap):
+            raise ValueError(
+                f"Forward-stability fold {fi} has {nwork:,} candidate combinations. "
+                f"The stability audit is capped at {int(retain_candidate_cap):,} retained candidates; "
+                f"reduce Stability candidate models (currently {len(ids)}) or raise the cap deliberately."
+            )
+        cfg=CombinationSearchConfig(
+            search_seasons=tuple(sorted(set(y for y,_ in fold["discovery_periods"]))),validation_seasons=(),
+            search_periods=tuple(fold["discovery_periods"]),validation_periods=(),min_size=int(min_size),max_size=int(hi),primary_k=float(search_k),
+            min_available_models=int(min_available_models),min_search_bets=int(min_search_bets),min_seasons_represented=1,min_distinct_weeks=1,
+            ranking_metric="ats",standard_price=int(standard_price),chunk_size=512,top_n=int(nwork),max_combinations=int(max_combinations),
+        )
+        def search_progress(done,total,msg):
+            frac=float(done)/float(total) if total else 0.0;prog(int(350*max(0,min(1,frac))),f"exhaustive candidates · {msg}")
+        search=brute_force_combination_search(close_data,ids,model_name_map,cfg,progress_callback=search_progress)
+        candidates=search.get("top_internal",pd.DataFrame()).copy()
+        if candidates.empty:
+            chronology_rows.append({"fold":fi,"status":"no eligible candidate combinations"});continue
+        inner=_inner_stability_blocks(usable_all,fold["validation_start"],n_blocks=int(inner_blocks),block_size=int(inner_block_size),min_prior_periods=int(inner_min_prior_periods))
+        if len(inner)<2:
+            chronology_rows.append({"fold":fi,"status":"insufficient inner forward blocks"});continue
+        def inner_progress(done,total,label):
+            frac=float(done)/float(total) if total else 0.0;prog(350+int(300*max(0,min(1,frac))),label)
+        scored=_combo_inner_stability_table(
+            close_data,ids,candidates,inner,search_k=float(search_k),min_available_models=int(min_available_models),standard_price=int(standard_price),
+            recency_half_life_blocks=float(recency_half_life_blocks),min_bets_per_block=int(min_bets_per_inner_block),progress_callback=inner_progress,
+        )
+        tune_periods=tuple(p for block in inner for p in block)
+        if scored.empty:
+            chronology_rows.append({"fold":fi,"status":"inner stability scoring failed"});continue
+        for mi,method in enumerate(FORWARD_STABILITY_METHODS,start=1):
+            prog(650+int((mi-1)*85),f"{method}: select + META")
+            sel=_select_forward_finalists(scored,method,finalists=int(finalists),min_scorable_inner_blocks=int(min_scorable_inner_blocks),min_inner_bets=int(min_inner_bets))
+            combos=_combo_dicts_from_selected(sel)
+            if len(combos)<2:
+                continue
+            analysis=analyze_finalist_portfolio(
+                close_data,combos,tune_periods,fold["validation_periods"],min_available_models=int(min_available_models),thresholds=thresholds,
+                combo_min_bets=max(10,min(int(min_search_bets),int(min_inner_bets))),meta_min_bets=max(10,min(int(min_search_bets),int(min_inner_bets))),
+                overlap_threshold=float(overlap_threshold),min_meta_communities=int(min_meta_communities),standard_price=int(standard_price),line_history=None,
+            )
+            ms=analysis.get("meta_summary",pd.DataFrame())
+            q=ms[(ms["method"].astype(str)=="Diversified META")&(ms["period"].astype(str)=="Holdout")] if isinstance(ms,pd.DataFrame) and len(ms) else pd.DataFrame()
+            disc=ms[(ms["method"].astype(str)=="Diversified META")&(ms["period"].astype(str)=="Discovery")] if isinstance(ms,pd.DataFrame) and len(ms) else pd.DataFrame()
+            rr=q.iloc[0] if len(q) else pd.Series(dtype=object); dr=disc.iloc[0] if len(disc) else pd.Series(dtype=object)
+            fold_rows.append({
+                "fold":fi,"validation_start":f"{fold['validation_start'][0]} W{fold['validation_start'][1]}","validation_end":f"{fold['validation_end'][0]} W{fold['validation_end'][1]}",
+                "selection_method":method,"candidate_models":len(ids),"candidate_combinations":int(len(candidates)),"finalists":len(combos),
+                "communities":int(analysis.get("overlap_summary",{}).get("communities",0)),"max_effective_model_weight":float(analysis.get("overlap_summary",{}).get("max_effective_model_weight",np.nan)),
+                "meta_k":float(rr.get("selected_k",dr.get("selected_k",np.nan))),"inner_tuning_bets":int(dr.get("bets",0) or 0),"inner_tuning_ats_pct":float(dr.get("ats_pct",np.nan)),
+                "bets":int(rr.get("bets",0) or 0),"wins":int(rr.get("wins",0) or 0),"losses":int(rr.get("losses",0) or 0),"pushes":int(rr.get("pushes",0) or 0),
+                "ats_pct":float(rr.get("ats_pct",np.nan)),"units":float(rr.get("units",np.nan)),"roi":float(rr.get("roi",np.nan)),"wilson_low":float(rr.get("wilson_low",np.nan)),
+            })
+            ss=sel.copy();ss["fold"]=fi;ss["selection_method"]=method
+            keep=["fold","selection_method","selection_rank","model_ids","model_names","combo_size","ats_pct","wilson_low","bets","inner_blocks","scorable_inner_blocks","inner_bets","inner_ats_pct","inner_wilson_low","mean_block_ats","sd_block_ats","profitable_block_rate","stable_score","recency_score"]
+            selected_rows.append(ss[[c for c in keep if c in ss.columns]])
+            br=_meta_bet_rows(analysis,method,fi,standard_price=int(standard_price),min_meta_communities=int(min_meta_communities))
+            if len(br):bet_frames.append(br)
+        chronology_rows.append({
+            "fold":fi,"status":"ok","discovery_periods":len(fold["discovery_periods"]),"discovery_start":f"{fold['discovery_start'][0]} W{fold['discovery_start'][1]}","discovery_end":f"{fold['discovery_end'][0]} W{fold['discovery_end'][1]}",
+            "inner_blocks":len(inner),"inner_first":f"{inner[0][0][0]} W{inner[0][0][1]}","inner_last":f"{inner[-1][-1][0]} W{inner[-1][-1][1]}",
+            "outer_start":f"{fold['validation_start'][0]} W{fold['validation_start'][1]}","outer_end":f"{fold['validation_end'][0]} W{fold['validation_end'][1]}",
+            "candidate_models":len(ids),"candidate_combinations":int(len(candidates)),
+        })
+        prog(1000,"complete")
+    fold_df=pd.DataFrame(fold_rows); selected_df=pd.concat(selected_rows,ignore_index=True,sort=False) if selected_rows else pd.DataFrame(); bet_df=pd.concat(bet_frames,ignore_index=True,sort=False) if bet_frames else pd.DataFrame()
+    if fold_df.empty:raise RuntimeError("Forward-stability validation produced no scorable outer results.")
+    aggregate=_aggregate_forward_stability(fold_df,bet_df)
+    paired=_paired_forward_methods(fold_df)
+    return {
+        "aggregate":aggregate,"fold_results":fold_df,"paired":paired,"selected_finalists":selected_df,"bet_rows":bet_df,"chronology":pd.DataFrame(chronology_rows),"coverage":coverage,
+        "completed_folds":int(fold_df["fold"].nunique()),"outer_block_size":int(outer_block_size),"inner_blocks":int(inner_blocks),"inner_block_size":int(inner_block_size),
+        "stability_definition":"mean inner-block ATS - 1 SD","recency_definition":f"exp-weighted mean - weighted SD; half-life {float(recency_half_life_blocks):g} blocks",
     }
