@@ -1,0 +1,22 @@
+{
+  "mirror_schema": 1,
+  "season": 2026,
+  "week": 2,
+  "fetched_at_utc": "2026-08-31T17:13:31.491715Z",
+  "published_update": "Monday, August 31, 2026 11:43 AM",
+  "canonical_sha256": "64e95bb67fb58632fb7b6f67171bccba3604656121acc243c2c61b0215130bf1",
+  "rows": 44,
+  "columns": 60,
+  "snapshot_path": "data/snapshots/predictiontracker/mirror/season_2026/week_02/20260831T170221Z_64e95bb67fb5_ncaapredictions.csv",
+  "page_validation": {
+    "csv_games": 44,
+    "line_match_rate": null,
+    "match_rate": null,
+    "matched_games": null,
+    "message": "Could not parse the visible PredictionTracker summary table; CSV was validated structurally only.",
+    "page_games": null,
+    "status": "validation_unavailable"
+  },
+  "source_url": "https://www.thepredictiontracker.com/ncaapredictions.csv",
+  "note": "Fetched locally because PredictionTracker blocks Posit Connect Cloud worker IPs."
+}
