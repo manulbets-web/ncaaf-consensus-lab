@@ -27,7 +27,7 @@ from line_movement import (
     build_selection_detail, fixed_bet_repricing, bet_set_overlap,
     signal_migration_detail, signal_migration_summary, opening_line_qc,
     clean_line_history_for_analysis, individual_line_reference_by_period,
-    run_line_specific_pipelines, LINE_REFS,
+    run_line_specific_pipelines, run_rolling_line_selection_validation, LINE_REFS,
 )
 from streamlined_engine import (
     StreamlinedBacktestConfig,
@@ -957,6 +957,54 @@ app_ui = ui.page_fluid(
                 ui.h5("Line-specific candidate rankings"),
                 ui.output_data_frame("line_pipeline_candidate_table"),
             ),
+            ui.card(
+                ui.card_header("Repeated chronological stress test"),
+                ui.p(
+                    "Final architecture-selection validation. Each fold rebuilds Open-, Midweek-, and Updated-selected META from scratch using only earlier data, then evaluates a common non-overlapping future block. "
+                    "The window expands forward through time; no finalist membership, effective weight, or k value is carried backward from later folds. "
+                    "The primary comparison executes every architecture against PT Updated so model-selection target and execution price are separated.",
+                    class_="muted",
+                ),
+                ui.layout_columns(
+                    ui.input_numeric("rolling_line_folds", "OOS blocks", 8, min=3, max=12, step=1),
+                    ui.input_numeric("rolling_line_block_size", "Usable weeks / block", 6, min=2, max=10, step=1),
+                    ui.input_numeric("rolling_line_min_discovery", "Minimum prior usable weeks", 24, min=12, max=60, step=2),
+                    ui.input_numeric("rolling_line_min_games", "Minimum common games / week", 10, min=3, max=30, step=1),
+                    col_widths=(3,3,3,3),
+                ),
+                ui.input_task_button(
+                    "run_rolling_line_validation",
+                    "Run rolling chronological validation",
+                    label_busy="Rebuilding all three META architectures through time…",
+                    type="primary",
+                ),
+                ui.output_ui("rolling_line_progress_bar"),
+                ui.output_text("rolling_line_status"),
+                ui.h5("Aggregate OOS performance at PT Updated execution"),
+                ui.p(
+                    "This is the production-style headline: the model-selection architecture changes, but every row is executed against the same PT Updated reference. Winning blocks count blocks with positive units.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("rolling_line_current_aggregate_table"),
+                ui.h5("Aggregate rolling OOS 3×3 matrix"),
+                ui.p(
+                    "All non-overlapping OOS blocks pooled. Each cell shows aggregate ATS, ROI, bet count, and the number of profitable blocks.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("rolling_line_matrix_table"),
+                ui.h5("Fold-by-fold PT Updated execution"),
+                ui.output_data_frame("rolling_line_fold_table"),
+                ui.h5("Paired block comparison at PT Updated"),
+                ui.p(
+                    "Pairs compare architectures within the same future blocks. The exact sign-test p-value treats each non-tied block as one vote; it is a stability diagnostic, not a substitute for the game-level OOS results.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("rolling_line_paired_table"),
+                ui.h5("Architecture stability by fold"),
+                ui.output_data_frame("rolling_line_architecture_table"),
+                ui.h5("Chronology used"),
+                ui.output_data_frame("rolling_line_folds_table"),
+            ),
             ui.p(
                 "Historical Open/Midweek results remain retrospective price-sensitivity analyses because exact model publication timestamps are unavailable. The timestamped 2026 PredictionTracker snapshots collected on Page 2 will support a genuinely prospective version of these tests going forward.",
                 class_="muted",
@@ -1037,6 +1085,18 @@ def server(input, output, session):
         "done": 0, "total": 0, "label": "", "started": None, "updated": None,
     }
     line_pipeline_progress_lock = threading.Lock()
+    rolling_line_progress = {
+        "done": 0, "total": 0, "label": "", "started": None, "updated": None,
+    }
+    rolling_line_progress_lock = threading.Lock()
+
+    def set_rolling_line_progress(**kwargs):
+        with rolling_line_progress_lock:
+            rolling_line_progress.update(kwargs)
+
+    def get_rolling_line_progress():
+        with rolling_line_progress_lock:
+            return dict(rolling_line_progress)
 
     def set_line_pipeline_progress(**kwargs):
         with line_pipeline_progress_lock:
@@ -3637,6 +3697,222 @@ def server(input, output, session):
         d=_pct_frame(d,["ats_pct","roi","wilson_low"])
         keep=["line_reference","pool_rank","model_name","bets","ats_pct","roi","wilson_low","mae"]
         return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={"line_reference":"Pipeline","pool_rank":"Pool rank","model_name":"Model","bets":"Discovery bets","ats_pct":"ATS %","roi":"ROI %","wilson_low":"Wilson LB %","mae":"MAE"}),filters=True,height="520px")
+
+    # ------------------------------------------------------------------
+    # Page 5: repeated chronological stress test (v3.5.26)
+    # ------------------------------------------------------------------
+    @ui.bind_task_button(button_id="run_rolling_line_validation")
+    @reactive.extended_task
+    async def rolling_line_task(
+        live_ids: list[str], period_scope: tuple, line_history: pd.DataFrame,
+        n_folds: int, block_size: int, min_discovery: int, min_games: int,
+    ):
+        def compute():
+            start = time.monotonic()
+            set_rolling_line_progress(
+                done=0, total=max(1, int(n_folds) * 1000),
+                label="Preparing rolling chronology…", started=start, updated=start,
+            )
+            def progress(done, total, label):
+                set_rolling_line_progress(
+                    done=int(done), total=int(total), label=str(label), updated=time.monotonic()
+                )
+                if int(done) == int(total) or int(done) % 250 < 5:
+                    print(f"[Rolling line validation] {done:,}/{total:,} · {label}", flush=True)
+            return run_rolling_line_selection_validation(
+                DATA, line_history, live_ids, MODEL_NAME_MAP,
+                period_scope=period_scope,
+                block_size=int(block_size), n_folds=int(n_folds),
+                min_discovery_periods=int(min_discovery),
+                min_games_per_period=int(min_games),
+                pool_n=PATRICK_POOL_N, pool_min_bets=PATRICK_POOL_MIN_BETS,
+                min_size=PATRICK_MIN_SIZE, max_size=PATRICK_MAX_SIZE,
+                search_k=PATRICK_K, min_available_models=PATRICK_MIN_AVAILABLE,
+                min_search_bets=PATRICK_MIN_SEARCH_BETS, finalists=PATRICK_FINALISTS,
+                overlap_threshold=PATRICK_OVERLAP_THRESHOLD,
+                min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
+                thresholds=K_GRID, max_combinations=EXACT_SEARCH_DEFAULT_MAX,
+                standard_price=-110, progress_callback=progress,
+            )
+        return await asyncio.to_thread(compute)
+
+    @reactive.effect
+    @reactive.event(input.run_rolling_line_validation)
+    def start_rolling_line_validation():
+        if rolling_line_task.status() == "running":
+            return
+        a = _active_committee_analysis()
+        if not a or not a.get("combinations"):
+            ui.notification_show(
+                "Run Patrick's recommended settings on Page 4 first so the historical chronology and current model universe are frozen.",
+                type="error", duration=12,
+            )
+            return
+        live_ids, live_ready, _ = current_week_available_model_ids()
+        if not live_ready or not live_ids:
+            ui.notification_show("Refresh PredictionTracker on Page 2 first.", type="error")
+            return
+        s_active = strategy.get()
+        discovery = tuple(s_active.get("discovery_periods") or a.get("discovery_periods", ()))
+        holdout = tuple(s_active.get("holdout_periods") or a.get("holdout_periods", ()))
+        period_scope = tuple(sorted(set(tuple(discovery) + tuple(holdout))))
+        if not period_scope:
+            ui.notification_show(
+                "No frozen historical chronology is registered. Re-run Patrick's recommended settings once.",
+                type="error", duration=12,
+            )
+            return
+        rolling_line_task(
+            sorted(live_ids), period_scope, analysis_line_history().copy(),
+            int(input.rolling_line_folds()), int(input.rolling_line_block_size()),
+            int(input.rolling_line_min_discovery()), int(input.rolling_line_min_games()),
+        )
+
+    def rolling_line_result():
+        if rolling_line_task.status() != "success":
+            return None
+        return rolling_line_task.result()
+
+    @render.ui
+    def rolling_line_progress_bar():
+        st = rolling_line_task.status()
+        if st not in {"running", "success"}:
+            return ui.div()
+        if st == "running":
+            reactive.invalidate_later(0.5)
+        p = get_rolling_line_progress()
+        total = int(p.get("total") or 0); done = int(p.get("done") or 0)
+        pct = 100.0 * done / total if total else (100.0 if st == "success" else 0.0)
+        return ui.div(
+            ui.div(class_="search-progress-fill", style=f"width: {max(0,min(100,pct)):.1f}%"),
+            class_="search-progress-track",
+        )
+
+    @render.text
+    def rolling_line_status():
+        st = rolling_line_task.status()
+        if st == "initial":
+            return "Run this after the one-fold line-specific comparison. Default: eight non-overlapping six-week OOS blocks with an expanding training window."
+        if st == "running":
+            reactive.invalidate_later(0.5)
+            p = get_rolling_line_progress(); done = int(p.get("done") or 0); total = int(p.get("total") or 0)
+            started = p.get("started"); elapsed = max(0.0, time.monotonic() - started) if started else 0.0
+            pct = 100.0 * done / total if total else 0.0
+            rate = done / elapsed if elapsed > 0 and done > 0 else 0.0
+            remain = (total - done) / rate if rate > 0 and total >= done else np.nan
+            eta = f" · est. {remain/60:.1f} min remaining" if np.isfinite(remain) and remain > 60 else (f" · est. {remain:.0f}s remaining" if np.isfinite(remain) and remain > 1 else "")
+            return f"{done:,}/{total:,} ({pct:.1f}%) · elapsed {elapsed/60:.1f} min{eta} · {p.get('label','')}"
+        if st == "success":
+            r = rolling_line_result() or {}
+            return (
+                f"Complete: {int(r.get('completed_folds',0))} non-overlapping OOS blocks rebuilt from scratch "
+                f"({int(r.get('block_size',0))} usable weeks/block)."
+            )
+        if st == "error":
+            return "Rolling line-selection validation failed; see the notification / Connect log for details."
+        return str(st)
+
+    @reactive.effect
+    def show_rolling_line_error():
+        if rolling_line_task.status() == "error":
+            try:
+                rolling_line_task.result()
+            except Exception as exc:
+                ui.notification_show(f"Rolling line-validation error: {exc}", type="error", duration=18)
+
+    @render.data_frame
+    def rolling_line_current_aggregate_table():
+        r = rolling_line_result(); d = r.get("aggregate", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = d[d["grading_reference"].astype(str).eq("Close (PT Updated/final)")].copy()
+        d = _pct_frame(d, ["ats_pct", "roi", "wilson_low", "winning_block_rate", "median_block_roi"])
+        keep = ["selection_reference","folds","bets","wins","losses","pushes","ats_pct","roi","wilson_low","winning_blocks","losing_blocks","winning_block_rate","median_block_roi"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "selection_reference":"META selected vs","folds":"OOS blocks","bets":"Bets","wins":"Wins","losses":"Losses","pushes":"Pushes",
+            "ats_pct":"ATS %","roi":"ROI %","wilson_low":"Wilson LB %","winning_blocks":"Profitable blocks","losing_blocks":"Losing blocks",
+            "winning_block_rate":"Profitable block %","median_block_roi":"Median block ROI %",
+        }), filters=False, height="220px")
+
+    @render.data_frame
+    def rolling_line_matrix_table():
+        r = rolling_line_result(); d = r.get("aggregate", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        rows = []; order = [x[0] for x in LINE_REFS]
+        key_map = {"Open":"Open", "Midweek":"Midweek", "Close (PT Updated/final)":"PT Updated"}
+        for sel in order:
+            q = d[d["selection_reference"].astype(str).eq(sel)]
+            row = {"META selected vs": sel}
+            for grade in order:
+                z = q[q["grading_reference"].astype(str).eq(grade)]
+                key = key_map[grade]
+                if z.empty:
+                    row[key] = "—"; continue
+                rr = z.iloc[0]
+                ats = pd.to_numeric(pd.Series([rr.get("ats_pct")]), errors="coerce").iloc[0]
+                roi = pd.to_numeric(pd.Series([rr.get("roi")]), errors="coerce").iloc[0]
+                bets = int(pd.to_numeric(pd.Series([rr.get("bets",0)]), errors="coerce").fillna(0).iloc[0])
+                wb = int(pd.to_numeric(pd.Series([rr.get("winning_blocks",0)]), errors="coerce").fillna(0).iloc[0])
+                nf = int(pd.to_numeric(pd.Series([rr.get("folds",0)]), errors="coerce").fillna(0).iloc[0])
+                row[key] = f"{100*ats:.1f}% ATS | {100*roi:+.1f}% ROI | n={bets} | {wb}/{nf} +blocks" if np.isfinite(ats) and np.isfinite(roi) else f"n={bets}"
+            rows.append(row)
+        return render.DataGrid(pd.DataFrame(rows), filters=False, height="190px")
+
+    @render.data_frame
+    def rolling_line_fold_table():
+        r = rolling_line_result(); d = r.get("current_line_blocks", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        for short in ("open", "midweek", "close"):
+            for c in (f"{short}_ats_pct", f"{short}_roi", f"{short}_wilson_low"):
+                if c in d.columns:
+                    d[c] = 100 * pd.to_numeric(d[c], errors="coerce")
+        keep = ["fold","validation_start","validation_end","open_bets","open_ats_pct","open_roi","midweek_bets","midweek_ats_pct","midweek_roi","close_bets","close_ats_pct","close_roi"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "fold":"Block","validation_start":"Start","validation_end":"End",
+            "open_bets":"Open-selected n","open_ats_pct":"Open-selected ATS %","open_roi":"Open-selected ROI %",
+            "midweek_bets":"Mid-selected n","midweek_ats_pct":"Mid-selected ATS %","midweek_roi":"Mid-selected ROI %",
+            "close_bets":"Updated-selected n","close_ats_pct":"Updated-selected ATS %","close_roi":"Updated-selected ROI %",
+        }), filters=False, height="360px")
+
+    @render.data_frame
+    def rolling_line_paired_table():
+        r = rolling_line_result(); d = r.get("paired_updated", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        for c in ["a_higher_roi_rate","a_higher_ats_rate","mean_roi_diff","mean_ats_diff"]:
+            if c in d.columns:
+                d[c] = 100 * pd.to_numeric(d[c], errors="coerce")
+        for c in ["roi_sign_test_p","ats_sign_test_p"]:
+            if c in d.columns:
+                d[c] = pd.to_numeric(d[c], errors="coerce").round(4)
+        keep=["architecture_a","architecture_b","blocks","a_higher_roi_blocks","b_higher_roi_blocks","roi_ties","a_higher_roi_rate","roi_sign_test_p","mean_roi_diff","a_higher_ats_blocks","b_higher_ats_blocks","ats_ties","a_higher_ats_rate","ats_sign_test_p","mean_ats_diff"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "architecture_a":"Architecture A","architecture_b":"Architecture B","blocks":"Paired blocks",
+            "a_higher_roi_blocks":"A higher ROI","b_higher_roi_blocks":"B higher ROI","roi_ties":"ROI ties","a_higher_roi_rate":"A wins ROI %","roi_sign_test_p":"ROI sign-test p","mean_roi_diff":"Mean ROI diff pp",
+            "a_higher_ats_blocks":"A higher ATS","b_higher_ats_blocks":"B higher ATS","ats_ties":"ATS ties","a_higher_ats_rate":"A wins ATS %","ats_sign_test_p":"ATS sign-test p","mean_ats_diff":"Mean ATS diff pp",
+        }), filters=False, height="240px")
+
+    @render.data_frame
+    def rolling_line_architecture_table():
+        r = rolling_line_result(); d = r.get("architecture_stability", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = _pct_frame(d, ["max_effective_model_weight","discovery_ats_pct","discovery_roi","holdout_ats_pct","holdout_roi","holdout_wilson_low"])
+        keep=["fold","validation_start","validation_end","line_reference","candidate_models","finalists","communities","max_effective_model_weight","meta_k","discovery_bets","discovery_ats_pct","holdout_bets","holdout_ats_pct","holdout_roi","holdout_wilson_low"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "fold":"Block","validation_start":"Start","validation_end":"End","line_reference":"META selected vs","candidate_models":"Candidate N","finalists":"Finalists","communities":"Communities","max_effective_model_weight":"Max model wt %","meta_k":"META k","discovery_bets":"Discovery bets","discovery_ats_pct":"Discovery ATS %","holdout_bets":"Native OOS bets","holdout_ats_pct":"Native OOS ATS %","holdout_roi":"Native OOS ROI %","holdout_wilson_low":"Native Wilson LB %",
+        }), filters=True, height="500px")
+
+    @render.data_frame
+    def rolling_line_folds_table():
+        r = rolling_line_result(); d = r.get("folds", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        return render.DataGrid(d.rename(columns={
+            "fold":"Block","status":"Status","discovery_periods":"Discovery periods","discovery_start":"Discovery start","discovery_end":"Discovery end","validation_start":"OOS start","validation_end":"OOS end","validation_periods":"OOS periods",
+        }), filters=False, height="300px")
 
     @render.data_frame
     def strategy_combo_summary_table():

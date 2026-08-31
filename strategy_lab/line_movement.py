@@ -958,3 +958,392 @@ def run_line_specific_pipelines(
         "results": results,
         "total_work": total_work,
     }
+
+# ---------------------------------------------------------------------------
+# v3.5.26: repeated chronological line-selection validation
+# ---------------------------------------------------------------------------
+
+def _chronological_key(period: tuple[int, int]) -> tuple[int, int]:
+    return int(period[0]), int(period[1])
+
+
+def _rolling_usable_periods(
+    data: pd.DataFrame,
+    line_history: pd.DataFrame,
+    live_ids: Iterable[str],
+    *,
+    period_scope: Iterable[tuple[int, int]] | None = None,
+    min_available_models: int = 3,
+    min_games_per_period: int = 10,
+) -> tuple[tuple[tuple[int, int], ...], pd.DataFrame]:
+    """Find chronology periods with enough *same-game* coverage for all 3 line refs.
+
+    A period is eligible as an OOS block only when at least ``min_games_per_period``
+    games have a final result, all three cleaned PT line references, and at least
+    ``min_available_models`` forecasts from the currently relevant model universe.
+    This keeps Open/Midweek/Updated block comparisons on a common chronology and
+    avoids sparse bowl/postseason periods silently dominating a fold.
+    """
+    if data is None or data.empty or line_history is None or line_history.empty:
+        return tuple(), pd.DataFrame()
+    live = set(map(str, live_ids))
+    scope = set((_chronological_key(p)) for p in period_scope) if period_scope else None
+
+    cols = ["game_key", "season", "week", "canonical_model_id", "prediction_margin", "actual_margin"]
+    z = data[[c for c in cols if c in data.columns]].copy()
+    if z.empty or not {"game_key", "season", "week", "canonical_model_id"}.issubset(z.columns):
+        return tuple(), pd.DataFrame()
+    z["season"] = pd.to_numeric(z["season"], errors="coerce")
+    z["week"] = pd.to_numeric(z["week"], errors="coerce")
+    z["prediction_margin"] = pd.to_numeric(z.get("prediction_margin"), errors="coerce")
+    z["actual_margin"] = pd.to_numeric(z.get("actual_margin"), errors="coerce")
+    z = z[
+        z["season"].notna() & z["week"].notna()
+        & z["canonical_model_id"].astype(str).isin(live)
+        & z["prediction_margin"].notna() & z["actual_margin"].notna()
+    ].copy()
+    if scope is not None:
+        z = z[[(_chronological_key((y, w)) in scope) for y, w in zip(z["season"], z["week"])]]
+    if z.empty:
+        return tuple(), pd.DataFrame()
+
+    per_game = (
+        z.groupby(["season", "week", "game_key"], as_index=False)
+        .agg(available_models=("canonical_model_id", "nunique"), actual_margin=("actual_margin", "first"))
+    )
+    lh_cols = ["game_key"] + [col for _, col in LINE_REFS]
+    lh = line_history[lh_cols].drop_duplicates("game_key").copy()
+    for _, col in LINE_REFS:
+        lh[col] = pd.to_numeric(lh[col], errors="coerce")
+    per_game = per_game.merge(lh, on="game_key", how="left")
+    line_ok = np.ones(len(per_game), dtype=bool)
+    for _, col in LINE_REFS:
+        line_ok &= np.isfinite(pd.to_numeric(per_game[col], errors="coerce").to_numpy(float))
+    per_game["common_scorable"] = (
+        (pd.to_numeric(per_game["available_models"], errors="coerce").fillna(0).to_numpy(float) >= int(min_available_models))
+        & np.isfinite(pd.to_numeric(per_game["actual_margin"], errors="coerce").to_numpy(float))
+        & line_ok
+    )
+    coverage = (
+        per_game.groupby(["season", "week"], as_index=False)
+        .agg(
+            games=("game_key", "nunique"),
+            common_scorable_games=("common_scorable", "sum"),
+        )
+    )
+    coverage["season"] = coverage["season"].astype(int)
+    coverage["week"] = coverage["week"].astype(int)
+    coverage["usable"] = coverage["common_scorable_games"] >= int(min_games_per_period)
+    coverage = coverage.sort_values(["season", "week"]).reset_index(drop=True)
+    usable = tuple(
+        (int(r.season), int(r.week))
+        for r in coverage.itertuples(index=False)
+        if bool(r.usable)
+    )
+    return usable, coverage
+
+
+def build_rolling_validation_folds(
+    data: pd.DataFrame,
+    line_history: pd.DataFrame,
+    live_ids: Iterable[str],
+    *,
+    period_scope: Iterable[tuple[int, int]] | None = None,
+    block_size: int = 6,
+    n_folds: int = 8,
+    min_discovery_periods: int = 24,
+    min_games_per_period: int = 10,
+    min_available_models: int = 3,
+) -> tuple[list[dict], pd.DataFrame]:
+    """Create non-overlapping expanding-window OOS folds, ending at the latest data."""
+    block_size = max(1, int(block_size))
+    n_folds = max(1, int(n_folds))
+    min_discovery_periods = max(1, int(min_discovery_periods))
+    usable, coverage = _rolling_usable_periods(
+        data, line_history, live_ids, period_scope=period_scope,
+        min_available_models=min_available_models,
+        min_games_per_period=min_games_per_period,
+    )
+    if period_scope:
+        scope = sorted(set(_chronological_key(p) for p in period_scope))
+    else:
+        yy = pd.to_numeric(data.get("season"), errors="coerce")
+        ww = pd.to_numeric(data.get("week"), errors="coerce")
+        scope = sorted(set(
+            (int(y), int(w)) for y, w in zip(yy, ww)
+            if pd.notna(y) and pd.notna(w)
+        ))
+    usable = list(usable)
+    max_folds = max(0, (len(usable) - min_discovery_periods) // block_size)
+    take = min(n_folds, max_folds)
+    if take <= 0:
+        return [], coverage
+    first_idx = len(usable) - take * block_size
+    folds = []
+    for j in range(take):
+        start = first_idx + j * block_size
+        validation = tuple(usable[start:start + block_size])
+        if len(validation) < block_size:
+            continue
+        first_val = validation[0]
+        discovery = tuple(p for p in scope if p < first_val)
+        if len(discovery) < min_discovery_periods:
+            continue
+        folds.append({
+            "fold": j + 1,
+            "discovery_periods": discovery,
+            "validation_periods": validation,
+            "discovery_start": discovery[0],
+            "discovery_end": discovery[-1],
+            "validation_start": validation[0],
+            "validation_end": validation[-1],
+        })
+    # Renumber after any conservative skips.
+    for j, fold in enumerate(folds, start=1):
+        fold["fold"] = j
+    return folds, coverage
+
+
+def _exact_sign_test_two_sided(wins: int, losses: int) -> float:
+    """Two-sided exact sign test under p=0.5; ties are excluded."""
+    wins = int(wins); losses = int(losses)
+    n = wins + losses
+    if n <= 0:
+        return np.nan
+    k = min(wins, losses)
+    lower = sum(math.comb(n, i) for i in range(k + 1)) / (2.0 ** n)
+    return float(min(1.0, 2.0 * lower))
+
+
+def _aggregate_oos_cross(fold_detail: pd.DataFrame) -> pd.DataFrame:
+    if fold_detail is None or fold_detail.empty:
+        return pd.DataFrame()
+    rows = []
+    for (sel, grade), q in fold_detail.groupby(["selection_reference", "grading_reference"], sort=False):
+        wins = int(pd.to_numeric(q.get("wins"), errors="coerce").fillna(0).sum())
+        losses = int(pd.to_numeric(q.get("losses"), errors="coerce").fillna(0).sum())
+        pushes = int(pd.to_numeric(q.get("pushes"), errors="coerce").fillna(0).sum())
+        bets = int(pd.to_numeric(q.get("bets"), errors="coerce").fillna(0).sum())
+        units = float(pd.to_numeric(q.get("units"), errors="coerce").fillna(0).sum())
+        n_decisive = wins + losses
+        block_units = pd.to_numeric(q.get("units"), errors="coerce")
+        rows.append({
+            "selection_reference": sel,
+            "grading_reference": grade,
+            "folds": int(q["fold"].nunique()),
+            "bets": bets,
+            "wins": wins,
+            "losses": losses,
+            "pushes": pushes,
+            "ats_pct": wins / n_decisive if n_decisive else np.nan,
+            "units": units,
+            "roi": units / bets if bets else np.nan,
+            "wilson_low": _wilson_lower(wins, n_decisive),
+            "winning_blocks": int((block_units > 0).sum()),
+            "losing_blocks": int((block_units < 0).sum()),
+            "flat_blocks": int((block_units == 0).sum()),
+            "winning_block_rate": float((block_units > 0).mean()) if len(block_units) else np.nan,
+            "median_block_roi": float(pd.to_numeric(q.get("roi"), errors="coerce").median()) if len(q) else np.nan,
+        })
+    return pd.DataFrame(rows)
+
+
+def _paired_updated_block_comparison(fold_detail: pd.DataFrame) -> pd.DataFrame:
+    if fold_detail is None or fold_detail.empty:
+        return pd.DataFrame()
+    close_label = "Close (PT Updated/final)"
+    z = fold_detail[fold_detail["grading_reference"].astype(str).eq(close_label)].copy()
+    pairs = [
+        ("Open", "Close (PT Updated/final)"),
+        ("Open", "Midweek"),
+        ("Midweek", "Close (PT Updated/final)"),
+    ]
+    rows = []
+    for a, b in pairs:
+        aa = z[z["selection_reference"].astype(str).eq(a)].set_index("fold")
+        bb = z[z["selection_reference"].astype(str).eq(b)].set_index("fold")
+        common = sorted(set(aa.index) & set(bb.index))
+        if not common:
+            continue
+        ar = pd.to_numeric(aa.loc[common, "roi"], errors="coerce")
+        br = pd.to_numeric(bb.loc[common, "roi"], errors="coerce")
+        aa_ats = pd.to_numeric(aa.loc[common, "ats_pct"], errors="coerce")
+        bb_ats = pd.to_numeric(bb.loc[common, "ats_pct"], errors="coerce")
+        valid_roi = ar.notna() & br.notna()
+        roi_w = int((ar[valid_roi] > br[valid_roi]).sum())
+        roi_l = int((ar[valid_roi] < br[valid_roi]).sum())
+        roi_t = int((ar[valid_roi] == br[valid_roi]).sum())
+        valid_ats = aa_ats.notna() & bb_ats.notna()
+        ats_w = int((aa_ats[valid_ats] > bb_ats[valid_ats]).sum())
+        ats_l = int((aa_ats[valid_ats] < bb_ats[valid_ats]).sum())
+        ats_t = int((aa_ats[valid_ats] == bb_ats[valid_ats]).sum())
+        rows.append({
+            "architecture_a": a,
+            "architecture_b": b,
+            "execution_line": close_label,
+            "blocks": len(common),
+            "a_higher_roi_blocks": roi_w,
+            "b_higher_roi_blocks": roi_l,
+            "roi_ties": roi_t,
+            "a_higher_roi_rate": roi_w / (roi_w + roi_l) if (roi_w + roi_l) else np.nan,
+            "roi_sign_test_p": _exact_sign_test_two_sided(roi_w, roi_l),
+            "a_higher_ats_blocks": ats_w,
+            "b_higher_ats_blocks": ats_l,
+            "ats_ties": ats_t,
+            "a_higher_ats_rate": ats_w / (ats_w + ats_l) if (ats_w + ats_l) else np.nan,
+            "ats_sign_test_p": _exact_sign_test_two_sided(ats_w, ats_l),
+            "mean_roi_diff": float((ar[valid_roi] - br[valid_roi]).mean()) if valid_roi.any() else np.nan,
+            "mean_ats_diff": float((aa_ats[valid_ats] - bb_ats[valid_ats]).mean()) if valid_ats.any() else np.nan,
+        })
+    return pd.DataFrame(rows)
+
+
+def run_rolling_line_selection_validation(
+    data: pd.DataFrame,
+    line_history: pd.DataFrame,
+    live_ids: Iterable[str],
+    model_name_map: dict[str, str],
+    *,
+    period_scope: Iterable[tuple[int, int]] | None = None,
+    block_size: int = 6,
+    n_folds: int = 8,
+    min_discovery_periods: int = 24,
+    min_games_per_period: int = 10,
+    pool_n=35,
+    pool_min_bets=25,
+    min_size=3,
+    max_size=6,
+    search_k=0.75,
+    min_available_models=3,
+    min_search_bets=50,
+    finalists=50,
+    overlap_threshold=0.50,
+    min_meta_communities=2,
+    thresholds=(0.25,0.50,0.75,1.00,1.25,1.50,1.75,2.00),
+    max_combinations=10_000_000,
+    standard_price=-110,
+    progress_callback: Callable[[int,int,str],None] | None = None,
+) -> dict:
+    """Repeated expanding-window OOS test of Open/Midweek/Updated selection targets.
+
+    Each fold rebuilds all three architectures *from scratch* using only periods
+    before that fold. Validation blocks are non-overlapping and common to all
+    three line references. No finalist membership or k value is carried forward
+    from a later fold.
+    """
+    live_ids = list(dict.fromkeys(map(str, live_ids)))
+    folds, coverage = build_rolling_validation_folds(
+        data, line_history, live_ids, period_scope=period_scope,
+        block_size=block_size, n_folds=n_folds,
+        min_discovery_periods=min_discovery_periods,
+        min_games_per_period=min_games_per_period,
+        min_available_models=min_available_models,
+    )
+    if not folds:
+        raise ValueError(
+            "No rolling folds could be formed. Reduce the number/size of blocks, "
+            "the minimum discovery periods, or the minimum scorable games/week."
+        )
+
+    detail_rows = []
+    architecture_rows = []
+    fold_rows = []
+    total_units = len(folds) * 1000
+    for idx, fold in enumerate(folds):
+        base = idx * 1000
+        if progress_callback is not None:
+            progress_callback(base, total_units, f"Fold {idx+1}/{len(folds)}: preparing")
+
+        def inner_progress(done, total, label, base=base, idx=idx):
+            frac = (float(done) / float(total)) if total else 0.0
+            global_done = base + int(round(999 * max(0.0, min(1.0, frac))))
+            if progress_callback is not None:
+                progress_callback(global_done, total_units, f"Fold {idx+1}/{len(folds)} · {label}")
+
+        try:
+            res = run_line_specific_pipelines(
+                data, line_history, live_ids, model_name_map,
+                fold["discovery_periods"], fold["validation_periods"],
+                pool_n=pool_n, pool_min_bets=pool_min_bets,
+                min_size=min_size, max_size=max_size, search_k=search_k,
+                min_available_models=min_available_models,
+                min_search_bets=min_search_bets, finalists=finalists,
+                overlap_threshold=overlap_threshold,
+                min_meta_communities=min_meta_communities,
+                thresholds=thresholds, max_combinations=max_combinations,
+                standard_price=standard_price, progress_callback=inner_progress,
+            )
+            cross = res.get("cross_reference", pd.DataFrame()).copy()
+            if len(cross):
+                cross["fold"] = int(fold["fold"])
+                cross["validation_start"] = f"{fold['validation_start'][0]} W{fold['validation_start'][1]}"
+                cross["validation_end"] = f"{fold['validation_end'][0]} W{fold['validation_end'][1]}"
+                detail_rows.append(cross)
+            summary = res.get("summary", pd.DataFrame()).copy()
+            if len(summary):
+                summary["fold"] = int(fold["fold"])
+                summary["validation_start"] = f"{fold['validation_start'][0]} W{fold['validation_start'][1]}"
+                summary["validation_end"] = f"{fold['validation_end'][0]} W{fold['validation_end'][1]}"
+                architecture_rows.append(summary)
+            fold_rows.append({
+                "fold": int(fold["fold"]), "status": "ok",
+                "discovery_periods": len(fold["discovery_periods"]),
+                "discovery_start": f"{fold['discovery_start'][0]} W{fold['discovery_start'][1]}",
+                "discovery_end": f"{fold['discovery_end'][0]} W{fold['discovery_end'][1]}",
+                "validation_start": f"{fold['validation_start'][0]} W{fold['validation_start'][1]}",
+                "validation_end": f"{fold['validation_end'][0]} W{fold['validation_end'][1]}",
+                "validation_periods": len(fold["validation_periods"]),
+            })
+        except Exception as exc:
+            fold_rows.append({
+                "fold": int(fold["fold"]), "status": f"error: {type(exc).__name__}: {exc}",
+                "discovery_periods": len(fold["discovery_periods"]),
+                "discovery_start": f"{fold['discovery_start'][0]} W{fold['discovery_start'][1]}",
+                "discovery_end": f"{fold['discovery_end'][0]} W{fold['discovery_end'][1]}",
+                "validation_start": f"{fold['validation_start'][0]} W{fold['validation_start'][1]}",
+                "validation_end": f"{fold['validation_end'][0]} W{fold['validation_end'][1]}",
+                "validation_periods": len(fold["validation_periods"]),
+            })
+        if progress_callback is not None:
+            progress_callback((idx + 1) * 1000, total_units, f"Fold {idx+1}/{len(folds)} complete")
+
+    if not detail_rows:
+        errors = "; ".join(str(r.get("status", "")) for r in fold_rows if str(r.get("status", "")).startswith("error:"))
+        raise RuntimeError(f"All rolling validation folds failed. {errors[:1200]}")
+    detail = pd.concat(detail_rows, ignore_index=True, sort=False)
+    architecture = pd.concat(architecture_rows, ignore_index=True, sort=False) if architecture_rows else pd.DataFrame()
+    aggregate = _aggregate_oos_cross(detail)
+    paired = _paired_updated_block_comparison(detail)
+
+    # Wide fold-by-fold comparison at the production-style Updated execution line.
+    current_rows = []
+    close_label = "Close (PT Updated/final)"
+    for fold_id in sorted(pd.to_numeric(detail.get("fold"), errors="coerce").dropna().astype(int).unique()) if len(detail) else []:
+        q = detail[(pd.to_numeric(detail["fold"], errors="coerce")==fold_id) & detail["grading_reference"].astype(str).eq(close_label)]
+        row = {"fold": int(fold_id)}
+        if len(q):
+            row["validation_start"] = str(q.iloc[0].get("validation_start", ""))
+            row["validation_end"] = str(q.iloc[0].get("validation_end", ""))
+        for label, _ in LINE_REFS:
+            short = SHORT_REF[label]
+            z = q[q["selection_reference"].astype(str).eq(label)]
+            if len(z):
+                rr = z.iloc[0]
+                for metric in ("bets", "ats_pct", "roi", "wilson_low", "units"):
+                    row[f"{short}_{metric}"] = rr.get(metric, np.nan)
+        current_rows.append(row)
+    current_line_blocks = pd.DataFrame(current_rows)
+
+    return {
+        "folds": pd.DataFrame(fold_rows),
+        "coverage": coverage,
+        "fold_detail": detail,
+        "aggregate": aggregate,
+        "paired_updated": paired,
+        "current_line_blocks": current_line_blocks,
+        "architecture_stability": architecture,
+        "requested_folds": int(n_folds),
+        "completed_folds": int(pd.DataFrame(fold_rows).get("status", pd.Series(dtype=str)).astype(str).eq("ok").sum()) if fold_rows else 0,
+        "block_size": int(block_size),
+        "min_games_per_period": int(min_games_per_period),
+    }
