@@ -21,7 +21,76 @@ else
   git remote add origin "$REPO_URL"
 fi
 
-echo "Preflight: verifying v3.5.21 Patrick preset..."
+# v3.5.22: release rebuilds must never delete the verified PredictionTracker
+# mirror. If the working tree is missing mirror metadata, recover the newest
+# historical commit that still contains it, together with the matching CSV and
+# prospective mirror snapshots. This also self-heals repos affected by v3.5.21.
+recover_latest_pt_mirror() {
+  local meta="data/current/predictiontracker_mirror_status.json"
+  [[ -f "$meta" ]] && return 0
+  [[ -d .git ]] || return 0
+
+  local commit=""
+  while IFS= read -r c; do
+    if git cat-file -e "${c}:${meta}" 2>/dev/null; then
+      commit="$c"
+      break
+    fi
+  done < <(git rev-list HEAD --all -- "$meta" 2>/dev/null || true)
+
+  if [[ -z "$commit" ]]; then
+    echo "No prior PredictionTracker mirror found in Git history; continuing without one."
+    return 0
+  fi
+
+  echo "Recovering PredictionTracker mirror state from ${commit:0:12}..."
+  for path in \
+    data/current/ncaapredictions.csv \
+    data/current/predictiontracker_mirror_status.json \
+    data/derived/predictiontracker_source_status.json
+  do
+    if git cat-file -e "${commit}:${path}" 2>/dev/null; then
+      mkdir -p "$(dirname "$path")"
+      git show "${commit}:${path}" > "$path"
+    fi
+  done
+
+  while IFS= read -r path; do
+    [[ -z "$path" ]] && continue
+    mkdir -p "$(dirname "$path")"
+    git show "${commit}:${path}" > "$path"
+  done < <(git ls-tree -r --name-only "$commit" -- data/snapshots/predictiontracker/mirror 2>/dev/null || true)
+}
+
+recover_latest_pt_mirror
+
+# Validate that mirror metadata and current CSV travel together.
+python - <<'PYMIRROR'
+from pathlib import Path
+import hashlib, json
+meta = Path("data/current/predictiontracker_mirror_status.json")
+csv = Path("data/current/ncaapredictions.csv")
+if meta.exists():
+    if not csv.exists():
+        raise SystemExit("REFUSING TO PUSH: PredictionTracker mirror metadata exists but current CSV is missing.")
+    m = json.loads(meta.read_text(encoding="utf-8"))
+    expected = str(m.get("canonical_sha256") or "").strip()
+    actual = hashlib.sha256(csv.read_bytes()).hexdigest()
+    if expected and actual != expected:
+        raise SystemExit(
+            "REFUSING TO PUSH: PredictionTracker mirror metadata/CSV hash mismatch.\n"
+            f"  metadata: {expected[:12]}\n  csv:      {actual[:12]}\n"
+            "Run ./refresh_predictiontracker_local_and_push.sh SEASON WEEK before deploying."
+        )
+    print(
+        "Verified PredictionTracker mirror: "
+        f"season={m.get('season')} week={m.get('week')} rows={m.get('rows')} hash={actual[:12]}"
+    )
+else:
+    print("PredictionTracker mirror metadata not present; direct cloud refresh may remain blocked until a local mirror is created.")
+PYMIRROR
+
+echo "Preflight: verifying v3.5.22 Patrick preset..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -57,13 +126,13 @@ if "save_prospective_current_week_snapshot" not in current_week:
 if "PT_MIRROR_CSV_URL" not in current_week:
     refresh_missing.append("GitHub mirror fallback")
 if refresh_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.21 refresh code detected:\n  " + "\n  ".join(refresh_missing))
-print("Verified: Top 35 | Wilson | min 25 | sizes 3–6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | open/midweek/close grading | strict PT mirror + snapshots")
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.22 refresh code detected:\n  " + "\n  ".join(refresh_missing))
+print("Verified: Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | open/midweek/close grading | strict PT mirror + snapshots")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.21"
+  git commit -m "Deploy NCAAF Consensus Lab v3.5.22"
 else
   echo "No new changes to commit."
 fi

@@ -973,7 +973,7 @@ def server(input, output, session):
         d = INDIVIDUAL_LINE_HISTORY.copy()
         if d.empty:
             msg = pd.DataFrame([{
-                "Status": "PredictionTracker historical line files were not bundled. Rebuild the Connect repo with v3.5.21 so data/historical/ncaa*.csv is included."
+                "Status": "PredictionTracker historical line files were not bundled. Rebuild the Connect repo with v3.5.22 so data/historical/ncaa*.csv is included."
             }])
             return render.DataGrid(msg, filters=False)
         d = _pct_frame(d, ["ats_pct", "roi", "wilson_low"])
