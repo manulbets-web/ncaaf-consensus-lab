@@ -27,6 +27,17 @@ def utc_now():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def utc_stamp():
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _safe_json_load(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def slug_team(value):
     s = str(value or "").strip().lower()
     s = s.replace("&", " and ")
@@ -241,19 +252,24 @@ def predictiontracker_master_slate(root: Path) -> pd.DataFrame:
     wide = load_predictiontracker_wide(root)
     if wide.empty or not {"road", "home", "line"}.issubset(wide.columns):
         return pd.DataFrame()
-    out = wide[["road", "home", "line"]].copy()
+    keep = [c for c in ["road", "home", "lineopen", "line", "linemidweek"] if c in wide.columns]
+    out = wide[keep].copy()
     out["road"] = out["road"].astype(str)
     out["home"] = out["home"].astype(str)
-    out["market_home_margin"] = pd.to_numeric(
-        out["line"], errors="coerce"
-    )
+    out["market_home_margin"] = pd.to_numeric(out["line"], errors="coerce")
+    out["opening_home_margin"] = pd.to_numeric(out.get("lineopen"), errors="coerce")
+    out["midweek_home_margin"] = pd.to_numeric(out.get("linemidweek"), errors="coerce")
+    out["line_move_from_open"] = out["market_home_margin"] - out["opening_home_margin"]
     out["game_join_key"] = [
         game_key_from_names(a, h)
         for a, h in zip(out["road"], out["home"])
     ]
     return (
         out.rename(columns={"road": "away"})
-        [["away", "home", "market_home_margin", "game_join_key"]]
+        [[
+            "away", "home", "opening_home_margin", "market_home_margin",
+            "midweek_home_margin", "line_move_from_open", "game_join_key"
+        ]]
         .drop_duplicates("game_join_key")
         .reset_index(drop=True)
     )
@@ -317,10 +333,12 @@ def load_predictiontracker_current(
         if col is None:
             continue
 
-        for g in wide[["road", "home", "line", col]].itertuples(
-            index=False, name=None
-        ):
-            road, home, line, pred = g
+        line_cols = ["road", "home", "lineopen", "line", "linemidweek", col]
+        for c in ["lineopen", "linemidweek"]:
+            if c not in wide.columns:
+                wide[c] = np.nan
+        for g in wide[line_cols].itertuples(index=False, name=None):
+            road, home, lineopen, line, linemidweek, pred = g
             market = pd.to_numeric(
                 pd.Series([line]), errors="coerce"
             ).iloc[0]
@@ -335,6 +353,8 @@ def load_predictiontracker_current(
                 "market_home_margin": (
                     float(market) if np.isfinite(market) else np.nan
                 ),
+                "opening_home_margin": pd.to_numeric(pd.Series([lineopen]), errors="coerce").iloc[0],
+                "midweek_home_margin": pd.to_numeric(pd.Series([linemidweek]), errors="coerce").iloc[0],
                 "canonical_model_id": row.canonical_model_id,
                 "model_name": row.model_name,
                 "prediction_home_margin": float(prediction),
@@ -587,9 +607,18 @@ def build_current_board_from_cached_sources(
                 "week": int(week),
                 "away": away,
                 "home": home,
+                "opening_home_margin": pd.to_numeric(
+                    pd.Series([getattr(mr, "opening_home_margin", np.nan)]), errors="coerce"
+                ).iloc[0],
                 "market_home_margin": (
                     float(market) if np.isfinite(market) else np.nan
                 ),
+                "midweek_home_margin": pd.to_numeric(
+                    pd.Series([getattr(mr, "midweek_home_margin", np.nan)]), errors="coerce"
+                ).iloc[0],
+                "line_move_from_open": pd.to_numeric(
+                    pd.Series([getattr(mr, "line_move_from_open", np.nan)]), errors="coerce"
+                ).iloc[0],
                 "market_source": market_source,
                 "consensus_home_margin": consensus,
                 "model_sd": sd,
@@ -623,6 +652,19 @@ def build_current_board_from_cached_sources(
                     "week": int(week),
                     "away": away,
                     "home": home,
+                    "game_join_key": game_key,
+                    "opening_home_margin": pd.to_numeric(
+                        pd.Series([getattr(mr, "opening_home_margin", np.nan)]), errors="coerce"
+                    ).iloc[0],
+                    "market_home_margin": (
+                        float(market) if np.isfinite(market) else np.nan
+                    ),
+                    "midweek_home_margin": pd.to_numeric(
+                        pd.Series([getattr(mr, "midweek_home_margin", np.nan)]), errors="coerce"
+                    ).iloc[0],
+                    "line_move_from_open": pd.to_numeric(
+                        pd.Series([getattr(mr, "line_move_from_open", np.nan)]), errors="coerce"
+                    ).iloc[0],
                     "canonical_model_id": row.canonical_model_id,
                     "model_name": row.model_name,
                     "prediction_home_margin": row.prediction_home_margin,
@@ -828,6 +870,20 @@ def refresh_current_sources(
             ),
         }
 
+    # Attach the scraper's machine-readable record so the UI can prove what
+    # was fetched rather than merely reporting that a subprocess returned.
+    source_manifest = _safe_json_load(
+        root / "data/derived/predictiontracker_source_status.json"
+    )
+    current_records = [
+        r for r in source_manifest.get("records", [])
+        if r.get("name") == "current_predictions"
+    ]
+    status["predictiontracker_source_record"] = (
+        current_records[-1] if current_records else None
+    )
+    status["predictiontracker_source_manifest_status"] = source_manifest.get("overall_status")
+
     cfb_script = root / "scripts/scrape_cfbpicker_current.py"
     if not include_cfbpicker:
         status["cfbpicker"] = {
@@ -868,6 +924,145 @@ def refresh_current_sources(
     return status
 
 
+def _snapshot_index_path(root: Path) -> Path:
+    return root / "data/snapshots/predictiontracker/prospective_index.csv"
+
+
+def save_prospective_current_week_snapshot(
+    root: str | Path,
+    result: dict,
+    refresh_status: dict | None,
+    *,
+    season: int,
+    week: int,
+) -> dict:
+    """Persist each unique observed PT board for later early-line/CLV research.
+
+    The source SHA is the deduplication key.  Re-clicking Refresh without a
+    PredictionTracker change therefore does not create fake extra observations.
+    """
+    root = Path(root)
+    refresh_status = refresh_status or {}
+    record = refresh_status.get("predictiontracker_source_record") or {}
+    sha = str(record.get("canonical_sha256") or record.get("sha256") or "").strip()
+    observed_at = str(record.get("fetched_at_utc") or utc_now())
+    stamp = re.sub(r"[^0-9TZ]", "", observed_at.replace("+00:00", "Z"))[:16]
+    if not stamp:
+        stamp = utc_stamp()
+    sha12 = sha[:12] if sha else "nohash"
+
+    base = (
+        root / "data/snapshots/predictiontracker/prospective"
+        / f"season_{int(season)}" / f"week_{int(week):02d}"
+    )
+    base.mkdir(parents=True, exist_ok=True)
+    prefix = f"{stamp}_{sha12}"
+
+    index_path = _snapshot_index_path(root)
+    if index_path.exists():
+        try:
+            existing = pd.read_csv(index_path, dtype=str)
+        except Exception:
+            existing = pd.DataFrame()
+    else:
+        existing = pd.DataFrame()
+
+    already = False
+    if len(existing) and sha and "source_sha256" in existing.columns:
+        already = bool(existing["source_sha256"].fillna("").astype(str).eq(sha).any())
+
+    board = result.get("board", pd.DataFrame()).copy()
+    predictions = result.get("predictions", pd.DataFrame()).copy()
+    availability = result.get("availability", pd.DataFrame()).copy()
+    wide = load_predictiontracker_wide(root)
+
+    # Make each exported row independently joinable after many weekly downloads.
+    # The raw PT wide CSV is left untouched; derived prospective tables carry
+    # explicit observation/provenance columns.
+    for frame in (board, predictions, availability):
+        frame.insert(0, "observed_at_utc", observed_at)
+        frame.insert(1, "source_sha256", sha)
+        frame.insert(2, "pt_published_update", record.get("published_update"))
+
+    paths = {
+        "board": base / f"{prefix}_board.csv",
+        "predictions": base / f"{prefix}_predictions_long.csv",
+        "availability": base / f"{prefix}_availability.csv",
+        "predictiontracker_wide": base / f"{prefix}_predictiontracker_wide.csv",
+        "metadata": base / f"{prefix}_metadata.json",
+    }
+
+    if not already:
+        board.to_csv(paths["board"], index=False)
+        predictions.to_csv(paths["predictions"], index=False)
+        availability.to_csv(paths["availability"], index=False)
+        wide.to_csv(paths["predictiontracker_wide"], index=False)
+
+        meta = {
+            "observed_at_utc": observed_at,
+            "season": int(season),
+            "week": int(week),
+            "source_sha256": sha or None,
+            "predictiontracker_published_update": record.get("published_update"),
+            "source_changed": record.get("changed"),
+            "source_rows": record.get("rows"),
+            "source_columns": record.get("columns"),
+            "source_message": record.get("message"),
+            "games": int(len(board)),
+            "mapped_predictions": int(len(predictions)),
+            "canonical_models_posting": int(
+                predictions["canonical_model_id"].astype(str).nunique()
+            ) if len(predictions) and "canonical_model_id" in predictions.columns else 0,
+            "live_pt_model_columns": int(len(result.get("pt_live_models", pd.DataFrame()))),
+            "files": {k: str(v.relative_to(root)) for k, v in paths.items() if k != "metadata"},
+        }
+        paths["metadata"].write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+        row = pd.DataFrame([{
+            "observed_at_utc": observed_at,
+            "season": int(season),
+            "week": int(week),
+            "source_sha256": sha,
+            "published_update": record.get("published_update"),
+            "source_changed": record.get("changed"),
+            "games": int(len(board)),
+            "mapped_predictions": int(len(predictions)),
+            "canonical_models_posting": meta["canonical_models_posting"],
+            "snapshot_prefix": str((base / prefix).relative_to(root)),
+        }])
+        if len(existing):
+            new_index = pd.concat([existing, row], ignore_index=True, sort=False)
+        else:
+            new_index = row
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        new_index.to_csv(index_path, index=False)
+    else:
+        # Find the prior snapshot prefix for UI provenance.
+        prior = existing[existing["source_sha256"].fillna("").astype(str).eq(sha)]
+        if len(prior) and "snapshot_prefix" in prior.columns:
+            prefix_value = str(prior.iloc[-1]["snapshot_prefix"])
+        else:
+            prefix_value = str((base / prefix).relative_to(root))
+        return {
+            "saved": False,
+            "duplicate_source_sha": True,
+            "source_sha256": sha,
+            "observed_at_utc": observed_at,
+            "snapshot_prefix": prefix_value,
+            "index_path": str(index_path.relative_to(root)),
+        }
+
+    return {
+        "saved": True,
+        "duplicate_source_sha": False,
+        "source_sha256": sha,
+        "observed_at_utc": observed_at,
+        "snapshot_prefix": str((base / prefix).relative_to(root)),
+        "index_path": str(index_path.relative_to(root)),
+        "paths": {k: str(v.relative_to(root)) for k, v in paths.items()},
+    }
+
+
 def refresh_and_build_current_week(
     root: str | Path,
     history: pd.DataFrame,
@@ -895,6 +1090,23 @@ def refresh_and_build_current_week(
             include_cfbpicker=include_cfbpicker,
         )
 
+        # CRITICAL: never report a successful refresh while silently rebuilding
+        # from an old cached ncaapredictions.csv.  The scraper runs --strict; a
+        # nonzero code or non-ok current source record aborts the Shiny task.
+        pt_run = (refresh_status or {}).get("predictiontracker") or {}
+        pt_record = (refresh_status or {}).get("predictiontracker_source_record") or {}
+        if int(pt_run.get("returncode", 1)) != 0:
+            detail = str(pt_run.get("stderr") or pt_run.get("stdout") or "")[-1800:]
+            raise RuntimeError(
+                "PredictionTracker refresh failed; cached prior-week rows were NOT used. "
+                + detail
+            )
+        if pt_record.get("status") != "ok":
+            raise RuntimeError(
+                "PredictionTracker refresh did not produce a verified current source record; "
+                "cached rows were NOT used. " + str(pt_record.get("message") or "")
+            )
+
     result = build_current_board_from_cached_sources(
         root,
         history,
@@ -908,6 +1120,12 @@ def refresh_and_build_current_week(
         write_outputs=write_outputs,
     )
     result["refresh_status"] = refresh_status
+    if refresh:
+        result["prospective_snapshot"] = save_prospective_current_week_snapshot(
+            root, result, refresh_status, season=season, week=week
+        )
+    else:
+        result["prospective_snapshot"] = None
     return result
 
 

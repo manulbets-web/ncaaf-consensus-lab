@@ -368,8 +368,9 @@ app_ui = ui.page_fluid(
         ui.nav_panel(
             "2 · Upcoming Games",
             ui.p(
-                "Raw PredictionTracker board only. This page does not decide what to bet; "
-                "it shows the current line and every model projection we can map.",
+                "Raw PredictionTracker board only. Refresh is strict: if the live source cannot be verified, "
+                "the app fails rather than silently showing a cached prior-week slate. Every unique changed "
+                "board is timestamped for prospective early-line / closing-line-value analysis.",
                 class_="muted",
             ),
             ui.layout_columns(
@@ -384,12 +385,18 @@ app_ui = ui.page_fluid(
                 col_widths=(3, 3, 6),
             ),
             ui.output_text("upcoming_status"),
+            ui.output_text("upcoming_refresh_audit"),
             ui.layout_columns(
                 ui.value_box("Games", ui.output_text("upcoming_games_n")),
                 ui.value_box("Models posting", ui.output_text("upcoming_models_n")),
                 ui.value_box("Mapped predictions", ui.output_text("upcoming_predictions_n")),
-                ui.value_box("CFB Picker", "Inactive for now"),
+                ui.value_box("Source changed", ui.output_text("upcoming_source_changed")),
                 col_widths=(3, 3, 3, 3),
+            ),
+            ui.download_button(
+                "download_pt_snapshots",
+                "Download prospective snapshots",
+                class_="btn-outline-secondary mb-3",
             ),
             ui.card(
                 ui.card_header("Upcoming game board"),
@@ -978,10 +985,78 @@ def server(input, output, session):
         if s == "success":
             r = upcoming_result()
             live = len(r.get("pt_live_models", pd.DataFrame())) if r else 0
-            return f"PredictionTracker loaded. {live} model columns are currently posting. CFB Picker was not queried."
+            return f"PredictionTracker verified and loaded. {live} model columns are currently posting. CFB Picker was not queried."
         if s == "error":
-            return "PredictionTracker refresh failed."
+            return "PredictionTracker refresh failed verification. Cached prior-week rows were not accepted; try Refresh again."
         return str(s)
+
+    @render.text
+    def upcoming_refresh_audit():
+        r = upcoming_result()
+        if r is None:
+            return ""
+        rs = r.get("refresh_status") or {}
+        rec = rs.get("predictiontracker_source_record") or {}
+        snap = r.get("prospective_snapshot") or {}
+        published = rec.get("published_update") or "unknown"
+        fetched = rec.get("fetched_at_utc") or rs.get("refreshed_at_utc") or "unknown"
+        validation = ""
+        try:
+            msg = json.loads(rec.get("message") or "{}")
+            pv = msg.get("page_validation") or {}
+            st = pv.get("status")
+            if st:
+                if st == "ok":
+                    validation = f" · live-page check: OK ({pv.get('matched_games', '?')}/{pv.get('page_games', '?')} games)"
+                else:
+                    validation = f" · live-page check: {st}"
+        except Exception:
+            pass
+        snap_txt = snap.get("snapshot_prefix") or "not saved"
+        return (
+            f"PT published: {published} · fetched: {fetched} · "
+            f"prospective snapshot: {snap_txt}{validation}"
+        )
+
+    @render.text
+    def upcoming_source_changed():
+        r = upcoming_result()
+        if r is None:
+            return "—"
+        rec = (r.get("refresh_status") or {}).get("predictiontracker_source_record") or {}
+        changed = rec.get("changed")
+        if changed is True:
+            return "Yes"
+        if changed is False:
+            return "No"
+        return "—"
+
+    @render.download(filename="ncaaf_predictiontracker_prospective_snapshots.zip")
+    def download_pt_snapshots():
+        import tempfile
+        import zipfile
+
+        snap_root = PROJECT_ROOT / "data/snapshots/predictiontracker"
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+        with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            if snap_root.exists():
+                for fp in sorted(snap_root.rglob("*")):
+                    if fp.is_file():
+                        zf.write(fp, fp.relative_to(PROJECT_ROOT))
+            status_files = [
+                PROJECT_ROOT / "data/derived/predictiontracker_source_status.json",
+                PROJECT_ROOT / "data/derived/current_week_refresh_status.json",
+                PROJECT_ROOT / "data/current/ncaapredictions.csv",
+            ]
+            for fp in status_files:
+                if fp.exists():
+                    zf.write(fp, fp.relative_to(PROJECT_ROOT))
+        yield tmp_path.read_bytes()
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
 
     @reactive.effect
     def show_upcoming_error():
@@ -1020,11 +1095,23 @@ def server(input, output, session):
         if d.empty:
             return render.DataGrid(d)
         d["Game"] = d["away"].astype(str) + " @ " + d["home"].astype(str)
-        d["Market spread"] = [
+        d["Opening spread"] = [
+            _spread_label(a, h, m)
+            for a, h, m in zip(d["away"], d["home"], d.get("opening_home_margin", np.nan))
+        ]
+        d["Current spread"] = [
             _spread_label(a, h, m)
             for a, h, m in zip(d["away"], d["home"], d["market_home_margin"])
         ]
-        d = d[["Game", "Market spread", "available_models", "market_source"]].rename(
+        d["Midweek spread"] = [
+            _spread_label(a, h, m)
+            for a, h, m in zip(d["away"], d["home"], d.get("midweek_home_margin", np.nan))
+        ]
+        d["Move from open"] = pd.to_numeric(d.get("line_move_from_open"), errors="coerce").round(2)
+        d = d[[
+            "Game", "Opening spread", "Current spread", "Midweek spread",
+            "Move from open", "available_models", "market_source"
+        ]].rename(
             columns={"available_models": "Models posting", "market_source": "Line source"}
         )
         return render.DataGrid(d, filters=True, height="420px")
@@ -1047,11 +1134,11 @@ def server(input, output, session):
         ).reset_index()
         if len(b):
             b["Game"] = b["away"].astype(str) + " @ " + b["home"].astype(str)
-            b["Market"] = [
+            b["Current market"] = [
                 _spread_label(a, h, m)
                 for a, h, m in zip(b["away"], b["home"], b["market_home_margin"])
             ]
-            matrix = b[["Game", "Market"]].drop_duplicates("Game").merge(matrix, on="Game", how="left")
+            matrix = b[["Game", "Current market"]].drop_duplicates("Game").merge(matrix, on="Game", how="left")
         return render.DataGrid(matrix, filters=True, height="650px")
 
     # ------------------------------------------------------------------

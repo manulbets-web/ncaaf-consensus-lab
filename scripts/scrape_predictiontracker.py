@@ -17,7 +17,8 @@ The script is conservative:
 - retry/backoff for temporary failures;
 - validates before replacing production files;
 - never overwrites a valid production file with a failed/empty download;
-- creates a timestamped current snapshot only when content changes;
+- cache-busts the live current CSV/page and creates a timestamped current snapshot when content changes;
+- cross-checks the current CSV slate against the live HTML page when the page can be parsed;
 - supports stale-data fallback for scheduled website builds.
 
 Usage:
@@ -55,7 +56,7 @@ RESULTS_URL = f"{BASE_URL}/ncaaresults.php"
 ARCHIVE_INDEX_URL = f"{BASE_URL}/ncaaarchive.html"
 
 USER_AGENT = (
-    "manulbets-web-ncaaf-consensus/0.2 "
+    "manulbets-web-ncaaf-consensus/0.3 "
     "(research dashboard; low-frequency public-data retrieval)"
 )
 
@@ -71,6 +72,7 @@ class SourceRecord:
     http_status: int | None = None
     bytes: int | None = None
     sha256: str | None = None
+    canonical_sha256: str | None = None
     rows: int | None = None
     columns: int | None = None
     changed: bool | None = None
@@ -92,6 +94,14 @@ def utc_stamp(moment: datetime | None = None) -> str:
 def iso_utc(moment: datetime | None = None) -> str:
     moment = moment or utc_now()
     return moment.isoformat().replace("+00:00", "Z")
+
+
+def cache_busted_url(url: str, moment: datetime | None = None) -> str:
+    """Return a URL with a unique query token so current-week caches revalidate."""
+    moment = moment or utc_now()
+    token = moment.strftime("%Y%m%d%H%M%S%f")
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}_ncaaf_refresh={token}"
 
 
 def sha256_bytes(content: bytes) -> str:
@@ -127,6 +137,10 @@ def create_session() -> requests.Session:
                 "text/csv,text/html,application/xhtml+xml,"
                 "application/xml;q=0.9,*/*;q=0.8"
             ),
+            # PredictionTracker/CDN caching can lag the visible HTML page.
+            # Current-week refreshes must ask intermediaries to revalidate.
+            "Cache-Control": "no-cache, no-store, max-age=0",
+            "Pragma": "no-cache",
         }
     )
     session.mount("https://", HTTPAdapter(max_retries=retry))
@@ -137,8 +151,16 @@ def fetch_bytes(
     session: requests.Session,
     url: str,
     timeout_seconds: int = 45,
+    *,
+    force_revalidate: bool = False,
 ) -> tuple[bytes, requests.Response]:
-    response = session.get(url, timeout=timeout_seconds)
+    headers = None
+    if force_revalidate:
+        headers = {
+            "Cache-Control": "no-cache, no-store, max-age=0",
+            "Pragma": "no-cache",
+        }
+    response = session.get(url, timeout=timeout_seconds, headers=headers)
     response.raise_for_status()
     content = response.content
     if not content:
@@ -389,6 +411,142 @@ def parse_prediction_page_update(html_content: bytes) -> str | None:
     return re.sub(r"\s+", " ", match.group(1)).strip()
 
 
+def parse_prediction_page_summary(html_content: bytes) -> pd.DataFrame:
+    """Best-effort parser for the visible current-game summary on predncaa.html.
+
+    PredictionTracker renders the board as fixed-width/preformatted text.  The
+    summary rows begin with Home / Visitor followed by Opening, Updated, and
+    Midweek lines.  We deliberately require those first three numeric columns,
+    which keeps the later raw-model matrix from being mistaken for the summary.
+
+    This is a *validation* parser, not the production model-data parser.  If the
+    site's markup changes and no rows can be recognized, callers record
+    validation_unavailable rather than replacing the CSV with guessed HTML data.
+    """
+    soup = BeautifulSoup(html_content, "html.parser")
+    blocks = [x.get_text("\n", strip=False) for x in soup.find_all("pre")]
+    if not blocks:
+        blocks = [soup.get_text("\n", strip=False)]
+
+    row_re = re.compile(
+        r"^\s*(?P<home>\S(?:.*?\S)?)\s{2,}"
+        r"(?P<road>\S(?:.*?\S)?)\s{2,}"
+        r"(?P<lineopen>[+-]?\d+(?:\.\d+)?)\s+"
+        r"(?P<line>[+-]?\d+(?:\.\d+)?)\s+"
+        r"(?P<linemidweek>[+-]?\d+(?:\.\d+)?)(?:\s+|$)"
+    )
+
+    rows = []
+    for block in blocks:
+        if not (
+            re.search(r"Opening\s+Updated\s+Midweek", block, re.I)
+            or (
+                re.search(r"Opening\s+line", block, re.I)
+                and re.search(r"Updated\s+line", block, re.I)
+                and re.search(r"Midweek\s+line", block, re.I)
+            )
+        ):
+            continue
+        for line in block.splitlines():
+            m = row_re.match(line)
+            if not m:
+                continue
+            g = m.groupdict()
+            rows.append({
+                "home": re.sub(r"\s+", " ", g["home"]).strip(),
+                "road": re.sub(r"\s+", " ", g["road"]).strip(),
+                "lineopen": float(g["lineopen"]),
+                "line": float(g["line"]),
+                "linemidweek": float(g["linemidweek"]),
+            })
+
+    if not rows:
+        return pd.DataFrame(columns=["home", "road", "lineopen", "line", "linemidweek"])
+    return pd.DataFrame(rows).drop_duplicates().reset_index(drop=True)
+
+
+def _team_slug(value: Any) -> str:
+    x = str(value or "").lower().replace("&", " and ")
+    x = re.sub(r"[^a-z0-9]+", " ", x)
+    return re.sub(r"\s+", " ", x).strip()
+
+
+def validate_current_csv_against_page(
+    normalized: pd.DataFrame,
+    html_content: bytes,
+) -> dict[str, Any]:
+    """Detect the failure mode where the HTML page is fresh but CSV is stale."""
+    page = parse_prediction_page_summary(html_content)
+    if len(page) < 5:
+        return {
+            "status": "validation_unavailable",
+            "page_games": (int(len(page)) if len(page) else None),
+            "csv_games": int(len(normalized)),
+            "matched_games": None,
+            "match_rate": None,
+            "line_match_rate": None,
+            "message": "Could not parse the visible PredictionTracker summary table; CSV was validated structurally only.",
+        }
+
+    csv = normalized[[c for c in ["home", "road", "line", "lineopen", "linemidweek"] if c in normalized.columns]].copy()
+    for d in (page, csv):
+        d["_game_key"] = [
+            _team_slug(h) + "__" + _team_slug(r)
+            for h, r in zip(d["home"], d["road"])
+        ]
+    page = page.drop_duplicates("_game_key")
+    csv = csv.drop_duplicates("_game_key")
+
+    page_keys = set(page["_game_key"])
+    csv_keys = set(csv["_game_key"])
+    matched = page_keys & csv_keys
+    denom = max(1, len(page_keys))
+    match_rate = len(matched) / denom
+
+    line_matches = []
+    if matched and "line" in csv.columns:
+        p_line = page.set_index("_game_key")["line"]
+        c_line = pd.to_numeric(csv.set_index("_game_key")["line"], errors="coerce")
+        for key in matched:
+            a = p_line.get(key)
+            b = c_line.get(key)
+            if pd.notna(a) and pd.notna(b):
+                line_matches.append(abs(float(a) - float(b)) < 0.01)
+    line_match_rate = (
+        sum(line_matches) / len(line_matches) if line_matches else None
+    )
+
+    # A current board should substantially agree with the board users see on
+    # predncaa.html.  A stale prior-week CSV typically has almost no overlap.
+    severe_count_gap = abs(len(page_keys) - len(csv_keys)) > max(3, int(round(0.20 * len(page_keys))))
+    bad_overlap = match_rate < 0.80
+    bad_lines = line_match_rate is not None and line_match_rate < 0.80
+    status = "ok" if not (severe_count_gap or bad_overlap or bad_lines) else "mismatch"
+
+    out = {
+        "status": status,
+        "page_games": int(len(page_keys)),
+        "csv_games": int(len(csv_keys)),
+        "matched_games": int(len(matched)),
+        "match_rate": float(match_rate),
+        "line_match_rate": (float(line_match_rate) if line_match_rate is not None else None),
+        "severe_count_gap": bool(severe_count_gap),
+    }
+    if status != "ok":
+        page_only = sorted(page_keys - csv_keys)[:5]
+        csv_only = sorted(csv_keys - page_keys)[:5]
+        out["message"] = (
+            "Current CSV does not match the visible PredictionTracker page. "
+            f"page_games={len(page_keys)}, csv_games={len(csv_keys)}, "
+            f"match_rate={match_rate:.1%}, line_match_rate="
+            f"{line_match_rate if line_match_rate is not None else 'NA'}. "
+            f"Examples page-only={page_only}; csv-only={csv_only}"
+        )
+    else:
+        out["message"] = "Current CSV agrees with the visible PredictionTracker board."
+    return out
+
+
 def parse_results_html(
     content: bytes,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
@@ -584,12 +742,18 @@ def process_current(
     )
 
     try:
-        content, response = fetch_bytes(session, CURRENT_CSV_URL)
-        normalized, report = normalize_current(content)
-
+        # Fetch the visible page and CSV with the SAME unique cache-busting token.
+        # This avoids the observed state where predncaa.html advances to the new
+        # week while an intermediary continues serving the prior ncaapredictions.csv.
+        token_time = run_time
+        page_content = None
         published_update = None
         try:
-            page_content, _ = fetch_bytes(session, CURRENT_PAGE_URL)
+            page_content, _ = fetch_bytes(
+                session,
+                cache_busted_url(CURRENT_PAGE_URL, token_time),
+                force_revalidate=True,
+            )
             published_update = parse_prediction_page_update(page_content)
             write_if_changed(
                 root / "data/raw/predictiontracker/predncaa.html",
@@ -600,6 +764,25 @@ def process_current(
                 "Could not fetch/parse current prediction page metadata: %s",
                 exc,
             )
+
+        content, response = fetch_bytes(
+            session,
+            cache_busted_url(CURRENT_CSV_URL, token_time),
+            force_revalidate=True,
+        )
+        normalized, report = normalize_current(content)
+
+        validation = None
+        if page_content is not None:
+            validation = validate_current_csv_against_page(normalized, page_content)
+            report["page_validation"] = validation
+            if validation.get("status") == "mismatch":
+                raise ValueError(validation.get("message") or "PredictionTracker CSV/page mismatch")
+        else:
+            report["page_validation"] = {
+                "status": "page_fetch_failed",
+                "message": "Visible page could not be fetched; CSV structural validation only.",
+            }
 
         production_path = root / "data/current/ncaapredictions.csv"
         raw_path = (
@@ -624,6 +807,8 @@ def process_current(
         record.http_status = response.status_code
         record.bytes = len(content)
         record.sha256 = sha256_bytes(content)
+        record.canonical_sha256 = sha256_bytes(canonical_csv_bytes(normalized))
+        report["canonical_sha256"] = record.canonical_sha256
         record.rows = report["rows"]
         record.columns = report["columns"]
         record.changed = changed
