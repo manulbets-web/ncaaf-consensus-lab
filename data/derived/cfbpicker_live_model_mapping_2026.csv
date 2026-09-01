@@ -1,0 +1,44 @@
+picker_name,canonical_model_id,model_name,is_new_canonical_model,mapping_reason,strategy_selected
+CFB Geek,linecfbp_cfb_geek,CFB Geek,False,selected_mapping_exact_picker,True
+CFB Professor,linecfbp_cfb_professor,CFB Professor,False,selected_mapping_exact_picker,True
+CFB Victory,linecfbp_cfb_victory,CFB Victory,False,selected_mapping_exact_picker,True
+Congrove,congrove,Congrove Computer Rankings,False,selected_mapping_exact_picker,True
+DRatings,linecfbp_dratings,DRatings,False,selected_mapping_exact_picker,True
+David Sasser,linecfbp_david_sasser,David Sasser,False,selected_mapping_exact_picker,True
+Dokter Entropy,dokter_entropy,Dokter Entropy,False,selected_mapping_exact_picker,True
+ESPN FPI,espn_fpi,ESPN FPI,False,selected_mapping_exact_picker,True
+FEI,fei,FEI Projections,False,selected_mapping_exact_picker,True
+Harville,harville,David Harville,False,selected_mapping_exact_picker,True
+JP+,linecfbp_jp,JP+,False,selected_mapping_exact_picker,True
+John Harris,linecfbp_john_harris,John Harris,False,selected_mapping_exact_picker,True
+Keeper,keeper,Keeper,False,selected_mapping_exact_picker,True
+LAZ Index,linept_laz,Laz Index,False,selected_mapping_exact_picker,True
+Massey,massey,Massey Ratings,False,selected_mapping_exact_picker,True
+McIllece Sports,linecfbp_mcillece_sports,McIllece Sports,False,selected_mapping_exact_picker,True
+Moore Ratings,moore_ratings,Moore Power Ratings,False,selected_mapping_exact_picker,True
+OddsTrader AI,linecfbp_oddstrader_ai,OddsTrader AI,False,selected_mapping_exact_picker,True
+PEARatings,linecfbp_pearatings,PEARatings,False,selected_mapping_exact_picker,True
+PiRate,piratings,Pi-Ratings,False,selected_mapping_exact_picker,True
+PiRate: Bias,piratings_bias,PI-Rate Bias,False,selected_mapping_exact_picker,True
+PiRate: Mean,piratings_mean,Pi-Ratings Mean,False,selected_mapping_exact_picker,True
+Power Rank,linecfbp_power_rank,Power Rank,False,selected_mapping_exact_picker,True
+Power Rank: Free,linecfbp_power_rank_free,Power Rank: Free,False,selected_mapping_exact_picker,True
+Room44 Bets,linecfbp_room44_bets,Room44 Bets,False,selected_mapping_exact_picker,True
+Ryder Analytics,linecfbp_ryder_analytics,Ryder Analytics,False,selected_mapping_exact_picker,True
+SP+,linecfbp_sp,SP+,False,selected_mapping_exact_picker,True
+Sagarin,sagarin,Sagarin Ratings,False,selected_mapping_exact_picker,True
+Sagarin: Golden,sagarin_golden_mean,Sagarin Golden Mean,False,selected_mapping_exact_picker,True
+Sagarin: Predictor,sagarin_predictor,Sagarin Predictor,False,selected_mapping_exact_picker,True
+Sagarin: Recent,sagarin_recent,Sagarin Recent,False,selected_mapping_exact_picker,True
+Slate Index,linept_fluker,Slate Fluker,False,matched_existing_alias,True
+SportsLine,linecfbp_sportsline,SportsLine,False,selected_mapping_exact_picker,True
+SportsRatings,linecfbp_sportsratings,SportsRatings,False,selected_mapping_exact_picker,True
+TShoe Index,linecfbp_tshoe_index,TShoe Index,False,selected_mapping_exact_picker,True
+TeamRankings,teamrankings,TeamRankings.com,False,selected_mapping_exact_picker,True
+Wilson Ratings,linecfbp_wilson_ratings,Wilson Ratings,False,selected_mapping_exact_picker,True
+Action Network,cfbpicker_actionnetwork,Action Network,True,new_cfbpicker_model,False
+All-Takes,cfbpicker_alltakes,All-Takes,True,new_cfbpicker_model,False
+CFB Insiders,cfbpicker_cfbinsiders,CFB Insiders,True,new_cfbpicker_model,False
+G3 Projections,cfbpicker_g3projections,G3 Projections,True,new_cfbpicker_model,False
+McConnell,cfbpicker_mcconnell,McConnell,True,new_cfbpicker_model,False
+University Foot-Ball,cfbpicker_universityfootball,University Foot-Ball,True,new_cfbpicker_model,False

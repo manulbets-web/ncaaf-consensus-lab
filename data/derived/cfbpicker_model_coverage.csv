@@ -1,0 +1,44 @@
+picker,canonical_model_id,model_name,is_new_canonical_model,parsed_rows,matched_rows,overlap_rows,appended_rows
+Beta_Rank,linecfbp_beta_rank,Beta_Rank,False,1613,1287,1287,0
+Blake Atkinson,linecfbp_blake_atkinson,Blake Atkinson,False,515,409,409,0
+CBCR2: Power,linecfbp_cbcr2_power,CBCR2: Power,False,1063,843,843,0
+CBCR2: Sam,linecfbp_cbcr2_sam,CBCR2: Sam,False,515,409,409,0
+CFB Geek,linecfbp_cfb_geek,CFB Geek,False,1613,1287,1287,0
+CFB Graphs,linecfbp_cfb_graphs,CFB Graphs,False,1612,1288,1288,0
+CFB Victory,linecfbp_cfb_victory,CFB Victory,False,1098,878,878,0
+Congrove,congrove,Congrove Computer Rankings,False,1613,1287,1287,0
+DRatings,linecfbp_dratings,DRatings,False,1613,1287,1287,0
+David Sasser,linecfbp_david_sasser,David Sasser,False,550,444,444,0
+Dokter Entropy,dokter_entropy,Dokter Entropy,False,1613,1287,1287,0
+ESPN FPI,espn_fpi,ESPN FPI,False,1613,1287,1287,0
+FEI,fei,FEI Projections,False,1063,843,843,0
+Harville,harville,David Harville,False,1613,1287,1287,0
+JP+,linecfbp_jp,JP+,False,1613,1287,1287,0
+John Harris,linecfbp_john_harris,John Harris,False,1098,879,879,0
+KFord,linecfbp_kford,KFord,False,1613,1287,1287,0
+Keeper,keeper,Keeper,False,1612,1286,1286,0
+Massey,massey,Massey Ratings,False,1613,1287,1287,0
+Matt Grissom,linecfbp_matt_grissom,Matt Grissom,False,1098,878,878,0
+McIllece Sports,linecfbp_mcillece_sports,McIllece Sports,False,550,444,444,0
+Moore Ratings,moore_ratings,Moore Power Ratings,False,1612,1286,1286,0
+OddsTrader AI,linecfbp_oddstrader_ai,OddsTrader AI,False,1064,851,851,0
+PEARatings,linecfbp_pearatings,PEARatings,False,550,444,444,0
+PiRate,piratings,Pi-Ratings,False,1613,1287,1287,0
+PiRate: Bias,piratings_bias,PI-Rate Bias,False,1613,1287,1287,0
+PiRate: Mean,piratings_mean,Pi-Ratings Mean,False,1613,1287,1287,0
+Power Rank,linecfbp_power_rank,Power Rank,False,1613,1287,1287,0
+Power Rank: Free,linecfbp_power_rank_free,Power Rank: Free,False,1063,843,843,0
+Professor Sides,linecfbp_professor_sides,Professor Sides,False,1609,1283,1283,0
+Room44 Bets,linecfbp_room44_bets,Room44 Bets,False,1613,1287,1287,0
+Ryder Analytics,linecfbp_ryder_analytics,Ryder Analytics,False,550,444,444,0
+SP+,linecfbp_sp,SP+,False,1613,1287,1287,0
+Sagarin,sagarin,Sagarin Ratings,False,1613,1287,1287,0
+Sagarin: Golden,sagarin_golden_mean,Sagarin Golden Mean,False,1613,1287,1287,0
+Sagarin: Predictor,sagarin_predictor,Sagarin Predictor,False,1613,1287,1287,0
+Sagarin: Recent,sagarin_recent,Sagarin Recent,False,1613,1287,1287,0
+SportsLine,linecfbp_sportsline,SportsLine,False,1613,1288,1288,0
+SportsRatings,linecfbp_sportsratings,SportsRatings,False,550,444,444,0
+TShoe Index,linecfbp_tshoe_index,TShoe Index,False,1611,1285,1285,0
+TeamRankings,teamrankings,TeamRankings.com,False,1613,1287,1287,0
+Trent Sorensen,linecfbp_trent_sorensen,Trent Sorensen,False,1098,878,878,0
+Wilson Ratings,linecfbp_wilson_ratings,Wilson Ratings,False,1613,1287,1287,0

@@ -1,0 +1,10 @@
+{
+  "created_at_utc": "2026-09-01T16:46:32.856881Z",
+  "season": 2026,
+  "week": 2,
+  "rows": 344,
+  "games": 8,
+  "models": 43,
+  "canonical_sha256": "48b36788869051c650bcde2a0380edccaedff8431ec0f5ebea7038312fb8da51",
+  "transport": "tableau_embedding_api_tooltip_existing_cache"
+}

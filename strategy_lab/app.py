@@ -21,6 +21,7 @@ from committee import (
 from current_week import (
     refresh_and_build_current_week,
     build_current_board_from_cached_sources,
+    current_cfbpicker_model_map,
     save_current_selection,
 )
 from line_movement import (
@@ -1266,23 +1267,31 @@ def server(input, output, session):
         return render.DataGrid(d, filters=True, height="650px")
 
     # ------------------------------------------------------------------
-    # Page 2: PredictionTracker raw upcoming board
+    # Page 2: verified PredictionTracker + CFB Picker upcoming board
     # ------------------------------------------------------------------
     @ui.bind_task_button(button_id="refresh_upcoming")
     @reactive.extended_task
     async def upcoming_task(season: int, week: int):
         def compute():
+            cfb_names = current_cfbpicker_model_map(
+                PROJECT_ROOT, season=int(season), week=int(week)
+            )
+            current_ids = list(dict.fromkeys([
+                *ALL_MODEL_IDS, *cfb_names.keys()
+            ]))
+            current_names = {**MODEL_NAME_MAP, **cfb_names}
             return refresh_and_build_current_week(
                 PROJECT_ROOT,
                 DATA,
-                ALL_MODEL_IDS,
-                MODEL_NAME_MAP,
+                current_ids,
+                current_names,
                 season=int(season),
                 week=int(week),
                 primary_k=0.25,
                 min_available_models=2,
                 refresh=True,
-                include_cfbpicker=False,
+                include_cfbpicker=True,
+                refresh_cfbpicker=False,
                 write_outputs=False,
             )
         return await asyncio.to_thread(compute)
@@ -1298,7 +1307,7 @@ def server(input, output, session):
         return upcoming_task.result()
 
     def current_week_available_model_ids():
-        """Canonical models with at least one actual PT projection for the active week."""
+        """Canonical models with an actual PT or CFB Picker current projection."""
         r = upcoming_result()
         if r is None:
             return set(), False, "Refresh PredictionTracker on Page 2 first."
@@ -1310,9 +1319,9 @@ def server(input, output, session):
                 return set(), False, "Page 2 was refreshed for a different season/week; refresh it again."
         p = r.get("predictions", pd.DataFrame())
         if p.empty or "canonical_model_id" not in p.columns:
-            return set(), True, "PredictionTracker loaded, but no mapped models have posted projections."
+            return set(), True, "Current sources loaded, but no mapped models have posted projections."
         ids = set(p["canonical_model_id"].dropna().astype(str))
-        return ids, True, f"{len(ids)} canonical models are posting in the active PredictionTracker week."
+        return ids, True, f"{len(ids)} canonical models are posting across the verified current sources."
 
     @render.text
     def upcoming_status():
@@ -1324,9 +1333,18 @@ def server(input, output, session):
         if s == "success":
             r = upcoming_result()
             live = len(r.get("pt_live_models", pd.DataFrame())) if r else 0
+            predictions = r.get("predictions", pd.DataFrame()) if r else pd.DataFrame()
+            cfb = predictions[
+                predictions.get("source", pd.Series(index=predictions.index, dtype=str)).eq("cfbpicker")
+            ] if len(predictions) else pd.DataFrame()
+            cfb_models = int(cfb["canonical_model_id"].nunique()) if len(cfb) else 0
             transport = ((r or {}).get("refresh_status") or {}).get("predictiontracker_transport") or "unknown"
             via = "direct source" if transport == "direct" else "verified GitHub mirror" if transport == "github_mirror" else transport
-            return f"PredictionTracker verified and loaded via {via}. {live} model columns are currently posting. CFB Picker was not queried."
+            return (
+                f"PredictionTracker verified and loaded via {via}. {live} PT model columns are posting. "
+                f"The season/week-matched CFB Picker cache contributes {len(cfb)} incremental "
+                f"model-game rows across {cfb_models} canonical models after PT-first de-duplication."
+            )
         if s == "error":
             return "PredictionTracker refresh failed. Connect Cloud is blocked by the source and no matching verified GitHub mirror was available. Run the local mirror helper on your Mac, then click Refresh again."
         return str(s)
@@ -2472,7 +2490,7 @@ def server(input, output, session):
                     week=int(week),
                     primary_k=float(combo_k),
                     min_available_models=min(int(min_n), len(ids)),
-                    include_cfbpicker=False,
+                    include_cfbpicker=True,
                     write_outputs=False,
                 )
                 b = rr.get("board", pd.DataFrame()).copy()

@@ -1,0 +1,44 @@
+picker,canonical_model_id,model_name,is_new_canonical_model,mapping_reason
+Beta_Rank,linecfbp_beta_rank,Beta_Rank,False,matched_existing_alias
+Blake Atkinson,linecfbp_blake_atkinson,Blake Atkinson,False,matched_existing_alias
+CBCR2: Power,linecfbp_cbcr2_power,CBCR2: Power,False,matched_existing_alias
+CBCR2: Sam,linecfbp_cbcr2_sam,CBCR2: Sam,False,matched_existing_alias
+CFB Geek,linecfbp_cfb_geek,CFB Geek,False,matched_existing_alias
+CFB Graphs,linecfbp_cfb_graphs,CFB Graphs,False,matched_existing_alias
+CFB Victory,linecfbp_cfb_victory,CFB Victory,False,matched_existing_alias
+Congrove,congrove,Congrove Computer Rankings,False,matched_existing_alias
+DRatings,linecfbp_dratings,DRatings,False,matched_existing_alias
+David Sasser,linecfbp_david_sasser,David Sasser,False,matched_existing_alias
+Dokter Entropy,dokter_entropy,Dokter Entropy,False,matched_existing_alias
+ESPN FPI,espn_fpi,ESPN FPI,False,matched_existing_alias
+FEI,fei,FEI Projections,False,matched_existing_alias
+Harville,harville,David Harville,False,matched_existing_alias
+JP+,linecfbp_jp,JP+,False,matched_existing_alias
+John Harris,linecfbp_john_harris,John Harris,False,matched_existing_alias
+KFord,linecfbp_kford,KFord,False,matched_existing_alias
+Keeper,keeper,Keeper,False,matched_existing_alias
+Massey,massey,Massey Ratings,False,matched_existing_alias
+Matt Grissom,linecfbp_matt_grissom,Matt Grissom,False,matched_existing_alias
+McIllece Sports,linecfbp_mcillece_sports,McIllece Sports,False,matched_existing_alias
+Moore Ratings,moore_ratings,Moore Power Ratings,False,matched_existing_alias
+OddsTrader AI,linecfbp_oddstrader_ai,OddsTrader AI,False,matched_existing_alias
+PEARatings,linecfbp_pearatings,PEARatings,False,matched_existing_alias
+PiRate,piratings,Pi-Ratings,False,matched_existing_alias
+PiRate: Bias,piratings_bias,PI-Rate Bias,False,matched_existing_alias
+PiRate: Mean,piratings_mean,Pi-Ratings Mean,False,matched_existing_alias
+Power Rank,linecfbp_power_rank,Power Rank,False,matched_existing_alias
+Power Rank: Free,linecfbp_power_rank_free,Power Rank: Free,False,matched_existing_alias
+Professor Sides,linecfbp_professor_sides,Professor Sides,False,matched_existing_alias
+Room44 Bets,linecfbp_room44_bets,Room44 Bets,False,matched_existing_alias
+Ryder Analytics,linecfbp_ryder_analytics,Ryder Analytics,False,matched_existing_alias
+SP+,linecfbp_sp,SP+,False,matched_existing_alias
+Sagarin,sagarin,Sagarin Ratings,False,matched_existing_alias
+Sagarin: Golden,sagarin_golden_mean,Sagarin Golden Mean,False,matched_existing_alias
+Sagarin: Predictor,sagarin_predictor,Sagarin Predictor,False,matched_existing_alias
+Sagarin: Recent,sagarin_recent,Sagarin Recent,False,matched_existing_alias
+SportsLine,linecfbp_sportsline,SportsLine,False,matched_existing_alias
+SportsRatings,linecfbp_sportsratings,SportsRatings,False,matched_existing_alias
+TShoe Index,linecfbp_tshoe_index,TShoe Index,False,matched_existing_alias
+TeamRankings,teamrankings,TeamRankings.com,False,matched_existing_alias
+Trent Sorensen,linecfbp_trent_sorensen,Trent Sorensen,False,matched_existing_alias
+Wilson Ratings,linecfbp_wilson_ratings,Wilson Ratings,False,matched_existing_alias

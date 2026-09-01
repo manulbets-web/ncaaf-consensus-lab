@@ -23,6 +23,7 @@ CFB_NAME_ALIASES = {
     "Sagarin Recent": "Sagarin: Recent",
     "TeamRankings.com": "TeamRankings",
     "David Harville": "Harville",
+    "Slate Fluker": "Slate Index",
 }
 
 
@@ -380,6 +381,9 @@ def load_predictiontracker_current(
 
 def load_cfbpicker_current(
     root: Path,
+    *,
+    season: int | None = None,
+    week: int | None = None,
 ) -> pd.DataFrame:
     path = root / "data/current/cfbpicker_current_long.csv"
     if not path.exists():
@@ -387,6 +391,12 @@ def load_cfbpicker_current(
     x = pd.read_csv(path, low_memory=False)
     if x.empty:
         return x
+    if season is not None and "season" in x.columns:
+        x = x[pd.to_numeric(x["season"], errors="coerce").eq(int(season))].copy()
+    if week is not None and "week" in x.columns:
+        x = x[pd.to_numeric(x["week"], errors="coerce").eq(int(week))].copy()
+    if x.empty:
+        return pd.DataFrame()
     out = pd.DataFrame({
         "away": x["away"].astype(str),
         "home": x["home"].astype(str),
@@ -404,6 +414,27 @@ def load_cfbpicker_current(
         "source_model_name": x["picker"].astype(str),
     })
     return out.dropna(subset=["prediction_home_margin"])
+
+
+def current_cfbpicker_model_map(
+    root: str | Path,
+    *,
+    season: int,
+    week: int,
+) -> dict[str, str]:
+    """Canonical live-model names available in the verified CFB Picker cache."""
+    current = load_cfbpicker_current(
+        Path(root), season=int(season), week=int(week)
+    )
+    if current.empty:
+        return {}
+    pairs = current[["canonical_model_id", "model_name"]].drop_duplicates(
+        "canonical_model_id", keep="last"
+    )
+    return dict(zip(
+        pairs["canonical_model_id"].astype(str),
+        pairs["model_name"].astype(str),
+    ))
 
 
 def build_current_board_from_cached_sources(
@@ -426,7 +457,7 @@ def build_current_board_from_cached_sources(
     )
 
     pt, pt_map = load_predictiontracker_current(root, mapping)
-    cfb = load_cfbpicker_current(root) if include_cfbpicker else pd.DataFrame()
+    cfb = load_cfbpicker_current(root, season=int(season), week=int(week)) if include_cfbpicker else pd.DataFrame()
     pt_master = predictiontracker_master_slate(root)
     pt_live = predictiontracker_live_model_columns(root)
 
@@ -968,6 +999,7 @@ def refresh_current_sources(
     season: int,
     week: int,
     include_cfbpicker: bool = True,
+    refresh_cfbpicker: bool = True,
 ) -> dict:
     root = Path(root).resolve()
     selected = list(dict.fromkeys(map(str, selected_ids)))
@@ -1065,7 +1097,23 @@ def refresh_current_sources(
         status["cfbpicker"] = {
             "returncode": 0,
             "disabled": True,
-            "stderr": "CFB Picker intentionally disabled in v3.5.3 until the 2026 feed is available.",
+            "stderr": "CFB Picker intentionally disabled for this refresh.",
+        }
+    elif not refresh_cfbpicker:
+        cached_cfb = load_cfbpicker_current(
+            root, season=int(season), week=int(week)
+        )
+        status["cfbpicker"] = {
+            "returncode": 0 if len(cached_cfb) else 1,
+            "refreshed": False,
+            "transport": "verified_local_or_deployed_cache",
+            "rows": int(len(cached_cfb)),
+            "models": int(cached_cfb["canonical_model_id"].nunique())
+            if len(cached_cfb) else 0,
+            "stderr": "" if len(cached_cfb) else (
+                "No season/week-matched CFB Picker cache was available. "
+                "Run the Mac-side CFB Picker refresh and redeploy the mirror."
+            ),
         }
     elif cfb_script.exists():
         status["cfbpicker"] = _run(
@@ -1084,7 +1132,7 @@ def refresh_current_sources(
                 "--quick",
             ],
             root,
-            timeout_seconds=75,
+            timeout_seconds=900,
         )
     else:
         status["cfbpicker"] = {
@@ -1251,6 +1299,7 @@ def refresh_and_build_current_week(
     min_available_models: int = 4,
     refresh: bool = True,
     include_cfbpicker: bool = True,
+    refresh_cfbpicker: bool = True,
     write_outputs: bool = True,
 ) -> dict:
     root = Path(root)
@@ -1264,6 +1313,7 @@ def refresh_and_build_current_week(
             season=season,
             week=week,
             include_cfbpicker=include_cfbpicker,
+            refresh_cfbpicker=refresh_cfbpicker,
         )
 
         # CRITICAL: never report a successful refresh while silently rebuilding

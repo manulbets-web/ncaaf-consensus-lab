@@ -1,84 +1,87 @@
 canonical_model_id,model_name,source_coverage,n_source_members,source_specific_model_ids,source_model_names,relationship,preferred_source,include_default,notes,first_season,last_season,seasons_active,source_records
-linept_argh,Argh Ratings,predictiontracker,1,linept_argh,Argh Ratings,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2024,4,3135
-linept_elo,Beck Elo,predictiontracker,1,linept_elo,Beck Elo,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3896
-linecfbp_beta_rank,Beta_Rank,cfbpicker,1,linecfbp_beta_rank,Beta_Rank,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2025,5,2638
-linept_big200,Big 200,predictiontracker,1,linept_big200,Big 200,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2024,2025,2,1558
-linept_bihl,Bihl System,predictiontracker,1,linept_bihl,Bihl System,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,2161
-linept_bill,Billingsley,predictiontracker,1,linept_bill,Billingsley,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3895
-linecfbp_blake_atkinson,Blake Atkinson,cfbpicker,1,linecfbp_blake_atkinson,Blake Atkinson,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023,2023,1,515
-linept_born,Born Power Index,predictiontracker,1,linept_born,Born Power Index,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2024,4,3133
-linecfbp_cbcr2_power,CBCR2: Power,cfbpicker,1,linecfbp_cbcr2_power,CBCR2: Power,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023,2024,2,1063
-linecfbp_cbcr2_sam,CBCR2: Sam,cfbpicker,1,linecfbp_cbcr2_sam,CBCR2: Sam,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023,2023,1,515
-linecfbp_cfb_geek,CFB Geek,cfbpicker,1,linecfbp_cfb_geek,CFB Geek,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2025,4,2122
-linecfbp_cfb_graphs,CFB Graphs,cfbpicker,1,linecfbp_cfb_graphs,CFB Graphs,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022,2025,4,2128
-linecfbp_cfb_professor,CFB Professor,cfbpicker,1,linecfbp_cfb_professor,CFB Professor,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2022,2,1022
-linecfbp_cfb_victory,CFB Victory,cfbpicker,1,linecfbp_cfb_victory,CFB Victory,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2024,2025,2,1098
-linecfbp_cfbwe,CFBWE,cfbpicker,1,linecfbp_cfbwe,CFBWE,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022,2022,1,516
-linecfbp_cfbwe_average,CFBWE: Average,cfbpicker,1,linecfbp_cfbwe_average,CFBWE: Average,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022,2022,1,516
-linecfbp_cfbwe_margin,CFBWE: Margin,cfbpicker,1,linecfbp_cfbwe_margin,CFBWE: Margin,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022,2022,1,516
-linecfbp_cfbwe_rounded,CFBWE: Rounded,cfbpicker,1,linecfbp_cfbwe_rounded,CFBWE: Rounded,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022,2022,1,516
-linecfbp_cfbwe_talent,CFBWE: Talent,cfbpicker,1,linecfbp_cfbwe_talent,CFBWE: Talent,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022,2022,1,516
-linept_clean,Cleanup Hitter,predictiontracker,1,linept_clean,Cleanup Hitter,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3855
-congrove,Congrove Computer Rankings,cfbpicker+predictiontracker,2,linecfbp_congrove | linept_cong,Congrove | Congrove Computer Rankings,confirmed_duplicate,predictiontracker,True,Congrove cross-source identity; forecasts are nearly identical.,2021,2025,5,6532
-linept_dwig,DP Dwiggins,predictiontracker,1,linept_dwig,DP Dwiggins,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3888
-linecfbp_dratings,DRatings,cfbpicker,1,linecfbp_dratings,DRatings,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2025,5,2638
-linept_curry,Daniel Curry Index,predictiontracker,1,linept_curry,Daniel Curry Index,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3893
-harville,David Harville,cfbpicker+predictiontracker,2,linecfbp_harville | linept_harville,Harville | David Harville,confirmed_duplicate,predictiontracker,True,Harville / David Harville cross-source identity.,2021,2025,5,6532
-linecfbp_david_sasser,David Sasser,cfbpicker,1,linecfbp_david_sasser,David Sasser,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2025,2025,1,550
-dokter_entropy,Dokter Entropy,cfbpicker+predictiontracker,2,linecfbp_dokter_entropy | linept_dokter,Dokter Entropy | Dokter Entropy,same_model_different_snapshot,predictiontracker,True,Same named model; snapshots differ enough to retain an audit flag.,2021,2025,5,6513
-linept_donchess,Donchess Inference,predictiontracker,1,linept_donchess,Donchess Inference,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3896
-linept_dunk,Dunkel Index,predictiontracker,1,linept_dunk,Dunkel Index,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3472
-espn_fpi,ESPN FPI,cfbpicker+predictiontracker,2,linecfbp_espn_fpi | linept_espn,ESPN FPI | ESPN FPI,same_model_different_snapshot,predictiontracker,True,Same ESPN FPI model with different collection snapshots.,2021,2025,5,6527
-linept_kam,Edward Kambour,predictiontracker,1,linept_kam,Edward Kambour,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3894
-fei,FEI Projections,cfbpicker+predictiontracker,2,linecfbp_fei | linept_fei,FEI | FEI Projections,same_model_different_snapshot,predictiontracker,True,FEI / FEI Projections cross-source identity with snapshot differences.,2021,2025,5,5983
-linept_how,Howell,predictiontracker,1,linept_how,Howell,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3894
-linecfbp_jp,JP+,cfbpicker,1,linecfbp_jp,JP+,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022,2025,4,2129
-linecfbp_john_harris,John Harris,cfbpicker,1,linecfbp_john_harris,John Harris,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2024,2025,2,1098
-linecfbp_kford,KFord,cfbpicker,1,linecfbp_kford,KFord,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023,2025,3,1613
-keeper,Keeper,cfbpicker+predictiontracker,2,linecfbp_keeper | linept_keep,Keeper | Keeper,confirmed_duplicate,predictiontracker,True,Same named model; near-identical forecasts across shared games.,2021,2025,5,5489
-linept_rwp,Laffaye RWP,predictiontracker,1,linept_rwp,Laffaye RWP,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3767
-linept_laz,Laz Index,predictiontracker,1,linept_laz,Laz Index,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3894
-linept_log,Logistic Regression,predictiontracker,1,linept_log,Logistic Regression,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,1908
-linept_loud,Loudsound.org,predictiontracker,1,linept_loud,Loudsound.org,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3814
-massey,Massey Ratings,cfbpicker+predictiontracker,2,linecfbp_massey | linept_mass,Massey | Massey Ratings,same_model_different_snapshot,predictiontracker,True,Same Massey model family/name across the two sources.,2021,2025,5,6024
-linecfbp_matt_grissom,Matt Grissom,cfbpicker,1,linecfbp_matt_grissom,Matt Grissom,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2024,2025,2,1098
-linecfbp_mcillece_sports,McIllece Sports,cfbpicker,1,linecfbp_mcillece_sports,McIllece Sports,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2025,2025,1,550
-moore_ratings,Moore Power Ratings,cfbpicker+predictiontracker,2,linecfbp_moore_ratings | linept_moore,Moore Ratings | Moore Power Ratings,same_model_different_snapshot,predictiontracker,True,Moore Ratings / Moore Power Ratings cross-source identity.,2021,2025,5,6527
-linecfbp_obmodel,OBModel,cfbpicker,1,linecfbp_obmodel,OBModel,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2021,1,507
-linecfbp_oddstrader_ai,OddsTrader AI,cfbpicker,1,linecfbp_oddstrader_ai,OddsTrader AI,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023,2025,2,1064
-linecfbp_pearatings,PEARatings,cfbpicker,1,linecfbp_pearatings,PEARatings,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2025,2025,1,550
-piratings_bias,PI-Rate Bias,cfbpicker+predictiontracker,2,linecfbp_pirate_bias | linept_pibias,PiRate: Bias | PI-Rate Bias,confirmed_duplicate,predictiontracker,True,PiRate Bias / PI-Rate Bias cross-source identity.,2021,2025,5,6532
-linept_pfz,PerformanZ Ratings,predictiontracker,1,linept_pfz,PerformanZ Ratings,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3896
-piratings,Pi-Ratings,cfbpicker+predictiontracker,2,linecfbp_pirate | linept_piratings,PiRate | Pi-Ratings,confirmed_duplicate,predictiontracker,True,PiRate / Pi-Ratings cross-source identity.,2021,2025,5,6532
-piratings_mean,Pi-Ratings Mean,cfbpicker+predictiontracker,2,linecfbp_pirate_mean | linept_pimean,PiRate: Mean | Pi-Ratings Mean,confirmed_duplicate,predictiontracker,True,PiRate Mean / Pi-Ratings Mean cross-source identity.,2021,2025,5,6532
-linept_pig,Pigskin Index,predictiontracker,1,linept_pig,Pigskin Index,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3443
-linecfbp_power_rank,Power Rank,cfbpicker,1,linecfbp_power_rank,Power Rank,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2025,5,2636
-linecfbp_power_rank_free,Power Rank: Free,cfbpicker,1,linecfbp_power_rank_free,Power Rank: Free,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022,2024,3,1579
-linecfbp_professor_sides,Professor Sides,cfbpicker,1,linecfbp_professor_sides,Professor Sides,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2025,5,2632
-linept_pugh,Pugh Ratings,predictiontracker,1,linept_pugh,Pugh Ratings,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3889
-linecfbp_room44_bets,Room44 Bets,cfbpicker,1,linecfbp_room44_bets,Room44 Bets,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2025,5,2636
-linecfbp_ryder_analytics,Ryder Analytics,cfbpicker,1,linecfbp_ryder_analytics,Ryder Analytics,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2025,2025,1,550
-linecfbp_si_composite,SI Composite,cfbpicker,1,linecfbp_si_composite,SI Composite,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2021,1,505
-linecfbp_sp,SP+,cfbpicker,1,linecfbp_sp,SP+,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2025,5,2638
-linecfbp_sv_bettor,SV Bettor,cfbpicker,1,linecfbp_sv_bettor,SV Bettor,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2021,1,507
-sagarin_golden_mean,Sagarin Golden Mean,cfbpicker+predictiontracker,2,linecfbp_sagarin_golden | linept_saggm,Sagarin: Golden | Sagarin Golden Mean,same_model_different_snapshot,predictiontracker,True,Same Sagarin Golden Mean variant; source snapshots differ.,2021,2025,5,6534
-sagarin_predictor,Sagarin Predictor,cfbpicker+predictiontracker,2,linecfbp_sagarin_predictor | linept_sagpred,Sagarin: Predictor | Sagarin Predictor,same_model_different_snapshot,predictiontracker,True,Same Sagarin Predictor variant; source snapshots differ.,2021,2025,5,6534
-sagarin,Sagarin Ratings,cfbpicker+predictiontracker,2,linecfbp_sagarin | linept_sag,Sagarin | Sagarin Ratings,same_model_different_snapshot,predictiontracker,True,Same Sagarin base system; source snapshots differ modestly.,2021,2025,5,6534
-sagarin_recent,Sagarin Recent,cfbpicker+predictiontracker,2,linecfbp_sagarin_recent | linept_sagr,Sagarin: Recent | Sagarin Recent,same_model_different_snapshot,predictiontracker,True,Same Sagarin Recent variant; source snapshots differ.,2021,2025,5,6534
-linept_fluker,Slate Fluker,predictiontracker,1,linept_fluker,Slate Fluker,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2025,2025,1,694
-linecfbp_sportsline,SportsLine,cfbpicker,1,linecfbp_sportsline,SportsLine,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023,2025,3,1613
-linecfbp_sportsratings,SportsRatings,cfbpicker,1,linecfbp_sportsratings,SportsRatings,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2025,2025,1,550
-linept_kerns,Stephen Kerns,predictiontracker,1,linept_kerns,Stephen Kerns,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3896
-linecfbp_tshoe_index,TShoe Index,cfbpicker,1,linecfbp_tshoe_index,TShoe Index,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022,2025,4,2127
-linept_talis,Talisman Red,predictiontracker,1,linept_talis,Talisman Red,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2025,5,3839
-teamrankings,TeamRankings.com,cfbpicker+predictiontracker,2,linecfbp_teamrankings | linept_teamrank,TeamRankings | TeamRankings.com,same_model_different_snapshot,predictiontracker,True,Same named system; small cross-source snapshot differences.,2021,2025,5,6534
-linecfbp_trent_sorensen,Trent Sorensen,cfbpicker,1,linecfbp_trent_sorensen,Trent Sorensen,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2024,2025,2,1098
-linept_wayward,Waywardtrends,predictiontracker,1,linept_wayward,Waywardtrends,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2024,2025,2,1559
-linecfbp_wilson_ratings,Wilson Ratings,cfbpicker,1,linecfbp_wilson_ratings,Wilson Ratings,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021,2025,5,2638
-linept_cather,linecather,predictiontracker,1,linept_cather,linecather,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2022,2,923
-linept_fox,linefox,predictiontracker,1,linept_fox,linefox,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2023,3,2329
-linept_payne,linepayne,predictiontracker,1,linept_payne,linepayne,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2024,4,3124
-linept_paynep,linepaynep,predictiontracker,1,linept_paynep,linepaynep,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2024,4,3124
-linept_paynewl,linepaynewl,predictiontracker,1,linept_paynewl,linepaynewl,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2024,4,3124
-linept_round,lineround,predictiontracker,1,linept_round,lineround,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2024,4,2105
-linept_super,linesuper,predictiontracker,1,linept_super,linesuper,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021,2021,1,769
+linept_argh,Argh Ratings,predictiontracker,1.0,linept_argh,Argh Ratings,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2024.0,4.0,3135.0
+linept_elo,Beck Elo,predictiontracker,1.0,linept_elo,Beck Elo,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3896.0
+linecfbp_beta_rank,Beta_Rank,cfbpicker,1.0,linecfbp_beta_rank,Beta_Rank,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,2638.0
+linept_big200,Big 200,predictiontracker,1.0,linept_big200,Big 200,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2024.0,2025.0,2.0,1558.0
+linept_bihl,Bihl System,predictiontracker,1.0,linept_bihl,Bihl System,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,2161.0
+linept_bill,Billingsley,predictiontracker,1.0,linept_bill,Billingsley,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3895.0
+linecfbp_blake_atkinson,Blake Atkinson,cfbpicker,1.0,linecfbp_blake_atkinson,Blake Atkinson,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023.0,2023.0,1.0,515.0
+linept_born,Born Power Index,predictiontracker,1.0,linept_born,Born Power Index,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2024.0,4.0,3133.0
+linecfbp_cbcr2_power,CBCR2: Power,cfbpicker,1.0,linecfbp_cbcr2_power,CBCR2: Power,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023.0,2024.0,2.0,1063.0
+linecfbp_cbcr2_sam,CBCR2: Sam,cfbpicker,1.0,linecfbp_cbcr2_sam,CBCR2: Sam,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023.0,2023.0,1.0,515.0
+linecfbp_cfb_geek,CFB Geek,cfbpicker,1.0,linecfbp_cfb_geek,CFB Geek,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2025.0,4.0,2122.0
+linecfbp_cfb_graphs,CFB Graphs,cfbpicker,1.0,linecfbp_cfb_graphs,CFB Graphs,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022.0,2025.0,4.0,2128.0
+linecfbp_cfb_professor,CFB Professor,cfbpicker,1.0,linecfbp_cfb_professor,CFB Professor,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2022.0,2.0,1022.0
+linecfbp_cfb_victory,CFB Victory,cfbpicker,1.0,linecfbp_cfb_victory,CFB Victory,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2024.0,2025.0,2.0,1098.0
+linecfbp_cfbwe,CFBWE,cfbpicker,1.0,linecfbp_cfbwe,CFBWE,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022.0,2022.0,1.0,516.0
+linecfbp_cfbwe_average,CFBWE: Average,cfbpicker,1.0,linecfbp_cfbwe_average,CFBWE: Average,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022.0,2022.0,1.0,516.0
+linecfbp_cfbwe_margin,CFBWE: Margin,cfbpicker,1.0,linecfbp_cfbwe_margin,CFBWE: Margin,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022.0,2022.0,1.0,516.0
+linecfbp_cfbwe_rounded,CFBWE: Rounded,cfbpicker,1.0,linecfbp_cfbwe_rounded,CFBWE: Rounded,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022.0,2022.0,1.0,516.0
+linecfbp_cfbwe_talent,CFBWE: Talent,cfbpicker,1.0,linecfbp_cfbwe_talent,CFBWE: Talent,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022.0,2022.0,1.0,516.0
+linept_clean,Cleanup Hitter,predictiontracker,1.0,linept_clean,Cleanup Hitter,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3855.0
+congrove,Congrove Computer Rankings,cfbpicker+predictiontracker,2.0,linecfbp_congrove | linept_cong,Congrove | Congrove Computer Rankings,confirmed_duplicate,predictiontracker,True,Congrove cross-source identity; forecasts are nearly identical.,2021.0,2025.0,5.0,6532.0
+linept_dwig,DP Dwiggins,predictiontracker,1.0,linept_dwig,DP Dwiggins,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3888.0
+linecfbp_dratings,DRatings,cfbpicker,1.0,linecfbp_dratings,DRatings,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,2638.0
+linept_curry,Daniel Curry Index,predictiontracker,1.0,linept_curry,Daniel Curry Index,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3893.0
+harville,David Harville,cfbpicker+predictiontracker,2.0,linecfbp_harville | linept_harville,Harville | David Harville,confirmed_duplicate,predictiontracker,True,Harville / David Harville cross-source identity.,2021.0,2025.0,5.0,6532.0
+linecfbp_david_sasser,David Sasser,cfbpicker,1.0,linecfbp_david_sasser,David Sasser,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2025.0,2025.0,1.0,550.0
+dokter_entropy,Dokter Entropy,cfbpicker+predictiontracker,2.0,linecfbp_dokter_entropy | linept_dokter,Dokter Entropy | Dokter Entropy,same_model_different_snapshot,predictiontracker,True,Same named model; snapshots differ enough to retain an audit flag.,2021.0,2025.0,5.0,6513.0
+linept_donchess,Donchess Inference,predictiontracker,1.0,linept_donchess,Donchess Inference,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3896.0
+linept_dunk,Dunkel Index,predictiontracker,1.0,linept_dunk,Dunkel Index,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3472.0
+espn_fpi,ESPN FPI,cfbpicker+predictiontracker,2.0,linecfbp_espn_fpi | linept_espn,ESPN FPI | ESPN FPI,same_model_different_snapshot,predictiontracker,True,Same ESPN FPI model with different collection snapshots.,2021.0,2025.0,5.0,6527.0
+linept_kam,Edward Kambour,predictiontracker,1.0,linept_kam,Edward Kambour,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3894.0
+fei,FEI Projections,cfbpicker+predictiontracker,2.0,linecfbp_fei | linept_fei,FEI | FEI Projections,same_model_different_snapshot,predictiontracker,True,FEI / FEI Projections cross-source identity with snapshot differences.,2021.0,2025.0,5.0,5983.0
+linept_how,Howell,predictiontracker,1.0,linept_how,Howell,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3894.0
+linecfbp_jp,JP+,cfbpicker,1.0,linecfbp_jp,JP+,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022.0,2025.0,4.0,2129.0
+linecfbp_john_harris,John Harris,cfbpicker,1.0,linecfbp_john_harris,John Harris,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2024.0,2025.0,2.0,1098.0
+linecfbp_kford,KFord,cfbpicker,1.0,linecfbp_kford,KFord,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023.0,2025.0,3.0,1613.0
+keeper,Keeper,cfbpicker+predictiontracker,2.0,linecfbp_keeper | linept_keep,Keeper | Keeper,confirmed_duplicate,predictiontracker,True,Same named model; near-identical forecasts across shared games.,2021.0,2025.0,5.0,5489.0
+linept_rwp,Laffaye RWP,predictiontracker,1.0,linept_rwp,Laffaye RWP,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3767.0
+linept_laz,Laz Index,predictiontracker,1.0,linept_laz,Laz Index,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3894.0
+linept_log,Logistic Regression,predictiontracker,1.0,linept_log,Logistic Regression,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,1908.0
+linept_loud,Loudsound.org,predictiontracker,1.0,linept_loud,Loudsound.org,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3814.0
+massey,Massey Ratings,cfbpicker+predictiontracker,2.0,linecfbp_massey | linept_mass,Massey | Massey Ratings,same_model_different_snapshot,predictiontracker,True,Same Massey model family/name across the two sources.,2021.0,2025.0,5.0,6024.0
+linecfbp_matt_grissom,Matt Grissom,cfbpicker,1.0,linecfbp_matt_grissom,Matt Grissom,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2024.0,2025.0,2.0,1098.0
+linecfbp_mcillece_sports,McIllece Sports,cfbpicker,1.0,linecfbp_mcillece_sports,McIllece Sports,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2025.0,2025.0,1.0,550.0
+moore_ratings,Moore Power Ratings,cfbpicker+predictiontracker,2.0,linecfbp_moore_ratings | linept_moore,Moore Ratings | Moore Power Ratings,same_model_different_snapshot,predictiontracker,True,Moore Ratings / Moore Power Ratings cross-source identity.,2021.0,2025.0,5.0,6527.0
+linecfbp_obmodel,OBModel,cfbpicker,1.0,linecfbp_obmodel,OBModel,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2021.0,1.0,507.0
+linecfbp_oddstrader_ai,OddsTrader AI,cfbpicker,1.0,linecfbp_oddstrader_ai,OddsTrader AI,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023.0,2025.0,2.0,1064.0
+linecfbp_pearatings,PEARatings,cfbpicker,1.0,linecfbp_pearatings,PEARatings,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2025.0,2025.0,1.0,550.0
+piratings_bias,PI-Rate Bias,cfbpicker+predictiontracker,2.0,linecfbp_pirate_bias | linept_pibias,PiRate: Bias | PI-Rate Bias,confirmed_duplicate,predictiontracker,True,PiRate Bias / PI-Rate Bias cross-source identity.,2021.0,2025.0,5.0,6532.0
+linept_pfz,PerformanZ Ratings,predictiontracker,1.0,linept_pfz,PerformanZ Ratings,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3896.0
+piratings,Pi-Ratings,cfbpicker+predictiontracker,2.0,linecfbp_pirate | linept_piratings,PiRate | Pi-Ratings,confirmed_duplicate,predictiontracker,True,PiRate / Pi-Ratings cross-source identity.,2021.0,2025.0,5.0,6532.0
+piratings_mean,Pi-Ratings Mean,cfbpicker+predictiontracker,2.0,linecfbp_pirate_mean | linept_pimean,PiRate: Mean | Pi-Ratings Mean,confirmed_duplicate,predictiontracker,True,PiRate Mean / Pi-Ratings Mean cross-source identity.,2021.0,2025.0,5.0,6532.0
+linept_pig,Pigskin Index,predictiontracker,1.0,linept_pig,Pigskin Index,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3443.0
+linecfbp_power_rank,Power Rank,cfbpicker,1.0,linecfbp_power_rank,Power Rank,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,2636.0
+linecfbp_power_rank_free,Power Rank: Free,cfbpicker,1.0,linecfbp_power_rank_free,Power Rank: Free,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022.0,2024.0,3.0,1579.0
+linecfbp_professor_sides,Professor Sides,cfbpicker,1.0,linecfbp_professor_sides,Professor Sides,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,2632.0
+linept_pugh,Pugh Ratings,predictiontracker,1.0,linept_pugh,Pugh Ratings,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3889.0
+linecfbp_room44_bets,Room44 Bets,cfbpicker,1.0,linecfbp_room44_bets,Room44 Bets,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,2636.0
+linecfbp_ryder_analytics,Ryder Analytics,cfbpicker,1.0,linecfbp_ryder_analytics,Ryder Analytics,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2025.0,2025.0,1.0,550.0
+linecfbp_si_composite,SI Composite,cfbpicker,1.0,linecfbp_si_composite,SI Composite,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2021.0,1.0,505.0
+linecfbp_sp,SP+,cfbpicker,1.0,linecfbp_sp,SP+,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,2638.0
+linecfbp_sv_bettor,SV Bettor,cfbpicker,1.0,linecfbp_sv_bettor,SV Bettor,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2021.0,1.0,507.0
+sagarin_golden_mean,Sagarin Golden Mean,cfbpicker+predictiontracker,2.0,linecfbp_sagarin_golden | linept_saggm,Sagarin: Golden | Sagarin Golden Mean,same_model_different_snapshot,predictiontracker,True,Same Sagarin Golden Mean variant; source snapshots differ.,2021.0,2025.0,5.0,6534.0
+sagarin_predictor,Sagarin Predictor,cfbpicker+predictiontracker,2.0,linecfbp_sagarin_predictor | linept_sagpred,Sagarin: Predictor | Sagarin Predictor,same_model_different_snapshot,predictiontracker,True,Same Sagarin Predictor variant; source snapshots differ.,2021.0,2025.0,5.0,6534.0
+sagarin,Sagarin Ratings,cfbpicker+predictiontracker,2.0,linecfbp_sagarin | linept_sag,Sagarin | Sagarin Ratings,same_model_different_snapshot,predictiontracker,True,Same Sagarin base system; source snapshots differ modestly.,2021.0,2025.0,5.0,6534.0
+sagarin_recent,Sagarin Recent,cfbpicker+predictiontracker,2.0,linecfbp_sagarin_recent | linept_sagr,Sagarin: Recent | Sagarin Recent,same_model_different_snapshot,predictiontracker,True,Same Sagarin Recent variant; source snapshots differ.,2021.0,2025.0,5.0,6534.0
+linept_fluker,Slate Fluker,predictiontracker,1.0,linept_fluker,Slate Fluker,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2025.0,2025.0,1.0,694.0
+linecfbp_sportsline,SportsLine,cfbpicker,1.0,linecfbp_sportsline,SportsLine,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2023.0,2025.0,3.0,1613.0
+linecfbp_sportsratings,SportsRatings,cfbpicker,1.0,linecfbp_sportsratings,SportsRatings,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2025.0,2025.0,1.0,550.0
+linept_kerns,Stephen Kerns,predictiontracker,1.0,linept_kerns,Stephen Kerns,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3896.0
+linecfbp_tshoe_index,TShoe Index,cfbpicker,1.0,linecfbp_tshoe_index,TShoe Index,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2022.0,2025.0,4.0,2127.0
+linept_talis,Talisman Red,predictiontracker,1.0,linept_talis,Talisman Red,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,3839.0
+teamrankings,TeamRankings.com,cfbpicker+predictiontracker,2.0,linecfbp_teamrankings | linept_teamrank,TeamRankings | TeamRankings.com,same_model_different_snapshot,predictiontracker,True,Same named system; small cross-source snapshot differences.,2021.0,2025.0,5.0,6534.0
+linecfbp_trent_sorensen,Trent Sorensen,cfbpicker,1.0,linecfbp_trent_sorensen,Trent Sorensen,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2024.0,2025.0,2.0,1098.0
+linept_wayward,Waywardtrends,predictiontracker,1.0,linept_wayward,Waywardtrends,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2024.0,2025.0,2.0,1559.0
+linecfbp_wilson_ratings,Wilson Ratings,cfbpicker,1.0,linecfbp_wilson_ratings,Wilson Ratings,distinct_model,cfbpicker,True,No curated cross-source identity mapping.,2021.0,2025.0,5.0,2638.0
+linept_cather,linecather,predictiontracker,1.0,linept_cather,linecather,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2022.0,2.0,923.0
+linept_fox,linefox,predictiontracker,1.0,linept_fox,linefox,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2023.0,3.0,2329.0
+linept_payne,linepayne,predictiontracker,1.0,linept_payne,linepayne,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2024.0,4.0,3124.0
+linept_paynep,linepaynep,predictiontracker,1.0,linept_paynep,linepaynep,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2024.0,4.0,3124.0
+linept_paynewl,linepaynewl,predictiontracker,1.0,linept_paynewl,linepaynewl,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2024.0,4.0,3124.0
+linept_round,lineround,predictiontracker,1.0,linept_round,lineround,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2024.0,4.0,2105.0
+linept_super,linesuper,predictiontracker,1.0,linept_super,linesuper,distinct_model,predictiontracker,True,No curated cross-source identity mapping.,2021.0,2021.0,1.0,769.0
+cfbpicker_fei,FEI,,,,,,,,,,,,
+cfbpicker_fpi,FPI,,,,,,,,,,,,
+cfbpicker_sagarin,Sagarin,,,,,,,,,,,,

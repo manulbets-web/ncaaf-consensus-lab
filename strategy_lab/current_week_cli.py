@@ -17,6 +17,10 @@ def main():
     ap.add_argument("--season", type=int)
     ap.add_argument("--week", type=int)
     ap.add_argument("--cached-only", action="store_true")
+    ap.add_argument(
+        "--refresh-cfbpicker", action="store_true",
+        help="Explicitly run the slow Tableau collector; otherwise use the season/week cache.",
+    )
     args = ap.parse_args()
 
     root = args.root.expanduser().resolve()
@@ -75,7 +79,8 @@ def main():
             primary_k=k,
             min_available_models=min(min_n, len(ids)),
             refresh=(not args.cached_only and i == 0),
-            include_cfbpicker=False,
+            include_cfbpicker=True,
+            refresh_cfbpicker=bool(args.refresh_cfbpicker),
             # Preserve legacy outputs for a single set; portfolio gets its own files below.
             write_outputs=(len(combos) == 1),
         )

@@ -21,7 +21,7 @@ else
   git remote add origin "$REPO_URL"
 fi
 
-# v3.5.28: release rebuilds must never delete the verified PredictionTracker
+# v3.5.31: release rebuilds must never delete the verified PredictionTracker
 # mirror. If the working tree is missing mirror metadata, recover the newest
 # historical commit that still contains it, together with the matching CSV and
 # prospective mirror snapshots. This also self-heals repos affected by v3.5.21.
@@ -88,9 +88,30 @@ if meta.exists():
     )
 else:
     print("PredictionTracker mirror metadata not present; direct cloud refresh may remain blocked until a local mirror is created.")
+
+cfb_meta = Path("data/current/cfbpicker_mirror_status.json")
+cfb_csv = Path("data/current/cfbpicker_current_long.csv")
+if cfb_meta.exists():
+    if not cfb_csv.exists():
+        raise SystemExit("REFUSING TO PUSH: CFB Picker mirror metadata exists but current CSV is missing.")
+    cm = json.loads(cfb_meta.read_text(encoding="utf-8"))
+    cfb_expected = str(cm.get("canonical_sha256") or "").strip()
+    cfb_actual = hashlib.sha256(cfb_csv.read_bytes()).hexdigest()
+    if cfb_expected and cfb_actual != cfb_expected:
+        raise SystemExit(
+            "REFUSING TO PUSH: CFB Picker mirror metadata/CSV hash mismatch.\n"
+            f"  metadata: {cfb_expected[:12]}\n  csv:      {cfb_actual[:12]}\n"
+            "Publish the verified cache with scripts/scrape_cfbpicker_current.py --from-cache."
+        )
+    print(
+        "Verified CFB Picker mirror: "
+        f"season={cm.get('season')} week={cm.get('week')} rows={cm.get('rows')} hash={cfb_actual[:12]}"
+    )
+else:
+    print("CFB Picker mirror metadata not present; current boards will use PredictionTracker only.")
 PYMIRROR
 
-echo "Preflight: verifying v3.5.28 Patrick preset..."
+echo "Preflight: verifying v3.5.39 Patrick preset + CFB Picker API transport..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -139,7 +160,7 @@ if "save_prospective_current_week_snapshot" not in current_week:
 if "PT_MIRROR_CSV_URL" not in current_week:
     refresh_missing.append("GitHub mirror fallback")
 if refresh_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.28 refresh code detected:\n  " + "\n  ".join(refresh_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.39 refresh code detected:\n  " + "\n  ".join(refresh_missing))
 line_path = Path("strategy_lab/line_movement.py")
 if not line_path.exists():
     raise SystemExit("REFUSING TO PUSH: strategy_lab/line_movement.py is missing")
@@ -158,7 +179,7 @@ for x in ["line_active_strategy_status", '"discovery_periods": tuple(search_peri
     if x not in s:
         line_missing.append(x)
 if line_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.28 line-movement module detected:\n  " + "\n  ".join(line_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.39 line-movement module detected:\n  " + "\n  ".join(line_missing))
 fs_start = s.find("async def forward_stability_task(")
 fs_end = s.find("@reactive.effect", fs_start)
 fs_body = s[fs_start:fs_end] if fs_start >= 0 and fs_end > fs_start else ""
@@ -166,13 +187,47 @@ if "input." in fs_body:
     raise SystemExit("REFUSING TO PUSH: forward_stability_task reads Shiny reactive input inside Extended Task")
 for token in ["min_discovery: int, min_games: int", "min_discovery_periods=int(min_discovery)", "min_games_per_period=int(min_games)"]:
     if token not in s:
-        raise SystemExit(f"REFUSING TO PUSH: v3.5.28 Extended Task hotfix marker missing: {token}")
-print("Verified: Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | Open-line anomaly QC | frozen usable-week split | fixed-bet repricing | signal migration/CLV | independent line pipelines | 3x3 architecture/execution matrix | pipeline price decay | cross-pipeline model weights | rolling chronological OOS validation | nested forward-stability selection | strict PT mirror + snapshots")
+        raise SystemExit(f"REFUSING TO PUSH: v3.5.39 Extended Task hotfix marker missing: {token}")
+cfb_files = {
+    "scripts/scrape_cfbpicker_history_api.py": ["TableauViz", 'activeSheet, "Year "', "picker_items_from_objects"],
+    "scripts/cfbpicker_tooltip_legacy.py": ["click_and_read_tooltip_response", "collect_header_rows"],
+    "scripts/scrape_cfbpicker_history.py": ["cfbpicker_overlap_audit.csv", "cfbpicker_orientation_audit.csv", "existing_keys", "tableau_embedding_api_tooltip"],
+    "scripts/scrape_cfbpicker_current_api.py": [
+        "requestedComplete", "parse_current_tooltip",
+        "collectable_pickers_", "strategy_selected",
+        "cfbpicker_live_model_mapping_", "return [None]",
+        "const completeVerified=!hasCompleteRequest||",
+        "master_slate_match", "resolve_labeled_team_side",
+        'record["row_errors"]', r"Games\s*:\s*None",
+    ],
+    "scripts/scrape_cfbpicker_current.py": ["MIRROR_META_URL", "cfbpicker_current_long.csv", "scrape_cfbpicker_current_api.py", "--from-cache"],
+    "scripts/audit_cfbpicker_current_integration.py": ["incremental_after_pt_first_dedup", "overlap_rows_pt_preferred"],
+}
+for path, tokens in cfb_files.items():
+    pp = Path(path)
+    if not pp.exists():
+        raise SystemExit(f"REFUSING TO PUSH: missing CFB Picker integration file {path}")
+    text = pp.read_text(encoding="utf-8")
+    for token in tokens:
+        if token not in text:
+            raise SystemExit(f"REFUSING TO PUSH: stale CFB Picker integration marker missing in {path}: {token}")
+if "load_cfbpicker_current(root, season=int(season), week=int(week))" not in current_week:
+    raise SystemExit("REFUSING TO PUSH: current CFB Picker cache is not season/week filtered")
+for token in [
+    'source_order = {"predictiontracker": 0, "cfbpicker": 1}',
+    "refresh_cfbpicker: bool = True",
+]:
+    if token not in current_week:
+        raise SystemExit(f"REFUSING TO PUSH: current CFB Picker merge marker missing: {token}")
+for token in ["include_cfbpicker=True", "refresh_cfbpicker=False", "current_cfbpicker_model_map"]:
+    if token not in s:
+        raise SystemExit(f"REFUSING TO PUSH: app does not consume the deployed CFB Picker cache: {token}")
+print("Verified: Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | line movement | rolling OOS | nested forward stability | CFB Picker Embedding API + L# tooltips + canonical de-dup | strict PT/CFB mirrors")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.28"
+  git commit -m "Deploy NCAAF Consensus Lab v3.5.39"
 else
   echo "No new changes to commit."
 fi
