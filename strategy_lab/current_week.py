@@ -289,6 +289,32 @@ def predictiontracker_master_slate(root: Path) -> pd.DataFrame:
     )
 
 
+
+
+def completed_game_keys_from_history(history: pd.DataFrame, *, season: int) -> set[str]:
+    """Return current-season matchups that already have a graded final outcome.
+
+    Current source pages can briefly retain games after they finish.  Historical
+    grading is therefore a second, source-independent guard against presenting a
+    completed game as upcoming.  This function is deliberately fail-open: if the
+    historical frame does not contain the required fields, no games are removed.
+    """
+    required = {"season", "road", "home", "actual_margin"}
+    if history is None or history.empty or not required.issubset(history.columns):
+        return set()
+
+    z = history.copy()
+    sy = pd.to_numeric(z["season"], errors="coerce")
+    actual = pd.to_numeric(z["actual_margin"], errors="coerce")
+    z = z.loc[sy.eq(int(season)) & actual.notna(), ["road", "home"]].copy()
+    if z.empty:
+        return set()
+    return {
+        game_key_from_names(a, h)
+        for a, h in zip(z["road"], z["home"])
+        if str(a).strip() and str(h).strip()
+    }
+
 def predictiontracker_live_model_columns(root: Path) -> pd.DataFrame:
     wide = load_predictiontracker_wide(root)
     if wide.empty:
@@ -461,10 +487,73 @@ def build_current_board_from_cached_sources(
     pt_master = predictiontracker_master_slate(root)
     pt_live = predictiontracker_live_model_columns(root)
 
+    completed_keys = completed_game_keys_from_history(
+        history, season=int(season)
+    )
+
+    # The latest verified PredictionTracker board is the live game-universe
+    # authority.  CFB Picker augments model coverage; it does not keep a game
+    # alive after PredictionTracker has removed it.  This is crucial because
+    # Tableau's displayed Wk 1-2 page can retain already-played games in a
+    # season/week-tagged cache.
+    raw_pt_master_games = int(len(pt_master))
+    history_completed_games_excluded = 0
+    if len(pt_master) and completed_keys:
+        before = len(pt_master)
+        pt_master = pt_master[
+            ~pt_master["game_join_key"].astype(str).isin(completed_keys)
+        ].copy()
+        history_completed_games_excluded = int(before - len(pt_master))
+
+    live_master_keys = (
+        set(pt_master["game_join_key"].astype(str))
+        if len(pt_master) else set()
+    )
+
+    if len(pt):
+        pt["game_join_key"] = [
+            game_key_from_names(a, h)
+            for a, h in zip(pt["away"], pt["home"])
+        ]
+        if completed_keys:
+            pt = pt[
+                ~pt["game_join_key"].astype(str).isin(completed_keys)
+            ].copy()
+        if live_master_keys:
+            pt = pt[pt["game_join_key"].astype(str).isin(live_master_keys)].copy()
+
+    cfb_rows_before_live_filter = 0
+    cfb_games_before_live_filter = 0
+    cfb_rows_excluded_off_slate = 0
+    cfb_games_excluded_off_slate = 0
     if len(cfb):
         cfb = cfb[
             cfb["canonical_model_id"].astype(str).isin(selected)
         ].copy()
+        cfb["game_join_key"] = [
+            game_key_from_names(a, h)
+            for a, h in zip(cfb["away"], cfb["home"])
+        ]
+        cfb_rows_before_live_filter = int(len(cfb))
+        cfb_games_before_live_filter = int(cfb["game_join_key"].nunique())
+
+        if completed_keys:
+            cfb = cfb[
+                ~cfb["game_join_key"].astype(str).isin(completed_keys)
+            ].copy()
+
+        # Normal production refreshes always have a verified PT master slate.
+        # If PT is unavailable, fail open here so cached-source unit/CLI use can
+        # still inspect CFB Picker rather than silently deleting everything.
+        if live_master_keys:
+            before_keys = set(cfb["game_join_key"].astype(str))
+            before_rows = int(len(cfb))
+            cfb = cfb[
+                cfb["game_join_key"].astype(str).isin(live_master_keys)
+            ].copy()
+            after_keys = set(cfb["game_join_key"].astype(str))
+            cfb_rows_excluded_off_slate = int(before_rows - len(cfb))
+            cfb_games_excluded_off_slate = int(len(before_keys - after_keys))
 
     combined = pd.concat(
         [pt, cfb], ignore_index=True, sort=False
@@ -511,35 +600,19 @@ def build_current_board_from_cached_sources(
         )
 
     # Master game universe is NOT derived from selected-model availability.
-    # PredictionTracker road/home/line defines the current slate even when zero
-    # selected models have posted. Add CFB-only games if that source is usable.
-    master_frames = []
+    # The latest verified PredictionTracker road/home/line board defines the
+    # upcoming slate even when zero selected models have posted.  CFB Picker is
+    # an augmentation source only; stale CFB-only games remain stored in the
+    # cache for audit/history but never re-enter the live board.
     if len(pt_master):
-        master_frames.append(
-            pt_master.assign(master_source="PredictionTracker")
-        )
-    if len(cfb):
-        cfb_master = cfb[["away", "home", "market_home_margin"]].copy()
-        cfb_master["game_join_key"] = [
-            game_key_from_names(a, h)
-            for a, h in zip(cfb_master["away"], cfb_master["home"])
-        ]
-        cfb_master["master_source"] = "CFB Picker"
-        master_frames.append(cfb_master)
-
-    if master_frames:
-        master = pd.concat(master_frames, ignore_index=True, sort=False)
-        # Prefer PT master line for overlapping games.
-        master["_ord"] = master["master_source"].map(
-            {"PredictionTracker": 0, "CFB Picker": 1}
-        ).fillna(9)
         master = (
-            master.sort_values(["game_join_key", "_ord"])
+            pt_master.assign(master_source="PredictionTracker")
             .drop_duplicates("game_join_key", keep="first")
-            .drop(columns="_ord")
             .reset_index(drop=True)
         )
     elif len(combined):
+        # Cached-source fallback for local inspection when PT is intentionally
+        # absent. Production refreshes are strict and should not use this path.
         master = (
             combined[
                 ["away", "home", "market_home_margin", "game_join_key"]
@@ -819,6 +892,12 @@ def build_current_board_from_cached_sources(
         "pt_live_models": pt_live,
         "usable_source_rows": int(len(combined)),
         "master_games": int(len(master)),
+        "raw_pt_master_games": raw_pt_master_games,
+        "history_completed_games_excluded": history_completed_games_excluded,
+        "cfbpicker_rows_before_live_filter": cfb_rows_before_live_filter,
+        "cfbpicker_games_before_live_filter": cfb_games_before_live_filter,
+        "cfbpicker_rows_excluded_off_slate": cfb_rows_excluded_off_slate,
+        "cfbpicker_games_excluded_off_slate": cfb_games_excluded_off_slate,
     }
 
 

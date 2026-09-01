@@ -585,10 +585,16 @@ def resolve_mapping(
     )
     historical = _mapping_frame(root / "data/derived/cfbpicker_model_mapping.csv")
     live_path = picker_file
+    explicit_picker_file = picker_file is not None
     if live_path is not None and not live_path.is_absolute():
         live_path = root / live_path
     if live_path is None:
         live_path = root / f"data/cfbpicker/collectable_pickers_{season}.txt"
+    if explicit_picker_file and not live_path.exists():
+        raise FileNotFoundError(
+            f"Explicit --picker-file was not found: {live_path}. "
+            "Refusing to silently fall back to the full picker list."
+        )
     live_pickers = _picker_names(live_path) if live_path.exists() else []
 
     selected_ids = set(selected.get("canonical_model_id", pd.Series(dtype=str)).astype(str))

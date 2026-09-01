@@ -1,0 +1,26 @@
+canonical_model_id,model_name,cfb_rows,pt_overlap_rows,incremental_rows,historically_eligible
+linecfbp_cfb_victory,CFB Victory,21,0,21,True
+linecfbp_dratings,DRatings,21,0,21,True
+dokter_entropy,Dokter Entropy,21,0,21,True
+fei,FEI Projections,21,0,21,True
+linecfbp_jp,JP+,21,0,21,True
+linecfbp_john_harris,John Harris,21,0,21,True
+linecfbp_mcillece_sports,McIllece Sports,21,0,21,True
+linecfbp_oddstrader_ai,OddsTrader AI,21,0,21,True
+linecfbp_pearatings,PEARatings,21,0,21,True
+linecfbp_power_rank,Power Rank,21,0,21,True
+linecfbp_power_rank_free,Power Rank: Free,21,0,21,True
+linecfbp_room44_bets,Room44 Bets,21,0,21,True
+linecfbp_sp,SP+,21,0,21,True
+linecfbp_sportsline,SportsLine,21,0,21,True
+linecfbp_sportsratings,SportsRatings,21,0,21,True
+linecfbp_tshoe_index,TShoe Index,21,0,21,True
+congrove,Congrove Computer Rankings,21,17,4,True
+harville,David Harville,21,21,0,True
+espn_fpi,ESPN FPI,21,21,0,True
+massey,Massey Ratings,21,21,0,True
+moore_ratings,Moore Power Ratings,21,21,0,True
+piratings_bias,PI-Rate Bias,21,21,0,True
+piratings,Pi-Ratings,21,21,0,True
+piratings_mean,Pi-Ratings Mean,21,21,0,True
+teamrankings,TeamRankings.com,21,21,0,True

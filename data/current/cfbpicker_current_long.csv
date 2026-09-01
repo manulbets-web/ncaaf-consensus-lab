@@ -1,345 +1,526 @@
 season,week,away,home,market_home_margin_close,canonical_model_id,model_name,prediction_home_margin,picker,source_table,orientation_method
-2026,2,North Carolina,TCU,9.0,linecfbp_cfb_geek,CFB Geek,6.7,CFB Geek,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_cfb_geek,CFB Geek,33.8,CFB Geek,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_cfb_geek,CFB Geek,1.8,CFB Geek,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_cfb_geek,CFB Geek,5.5,CFB Geek,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_cfb_geek,CFB Geek,7.3,CFB Geek,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_cfb_geek,CFB Geek,-2.8,CFB Geek,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_cfb_geek,CFB Geek,28.1,CFB Geek,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_cfb_geek,CFB Geek,-3.2,CFB Geek,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_cfb_professor,CFB Professor,6.0,CFB Professor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_cfb_professor,CFB Professor,40.5,CFB Professor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_cfb_professor,CFB Professor,-6.3,CFB Professor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_cfb_professor,CFB Professor,2.2,CFB Professor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_cfb_professor,CFB Professor,17.6,CFB Professor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_cfb_professor,CFB Professor,14.9,CFB Professor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_cfb_professor,CFB Professor,37.7,CFB Professor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_cfb_professor,CFB Professor,0.4,CFB Professor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_cfb_victory,CFB Victory,12.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_cfb_victory,CFB Victory,30.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_cfb_victory,CFB Victory,2.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_cfb_victory,CFB Victory,-1.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_cfb_victory,CFB Victory,-2.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_cfb_victory,CFB Victory,2.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_cfb_victory,CFB Victory,23.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_cfb_victory,CFB Victory,2.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,congrove,Congrove Computer Rankings,10.5,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,congrove,Congrove Computer Rankings,41.8,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,congrove,Congrove Computer Rankings,6.9,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,congrove,Congrove Computer Rankings,-5.3,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,congrove,Congrove Computer Rankings,17.0,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,congrove,Congrove Computer Rankings,13.7,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,congrove,Congrove Computer Rankings,20.2,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,congrove,Congrove Computer Rankings,6.3,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_dratings,DRatings,7.8,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_dratings,DRatings,31.5,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_dratings,DRatings,4.7,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_dratings,DRatings,7.0,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_dratings,DRatings,10.3,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_dratings,DRatings,3.5,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_dratings,DRatings,25.4,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_dratings,DRatings,4.2,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_david_sasser,David Sasser,1.5,David Sasser,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_david_sasser,David Sasser,35.9,David Sasser,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_david_sasser,David Sasser,8.3,David Sasser,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_david_sasser,David Sasser,14.2,David Sasser,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_david_sasser,David Sasser,15.5,David Sasser,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_david_sasser,David Sasser,6.4,David Sasser,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_david_sasser,David Sasser,26.9,David Sasser,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_david_sasser,David Sasser,7.1,David Sasser,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,dokter_entropy,Dokter Entropy,4.9,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,dokter_entropy,Dokter Entropy,41.9,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,dokter_entropy,Dokter Entropy,7.2,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,dokter_entropy,Dokter Entropy,8.5,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,dokter_entropy,Dokter Entropy,11.2,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,dokter_entropy,Dokter Entropy,7.4,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,dokter_entropy,Dokter Entropy,35.3,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,dokter_entropy,Dokter Entropy,3.0,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,espn_fpi,ESPN FPI,1.5,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,espn_fpi,ESPN FPI,33.9,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,espn_fpi,ESPN FPI,6.8,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,espn_fpi,ESPN FPI,2.8,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,espn_fpi,ESPN FPI,-3.3,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,espn_fpi,ESPN FPI,1.7,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,espn_fpi,ESPN FPI,27.6,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,espn_fpi,ESPN FPI,6.3,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,fei,FEI Projections,13.6,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,fei,FEI Projections,29.4,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,fei,FEI Projections,0.2,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,fei,FEI Projections,-7.9,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,fei,FEI Projections,6.6,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,fei,FEI Projections,5.1,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,fei,FEI Projections,30.2,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,fei,FEI Projections,-1.1,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,harville,David Harville,9.1,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,harville,David Harville,26.7,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,harville,David Harville,5.0,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,harville,David Harville,9.9,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,harville,David Harville,4.3,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,harville,David Harville,7.6,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,harville,David Harville,23.8,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,harville,David Harville,0.9,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_jp,JP+,2.9,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_jp,JP+,28.4,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_jp,JP+,6.2,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_jp,JP+,6.9,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_jp,JP+,13.2,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_jp,JP+,3.0,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_jp,JP+,25.6,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_jp,JP+,3.9,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_john_harris,John Harris,6.4,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_john_harris,John Harris,38.8,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_john_harris,John Harris,5.1,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_john_harris,John Harris,7.4,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_john_harris,John Harris,10.8,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_john_harris,John Harris,3.9,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_john_harris,John Harris,30.9,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_john_harris,John Harris,4.6,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,keeper,Keeper,23.4,Keeper,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,keeper,Keeper,50.9,Keeper,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,keeper,Keeper,9.6,Keeper,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,keeper,Keeper,11.6,Keeper,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,keeper,Keeper,10.5,Keeper,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,keeper,Keeper,2.0,Keeper,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,keeper,Keeper,25.5,Keeper,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,keeper,Keeper,5.5,Keeper,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linept_laz,Laz Index,10.0,LAZ Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linept_laz,Laz Index,25.0,LAZ Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linept_laz,Laz Index,2.0,LAZ Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linept_laz,Laz Index,13.0,LAZ Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linept_laz,Laz Index,2.0,LAZ Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linept_laz,Laz Index,6.0,LAZ Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linept_laz,Laz Index,24.0,LAZ Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linept_laz,Laz Index,-1.0,LAZ Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,massey,Massey Ratings,10.6,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,massey,Massey Ratings,27.4,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,massey,Massey Ratings,2.9,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,massey,Massey Ratings,13.2,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,massey,Massey Ratings,3.6,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,massey,Massey Ratings,7.2,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,massey,Massey Ratings,27.0,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,massey,Massey Ratings,0.0,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_mcillece_sports,McIllece Sports,10.2,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_mcillece_sports,McIllece Sports,38.3,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_mcillece_sports,McIllece Sports,4.6,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_mcillece_sports,McIllece Sports,5.8,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_mcillece_sports,McIllece Sports,17.8,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_mcillece_sports,McIllece Sports,0.3,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_mcillece_sports,McIllece Sports,20.3,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_mcillece_sports,McIllece Sports,5.2,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,moore_ratings,Moore Power Ratings,14.9,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,moore_ratings,Moore Power Ratings,34.5,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,moore_ratings,Moore Power Ratings,7.8,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,moore_ratings,Moore Power Ratings,8.2,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,moore_ratings,Moore Power Ratings,5.7,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,moore_ratings,Moore Power Ratings,3.2,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,moore_ratings,Moore Power Ratings,23.7,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,moore_ratings,Moore Power Ratings,2.2,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_oddstrader_ai,OddsTrader AI,7.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_oddstrader_ai,OddsTrader AI,32.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_oddstrader_ai,OddsTrader AI,-3.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_oddstrader_ai,OddsTrader AI,7.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_oddstrader_ai,OddsTrader AI,7.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_oddstrader_ai,OddsTrader AI,4.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_oddstrader_ai,OddsTrader AI,32.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_oddstrader_ai,OddsTrader AI,8.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_pearatings,PEARatings,7.1,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_pearatings,PEARatings,35.2,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_pearatings,PEARatings,4.3,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_pearatings,PEARatings,2.0,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_pearatings,PEARatings,4.4,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_pearatings,PEARatings,3.7,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_pearatings,PEARatings,31.2,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_pearatings,PEARatings,4.4,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,piratings,Pi-Ratings,18.3,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,piratings,Pi-Ratings,53.5,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,piratings,Pi-Ratings,3.1,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,piratings,Pi-Ratings,10.7,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,piratings,Pi-Ratings,15.4,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,piratings,Pi-Ratings,12.7,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,piratings,Pi-Ratings,35.4,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,piratings,Pi-Ratings,2.3,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,piratings_bias,PI-Rate Bias,17.4,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,piratings_bias,PI-Rate Bias,54.5,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,piratings_bias,PI-Rate Bias,4.4,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,piratings_bias,PI-Rate Bias,14.6,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,piratings_bias,PI-Rate Bias,16.2,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,piratings_bias,PI-Rate Bias,10.3,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,piratings_bias,PI-Rate Bias,35.4,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,piratings_bias,PI-Rate Bias,3.2,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,piratings_mean,Pi-Ratings Mean,16.9,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,piratings_mean,Pi-Ratings Mean,51.3,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,piratings_mean,Pi-Ratings Mean,4.2,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,piratings_mean,Pi-Ratings Mean,7.8,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,piratings_mean,Pi-Ratings Mean,14.4,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,piratings_mean,Pi-Ratings Mean,9.8,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,piratings_mean,Pi-Ratings Mean,31.9,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,piratings_mean,Pi-Ratings Mean,4.4,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_power_rank,Power Rank,6.4,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_power_rank,Power Rank,34.9,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_power_rank,Power Rank,4.5,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_power_rank,Power Rank,10.9,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_power_rank,Power Rank,9.5,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_power_rank,Power Rank,4.1,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_power_rank,Power Rank,24.3,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_power_rank,Power Rank,5.2,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_power_rank_free,Power Rank: Free,6.2,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_power_rank_free,Power Rank: Free,31.2,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_power_rank_free,Power Rank: Free,4.8,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_power_rank_free,Power Rank: Free,8.1,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_power_rank_free,Power Rank: Free,3.0,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_power_rank_free,Power Rank: Free,3.5,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_power_rank_free,Power Rank: Free,27.1,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_power_rank_free,Power Rank: Free,4.0,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_room44_bets,Room44 Bets,8.3,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_room44_bets,Room44 Bets,34.6,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_room44_bets,Room44 Bets,5.0,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_room44_bets,Room44 Bets,-3.7,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_room44_bets,Room44 Bets,4.3,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_room44_bets,Room44 Bets,-0.9,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_room44_bets,Room44 Bets,31.9,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_room44_bets,Room44 Bets,-3.3,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_ryder_analytics,Ryder Analytics,5.2,Ryder Analytics,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_ryder_analytics,Ryder Analytics,48.4,Ryder Analytics,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_ryder_analytics,Ryder Analytics,2.4,Ryder Analytics,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_ryder_analytics,Ryder Analytics,5.4,Ryder Analytics,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_ryder_analytics,Ryder Analytics,9.6,Ryder Analytics,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_ryder_analytics,Ryder Analytics,5.9,Ryder Analytics,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_ryder_analytics,Ryder Analytics,34.4,Ryder Analytics,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_ryder_analytics,Ryder Analytics,4.1,Ryder Analytics,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_sp,SP+,5.8,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_sp,SP+,35.9,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_sp,SP+,4.9,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_sp,SP+,8.5,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_sp,SP+,9.8,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_sp,SP+,2.9,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_sp,SP+,30.1,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_sp,SP+,5.8,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,sagarin,Sagarin Ratings,6.2,Sagarin,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,sagarin,Sagarin Ratings,43.8,Sagarin,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,sagarin,Sagarin Ratings,4.7,Sagarin,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,sagarin,Sagarin Ratings,10.5,Sagarin,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,sagarin,Sagarin Ratings,8.4,Sagarin,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,sagarin,Sagarin Ratings,8.8,Sagarin,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,sagarin,Sagarin Ratings,31.9,Sagarin,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,sagarin,Sagarin Ratings,3.5,Sagarin,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,sagarin_golden_mean,Sagarin Golden Mean,6.2,Sagarin: Golden,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,sagarin_golden_mean,Sagarin Golden Mean,43.8,Sagarin: Golden,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,sagarin_golden_mean,Sagarin Golden Mean,4.7,Sagarin: Golden,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,sagarin_golden_mean,Sagarin Golden Mean,10.5,Sagarin: Golden,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,sagarin_golden_mean,Sagarin Golden Mean,8.4,Sagarin: Golden,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,sagarin_golden_mean,Sagarin Golden Mean,8.8,Sagarin: Golden,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,sagarin_golden_mean,Sagarin Golden Mean,31.9,Sagarin: Golden,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,sagarin_golden_mean,Sagarin Golden Mean,3.5,Sagarin: Golden,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,sagarin_predictor,Sagarin Predictor,6.2,Sagarin: Predictor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,sagarin_predictor,Sagarin Predictor,43.8,Sagarin: Predictor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,sagarin_predictor,Sagarin Predictor,4.7,Sagarin: Predictor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,sagarin_predictor,Sagarin Predictor,10.5,Sagarin: Predictor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,sagarin_predictor,Sagarin Predictor,8.4,Sagarin: Predictor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,sagarin_predictor,Sagarin Predictor,8.8,Sagarin: Predictor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,sagarin_predictor,Sagarin Predictor,31.9,Sagarin: Predictor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,sagarin_predictor,Sagarin Predictor,3.5,Sagarin: Predictor,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,sagarin_recent,Sagarin Recent,6.2,Sagarin: Recent,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,sagarin_recent,Sagarin Recent,43.8,Sagarin: Recent,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,sagarin_recent,Sagarin Recent,4.7,Sagarin: Recent,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,sagarin_recent,Sagarin Recent,10.5,Sagarin: Recent,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,sagarin_recent,Sagarin Recent,8.4,Sagarin: Recent,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,sagarin_recent,Sagarin Recent,8.8,Sagarin: Recent,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,sagarin_recent,Sagarin Recent,31.9,Sagarin: Recent,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,sagarin_recent,Sagarin Recent,3.5,Sagarin: Recent,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linept_fluker,Slate Fluker,9.8,Slate Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linept_fluker,Slate Fluker,34.7,Slate Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linept_fluker,Slate Fluker,6.8,Slate Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linept_fluker,Slate Fluker,10.0,Slate Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linept_fluker,Slate Fluker,14.1,Slate Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linept_fluker,Slate Fluker,5.0,Slate Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linept_fluker,Slate Fluker,30.3,Slate Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linept_fluker,Slate Fluker,3.9,Slate Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_sportsline,SportsLine,5.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_sportsline,SportsLine,33.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_sportsline,SportsLine,5.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_sportsline,SportsLine,5.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_sportsline,SportsLine,9.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_sportsline,SportsLine,-2.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_sportsline,SportsLine,21.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_sportsline,SportsLine,4.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_sportsratings,SportsRatings,16.8,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_sportsratings,SportsRatings,39.6,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_sportsratings,SportsRatings,5.1,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_sportsratings,SportsRatings,20.8,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_sportsratings,SportsRatings,0.3,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_sportsratings,SportsRatings,3.8,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_sportsratings,SportsRatings,34.5,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_sportsratings,SportsRatings,-1.3,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_tshoe_index,TShoe Index,5.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_tshoe_index,TShoe Index,34.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_tshoe_index,TShoe Index,4.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_tshoe_index,TShoe Index,9.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_tshoe_index,TShoe Index,6.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_tshoe_index,TShoe Index,5.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_tshoe_index,TShoe Index,23.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_tshoe_index,TShoe Index,1.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,teamrankings,TeamRankings.com,6.3,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,teamrankings,TeamRankings.com,38.4,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,teamrankings,TeamRankings.com,5.4,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,teamrankings,TeamRankings.com,10.5,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,teamrankings,TeamRankings.com,7.9,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,teamrankings,TeamRankings.com,5.9,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,teamrankings,TeamRankings.com,28.3,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,teamrankings,TeamRankings.com,3.3,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,linecfbp_wilson_ratings,Wilson Ratings,9.8,Wilson Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,linecfbp_wilson_ratings,Wilson Ratings,26.7,Wilson Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,linecfbp_wilson_ratings,Wilson Ratings,-0.7,Wilson Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,linecfbp_wilson_ratings,Wilson Ratings,-5.4,Wilson Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,linecfbp_wilson_ratings,Wilson Ratings,6.1,Wilson Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,linecfbp_wilson_ratings,Wilson Ratings,5.2,Wilson Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,linecfbp_wilson_ratings,Wilson Ratings,23.7,Wilson Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,linecfbp_wilson_ratings,Wilson Ratings,1.2,Wilson Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,cfbpicker_actionnetwork,Action Network,13.3,Action Network,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,cfbpicker_actionnetwork,Action Network,39.4,Action Network,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,cfbpicker_actionnetwork,Action Network,0.1,Action Network,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,cfbpicker_actionnetwork,Action Network,15.7,Action Network,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,cfbpicker_actionnetwork,Action Network,5.3,Action Network,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,cfbpicker_actionnetwork,Action Network,3.0,Action Network,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,cfbpicker_actionnetwork,Action Network,40.8,Action Network,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,cfbpicker_actionnetwork,Action Network,0.8,Action Network,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,cfbpicker_alltakes,All-Takes,16.0,All-Takes,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,cfbpicker_alltakes,All-Takes,33.6,All-Takes,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,cfbpicker_alltakes,All-Takes,4.9,All-Takes,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,cfbpicker_alltakes,All-Takes,11.5,All-Takes,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,cfbpicker_alltakes,All-Takes,-2.4,All-Takes,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,cfbpicker_alltakes,All-Takes,2.9,All-Takes,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,cfbpicker_alltakes,All-Takes,27.7,All-Takes,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,cfbpicker_alltakes,All-Takes,2.6,All-Takes,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,cfbpicker_cfbinsiders,CFB Insiders,11.6,CFB Insiders,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,cfbpicker_cfbinsiders,CFB Insiders,44.7,CFB Insiders,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,cfbpicker_cfbinsiders,CFB Insiders,6.4,CFB Insiders,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,cfbpicker_cfbinsiders,CFB Insiders,0.4,CFB Insiders,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,cfbpicker_cfbinsiders,CFB Insiders,16.7,CFB Insiders,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,cfbpicker_cfbinsiders,CFB Insiders,-2.4,CFB Insiders,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,cfbpicker_cfbinsiders,CFB Insiders,24.1,CFB Insiders,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,cfbpicker_cfbinsiders,CFB Insiders,7.6,CFB Insiders,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,cfbpicker_g3projections,G3 Projections,2.9,G3 Projections,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,cfbpicker_g3projections,G3 Projections,21.4,G3 Projections,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,cfbpicker_g3projections,G3 Projections,4.4,G3 Projections,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,cfbpicker_g3projections,G3 Projections,7.0,G3 Projections,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,cfbpicker_g3projections,G3 Projections,7.8,G3 Projections,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,cfbpicker_g3projections,G3 Projections,4.6,G3 Projections,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,cfbpicker_g3projections,G3 Projections,17.5,G3 Projections,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,cfbpicker_g3projections,G3 Projections,5.7,G3 Projections,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,cfbpicker_mcconnell,McConnell,5.5,McConnell,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,cfbpicker_mcconnell,McConnell,33.0,McConnell,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,cfbpicker_mcconnell,McConnell,0.8,McConnell,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,cfbpicker_mcconnell,McConnell,7.0,McConnell,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,cfbpicker_mcconnell,McConnell,9.5,McConnell,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,cfbpicker_mcconnell,McConnell,10.2,McConnell,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,cfbpicker_mcconnell,McConnell,31.6,McConnell,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,cfbpicker_mcconnell,McConnell,0.0,McConnell,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,North Carolina,TCU,9.0,cfbpicker_universityfootball,University Foot-Ball,7.0,University Foot-Ball,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,San Jose St.,USC,38.5,cfbpicker_universityfootball,University Foot-Ball,41.0,University Foot-Ball,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,NC St.,Virginia,4.0,cfbpicker_universityfootball,University Foot-Ball,7.0,University Foot-Ball,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Jacksonville St.,North Dakota St.,7.0,cfbpicker_universityfootball,University Foot-Ball,3.0,University Foot-Ball,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Sacramento St.,Eastern Mich.,9.5,cfbpicker_universityfootball,University Foot-Ball,7.0,University Foot-Ball,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Hawaii,Stanford,4.0,cfbpicker_universityfootball,University Foot-Ball,7.0,University Foot-Ball,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,New Mexico St.,Florida St.,32.0,cfbpicker_universityfootball,University Foot-Ball,35.0,University Foot-Ball,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
-2026,2,Memphis,UNLV,4.5,cfbpicker_universityfootball,University Foot-Ball,-2.0,University Foot-Ball,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_cfb_victory,CFB Victory,17.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_cfb_victory,CFB Victory,10.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_cfb_victory,CFB Victory,23.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_cfb_victory,CFB Victory,4.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_cfb_victory,CFB Victory,-1.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_cfb_victory,CFB Victory,19.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_cfb_victory,CFB Victory,20.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_cfb_victory,CFB Victory,18.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_cfb_victory,CFB Victory,19.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_cfb_victory,CFB Victory,6.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_cfb_victory,CFB Victory,14.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_cfb_victory,CFB Victory,44.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_cfb_victory,CFB Victory,4.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_cfb_victory,CFB Victory,19.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_cfb_victory,CFB Victory,12.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_cfb_victory,CFB Victory,20.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_cfb_victory,CFB Victory,22.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_cfb_victory,CFB Victory,-1.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_cfb_victory,CFB Victory,1.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_cfb_victory,CFB Victory,25.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_cfb_victory,CFB Victory,4.0,CFB Victory,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,congrove,Congrove Computer Rankings,23.7,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,congrove,Congrove Computer Rankings,15.9,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,congrove,Congrove Computer Rankings,24.0,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,congrove,Congrove Computer Rankings,10.2,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,congrove,Congrove Computer Rankings,6.3,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,congrove,Congrove Computer Rankings,11.4,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,congrove,Congrove Computer Rankings,19.8,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,congrove,Congrove Computer Rankings,8.1,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,congrove,Congrove Computer Rankings,31.6,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,congrove,Congrove Computer Rankings,25.3,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,congrove,Congrove Computer Rankings,26.6,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,congrove,Congrove Computer Rankings,42.4,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,congrove,Congrove Computer Rankings,5.3,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,congrove,Congrove Computer Rankings,16.7,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,congrove,Congrove Computer Rankings,3.3,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,congrove,Congrove Computer Rankings,12.0,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,congrove,Congrove Computer Rankings,23.6,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,congrove,Congrove Computer Rankings,11.6,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,congrove,Congrove Computer Rankings,-3.1,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,congrove,Congrove Computer Rankings,24.6,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,congrove,Congrove Computer Rankings,3.0,Congrove,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_dratings,DRatings,22.5,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_dratings,DRatings,7.5,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_dratings,DRatings,24.0,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_dratings,DRatings,4.9,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_dratings,DRatings,7.1,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_dratings,DRatings,22.6,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_dratings,DRatings,23.1,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_dratings,DRatings,7.6,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_dratings,DRatings,27.0,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_dratings,DRatings,22.0,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_dratings,DRatings,16.9,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_dratings,DRatings,36.9,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_dratings,DRatings,5.2,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_dratings,DRatings,24.4,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_dratings,DRatings,5.9,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_dratings,DRatings,23.0,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_dratings,DRatings,25.5,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_dratings,DRatings,2.9,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_dratings,DRatings,-9.0,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_dratings,DRatings,25.0,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_dratings,DRatings,3.0,DRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,dokter_entropy,Dokter Entropy,26.1,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,dokter_entropy,Dokter Entropy,6.9,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,dokter_entropy,Dokter Entropy,34.3,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,dokter_entropy,Dokter Entropy,6.3,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,dokter_entropy,Dokter Entropy,10.9,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,dokter_entropy,Dokter Entropy,15.8,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,dokter_entropy,Dokter Entropy,25.9,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,dokter_entropy,Dokter Entropy,8.7,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,dokter_entropy,Dokter Entropy,36.1,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,dokter_entropy,Dokter Entropy,22.1,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,dokter_entropy,Dokter Entropy,24.5,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,dokter_entropy,Dokter Entropy,63.0,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,dokter_entropy,Dokter Entropy,6.2,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,dokter_entropy,Dokter Entropy,24.3,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,dokter_entropy,Dokter Entropy,9.8,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,dokter_entropy,Dokter Entropy,26.5,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,dokter_entropy,Dokter Entropy,32.0,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,dokter_entropy,Dokter Entropy,7.7,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,dokter_entropy,Dokter Entropy,-10.6,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,dokter_entropy,Dokter Entropy,34.7,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,dokter_entropy,Dokter Entropy,4.1,Dokter Entropy,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,espn_fpi,ESPN FPI,22.9,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,espn_fpi,ESPN FPI,2.3,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,espn_fpi,ESPN FPI,24.4,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,espn_fpi,ESPN FPI,-0.7,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,espn_fpi,ESPN FPI,5.9,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,espn_fpi,ESPN FPI,18.7,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,espn_fpi,ESPN FPI,23.3,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,espn_fpi,ESPN FPI,8.3,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,espn_fpi,ESPN FPI,32.1,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,espn_fpi,ESPN FPI,19.4,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,espn_fpi,ESPN FPI,17.8,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,espn_fpi,ESPN FPI,48.6,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,espn_fpi,ESPN FPI,5.5,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,espn_fpi,ESPN FPI,23.9,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,espn_fpi,ESPN FPI,9.7,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,espn_fpi,ESPN FPI,25.1,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,espn_fpi,ESPN FPI,33.8,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,espn_fpi,ESPN FPI,3.8,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,espn_fpi,ESPN FPI,-9.7,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,espn_fpi,ESPN FPI,27.7,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,espn_fpi,ESPN FPI,3.3,ESPN FPI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,fei,FEI Projections,28.1,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,fei,FEI Projections,9.7,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,fei,FEI Projections,27.5,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,fei,FEI Projections,-0.6,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,fei,FEI Projections,0.6,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,fei,FEI Projections,23.0,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,fei,FEI Projections,23.4,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,fei,FEI Projections,16.9,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,fei,FEI Projections,24.4,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,fei,FEI Projections,13.3,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,fei,FEI Projections,12.7,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,fei,FEI Projections,52.8,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,fei,FEI Projections,6.2,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,fei,FEI Projections,27.2,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,fei,FEI Projections,11.8,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,fei,FEI Projections,26.7,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,fei,FEI Projections,26.1,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,fei,FEI Projections,3.0,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,fei,FEI Projections,-6.0,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,fei,FEI Projections,31.4,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,fei,FEI Projections,0.2,FEI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,harville,David Harville,19.5,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,harville,David Harville,8.9,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,harville,David Harville,23.5,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,harville,David Harville,2.8,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,harville,David Harville,4.4,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,harville,David Harville,17.4,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,harville,David Harville,16.6,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,harville,David Harville,15.2,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,harville,David Harville,25.9,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,harville,David Harville,12.2,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,harville,David Harville,17.1,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,harville,David Harville,36.8,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,harville,David Harville,5.3,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,harville,David Harville,22.7,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,harville,David Harville,8.1,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,harville,David Harville,21.0,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,harville,David Harville,18.2,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,harville,David Harville,7.8,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,harville,David Harville,-2.6,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,harville,David Harville,26.3,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,harville,David Harville,-0.1,Harville,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_jp,JP+,18.8,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_jp,JP+,4.4,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_jp,JP+,19.9,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_jp,JP+,3.4,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_jp,JP+,6.2,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_jp,JP+,19.2,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_jp,JP+,18.7,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_jp,JP+,4.4,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_jp,JP+,29.1,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_jp,JP+,22.0,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_jp,JP+,14.7,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_jp,JP+,44.0,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_jp,JP+,4.5,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_jp,JP+,24.5,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_jp,JP+,11.8,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_jp,JP+,21.3,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_jp,JP+,23.1,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_jp,JP+,7.6,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_jp,JP+,-14.2,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_jp,JP+,29.4,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_jp,JP+,6.4,JP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_john_harris,John Harris,24.2,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_john_harris,John Harris,5.6,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_john_harris,John Harris,28.9,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_john_harris,John Harris,3.7,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_john_harris,John Harris,10.8,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_john_harris,John Harris,21.7,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_john_harris,John Harris,25.7,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_john_harris,John Harris,7.0,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_john_harris,John Harris,39.1,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_john_harris,John Harris,23.4,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_john_harris,John Harris,21.2,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_john_harris,John Harris,57.3,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_john_harris,John Harris,6.9,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_john_harris,John Harris,28.1,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_john_harris,John Harris,10.8,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_john_harris,John Harris,26.5,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_john_harris,John Harris,32.8,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_john_harris,John Harris,8.4,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_john_harris,John Harris,-9.7,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_john_harris,John Harris,33.9,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_john_harris,John Harris,4.3,John Harris,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,massey,Massey Ratings,22.9,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,massey,Massey Ratings,8.5,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,massey,Massey Ratings,25.6,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,massey,Massey Ratings,-2.8,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,massey,Massey Ratings,6.8,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,massey,Massey Ratings,18.9,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,massey,Massey Ratings,19.3,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,massey,Massey Ratings,18.1,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,massey,Massey Ratings,25.7,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,massey,Massey Ratings,13.3,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,massey,Massey Ratings,11.4,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,massey,Massey Ratings,46.9,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,massey,Massey Ratings,4.9,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,massey,Massey Ratings,21.2,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,massey,Massey Ratings,7.9,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,massey,Massey Ratings,26.5,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,massey,Massey Ratings,24.7,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,massey,Massey Ratings,5.3,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,massey,Massey Ratings,-6.0,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,massey,Massey Ratings,29.3,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,massey,Massey Ratings,-0.7,Massey,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_mcillece_sports,McIllece Sports,29.7,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_mcillece_sports,McIllece Sports,13.0,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_mcillece_sports,McIllece Sports,23.7,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_mcillece_sports,McIllece Sports,8.5,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_mcillece_sports,McIllece Sports,13.6,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_mcillece_sports,McIllece Sports,35.4,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_mcillece_sports,McIllece Sports,18.8,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_mcillece_sports,McIllece Sports,-0.9,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_mcillece_sports,McIllece Sports,41.1,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_mcillece_sports,McIllece Sports,23.3,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_mcillece_sports,McIllece Sports,17.1,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_mcillece_sports,McIllece Sports,57.8,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_mcillece_sports,McIllece Sports,5.8,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_mcillece_sports,McIllece Sports,28.0,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_mcillece_sports,McIllece Sports,13.0,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_mcillece_sports,McIllece Sports,18.1,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_mcillece_sports,McIllece Sports,26.1,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_mcillece_sports,McIllece Sports,9.6,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_mcillece_sports,McIllece Sports,-19.2,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_mcillece_sports,McIllece Sports,40.7,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_mcillece_sports,McIllece Sports,5.8,McIllece Sports,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,moore_ratings,Moore Power Ratings,24.6,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,moore_ratings,Moore Power Ratings,12.0,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,moore_ratings,Moore Power Ratings,25.1,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,moore_ratings,Moore Power Ratings,4.0,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,moore_ratings,Moore Power Ratings,-0.6,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,moore_ratings,Moore Power Ratings,18.2,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,moore_ratings,Moore Power Ratings,12.1,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,moore_ratings,Moore Power Ratings,18.5,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,moore_ratings,Moore Power Ratings,29.7,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,moore_ratings,Moore Power Ratings,9.2,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,moore_ratings,Moore Power Ratings,21.9,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,moore_ratings,Moore Power Ratings,47.0,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,moore_ratings,Moore Power Ratings,7.2,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,moore_ratings,Moore Power Ratings,25.1,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,moore_ratings,Moore Power Ratings,7.7,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,moore_ratings,Moore Power Ratings,25.1,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,moore_ratings,Moore Power Ratings,20.8,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,moore_ratings,Moore Power Ratings,7.6,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,moore_ratings,Moore Power Ratings,0.5,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,moore_ratings,Moore Power Ratings,33.6,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,moore_ratings,Moore Power Ratings,-2.2,Moore Ratings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_oddstrader_ai,OddsTrader AI,22.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_oddstrader_ai,OddsTrader AI,9.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_oddstrader_ai,OddsTrader AI,25.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_oddstrader_ai,OddsTrader AI,7.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_oddstrader_ai,OddsTrader AI,8.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_oddstrader_ai,OddsTrader AI,20.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_oddstrader_ai,OddsTrader AI,25.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_oddstrader_ai,OddsTrader AI,4.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_oddstrader_ai,OddsTrader AI,38.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_oddstrader_ai,OddsTrader AI,21.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_oddstrader_ai,OddsTrader AI,17.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_oddstrader_ai,OddsTrader AI,47.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_oddstrader_ai,OddsTrader AI,5.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_oddstrader_ai,OddsTrader AI,22.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_oddstrader_ai,OddsTrader AI,6.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_oddstrader_ai,OddsTrader AI,35.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_oddstrader_ai,OddsTrader AI,27.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_oddstrader_ai,OddsTrader AI,7.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_oddstrader_ai,OddsTrader AI,-11.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_oddstrader_ai,OddsTrader AI,28.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_oddstrader_ai,OddsTrader AI,7.0,OddsTrader AI,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_pearatings,PEARatings,28.2,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_pearatings,PEARatings,7.8,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_pearatings,PEARatings,28.9,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_pearatings,PEARatings,0.4,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_pearatings,PEARatings,7.1,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_pearatings,PEARatings,23.2,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_pearatings,PEARatings,24.9,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_pearatings,PEARatings,10.2,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_pearatings,PEARatings,41.7,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_pearatings,PEARatings,22.8,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_pearatings,PEARatings,17.0,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_pearatings,PEARatings,55.4,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_pearatings,PEARatings,7.2,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_pearatings,PEARatings,28.2,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_pearatings,PEARatings,10.9,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_pearatings,PEARatings,27.9,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_pearatings,PEARatings,33.6,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_pearatings,PEARatings,6.1,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_pearatings,PEARatings,-14.0,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_pearatings,PEARatings,33.0,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_pearatings,PEARatings,1.7,PEARatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,piratings,Pi-Ratings,34.3,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,piratings,Pi-Ratings,9.8,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,piratings,Pi-Ratings,37.3,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,piratings,Pi-Ratings,10.5,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,piratings,Pi-Ratings,17.0,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,piratings,Pi-Ratings,33.5,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,piratings,Pi-Ratings,29.3,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,piratings,Pi-Ratings,14.0,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,piratings,Pi-Ratings,41.7,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,piratings,Pi-Ratings,33.0,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,piratings,Pi-Ratings,34.5,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,piratings,Pi-Ratings,62.3,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,piratings,Pi-Ratings,7.8,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,piratings,Pi-Ratings,30.9,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,piratings,Pi-Ratings,12.5,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,piratings,Pi-Ratings,34.4,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,piratings,Pi-Ratings,36.9,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,piratings,Pi-Ratings,12.4,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,piratings,Pi-Ratings,-9.9,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,piratings,Pi-Ratings,42.5,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,piratings,Pi-Ratings,6.0,PiRate,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,piratings_bias,PI-Rate Bias,32.7,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,piratings_bias,PI-Rate Bias,10.4,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,piratings_bias,PI-Rate Bias,37.4,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,piratings_bias,PI-Rate Bias,12.1,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,piratings_bias,PI-Rate Bias,15.2,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,piratings_bias,PI-Rate Bias,33.1,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,piratings_bias,PI-Rate Bias,28.5,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,piratings_bias,PI-Rate Bias,12.6,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,piratings_bias,PI-Rate Bias,43.7,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,piratings_bias,PI-Rate Bias,31.6,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,piratings_bias,PI-Rate Bias,34.5,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,piratings_bias,PI-Rate Bias,64.6,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,piratings_bias,PI-Rate Bias,7.6,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,piratings_bias,PI-Rate Bias,30.6,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,piratings_bias,PI-Rate Bias,11.3,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,piratings_bias,PI-Rate Bias,35.7,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,piratings_bias,PI-Rate Bias,35.6,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,piratings_bias,PI-Rate Bias,13.7,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,piratings_bias,PI-Rate Bias,-9.0,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,piratings_bias,PI-Rate Bias,43.3,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,piratings_bias,PI-Rate Bias,5.1,PiRate: Bias,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,piratings_mean,Pi-Ratings Mean,31.5,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,piratings_mean,Pi-Ratings Mean,11.1,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,piratings_mean,Pi-Ratings Mean,35.2,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,piratings_mean,Pi-Ratings Mean,9.0,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,piratings_mean,Pi-Ratings Mean,13.6,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,piratings_mean,Pi-Ratings Mean,32.9,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,piratings_mean,Pi-Ratings Mean,29.4,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,piratings_mean,Pi-Ratings Mean,12.3,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,piratings_mean,Pi-Ratings Mean,40.4,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,piratings_mean,Pi-Ratings Mean,29.5,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,piratings_mean,Pi-Ratings Mean,32.3,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,piratings_mean,Pi-Ratings Mean,60.7,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,piratings_mean,Pi-Ratings Mean,7.2,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,piratings_mean,Pi-Ratings Mean,28.1,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,piratings_mean,Pi-Ratings Mean,12.9,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,piratings_mean,Pi-Ratings Mean,33.4,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,piratings_mean,Pi-Ratings Mean,36.9,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,piratings_mean,Pi-Ratings Mean,12.3,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,piratings_mean,Pi-Ratings Mean,-10.0,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,piratings_mean,Pi-Ratings Mean,40.8,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,piratings_mean,Pi-Ratings Mean,5.4,PiRate: Mean,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_power_rank,Power Rank,22.0,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_power_rank,Power Rank,8.5,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_power_rank,Power Rank,27.5,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_power_rank,Power Rank,1.7,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_power_rank,Power Rank,11.6,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_power_rank,Power Rank,22.3,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_power_rank,Power Rank,24.5,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_power_rank,Power Rank,8.6,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_power_rank,Power Rank,36.6,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_power_rank,Power Rank,21.6,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_power_rank,Power Rank,21.7,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_power_rank,Power Rank,52.2,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_power_rank,Power Rank,5.4,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_power_rank,Power Rank,28.2,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_power_rank,Power Rank,9.3,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_power_rank,Power Rank,24.2,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_power_rank,Power Rank,31.6,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_power_rank,Power Rank,7.1,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_power_rank,Power Rank,-8.1,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_power_rank,Power Rank,31.5,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_power_rank,Power Rank,2.2,Power Rank,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_power_rank_free,Power Rank: Free,24.1,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_power_rank_free,Power Rank: Free,6.8,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_power_rank_free,Power Rank: Free,25.7,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_power_rank_free,Power Rank: Free,-0.8,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_power_rank_free,Power Rank: Free,7.6,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_power_rank_free,Power Rank: Free,19.3,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_power_rank_free,Power Rank: Free,21.3,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_power_rank_free,Power Rank: Free,10.1,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_power_rank_free,Power Rank: Free,31.1,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_power_rank_free,Power Rank: Free,16.6,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_power_rank_free,Power Rank: Free,14.1,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_power_rank_free,Power Rank: Free,50.2,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_power_rank_free,Power Rank: Free,5.7,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_power_rank_free,Power Rank: Free,23.2,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_power_rank_free,Power Rank: Free,8.5,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_power_rank_free,Power Rank: Free,24.1,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_power_rank_free,Power Rank: Free,28.0,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_power_rank_free,Power Rank: Free,6.9,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_power_rank_free,Power Rank: Free,-8.1,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_power_rank_free,Power Rank: Free,29.6,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_power_rank_free,Power Rank: Free,2.0,Power Rank: Free,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_room44_bets,Room44 Bets,17.8,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_room44_bets,Room44 Bets,8.7,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_room44_bets,Room44 Bets,24.2,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_room44_bets,Room44 Bets,-0.7,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_room44_bets,Room44 Bets,7.2,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_room44_bets,Room44 Bets,20.1,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_room44_bets,Room44 Bets,23.4,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_room44_bets,Room44 Bets,13.2,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_room44_bets,Room44 Bets,38.5,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_room44_bets,Room44 Bets,21.3,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_room44_bets,Room44 Bets,11.4,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_room44_bets,Room44 Bets,48.4,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_room44_bets,Room44 Bets,9.3,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_room44_bets,Room44 Bets,21.3,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_room44_bets,Room44 Bets,8.6,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_room44_bets,Room44 Bets,26.0,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_room44_bets,Room44 Bets,26.1,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_room44_bets,Room44 Bets,2.5,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_room44_bets,Room44 Bets,-9.3,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_room44_bets,Room44 Bets,25.9,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_room44_bets,Room44 Bets,0.1,Room44 Bets,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_sp,SP+,28.9,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_sp,SP+,7.8,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_sp,SP+,30.4,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_sp,SP+,2.6,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_sp,SP+,13.8,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_sp,SP+,19.5,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_sp,SP+,22.4,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_sp,SP+,7.0,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_sp,SP+,39.9,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_sp,SP+,23.6,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_sp,SP+,15.5,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_sp,SP+,60.4,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_sp,SP+,7.7,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_sp,SP+,26.6,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_sp,SP+,8.1,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_sp,SP+,26.9,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_sp,SP+,27.4,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_sp,SP+,12.4,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_sp,SP+,-10.6,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_sp,SP+,34.3,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_sp,SP+,1.7,SP+,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_sportsline,SportsLine,23.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_sportsline,SportsLine,6.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_sportsline,SportsLine,26.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_sportsline,SportsLine,7.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_sportsline,SportsLine,9.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_sportsline,SportsLine,16.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_sportsline,SportsLine,25.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_sportsline,SportsLine,9.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_sportsline,SportsLine,33.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_sportsline,SportsLine,19.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_sportsline,SportsLine,13.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_sportsline,SportsLine,48.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_sportsline,SportsLine,12.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_sportsline,SportsLine,25.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_sportsline,SportsLine,10.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_sportsline,SportsLine,28.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_sportsline,SportsLine,29.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_sportsline,SportsLine,1.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_sportsline,SportsLine,-13.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_sportsline,SportsLine,29.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_sportsline,SportsLine,14.0,SportsLine,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_sportsratings,SportsRatings,27.7,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_sportsratings,SportsRatings,15.0,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_sportsratings,SportsRatings,32.8,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_sportsratings,SportsRatings,0.7,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_sportsratings,SportsRatings,-0.5,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_sportsratings,SportsRatings,27.3,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_sportsratings,SportsRatings,15.3,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_sportsratings,SportsRatings,25.1,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_sportsratings,SportsRatings,30.3,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_sportsratings,SportsRatings,14.4,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_sportsratings,SportsRatings,21.2,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_sportsratings,SportsRatings,56.5,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_sportsratings,SportsRatings,11.5,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_sportsratings,SportsRatings,29.3,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_sportsratings,SportsRatings,13.0,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_sportsratings,SportsRatings,29.9,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_sportsratings,SportsRatings,21.9,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_sportsratings,SportsRatings,4.7,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_sportsratings,SportsRatings,4.4,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_sportsratings,SportsRatings,39.7,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_sportsratings,SportsRatings,-0.5,SportsRatings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,linecfbp_tshoe_index,TShoe Index,23.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,linecfbp_tshoe_index,TShoe Index,8.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,linecfbp_tshoe_index,TShoe Index,28.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,linecfbp_tshoe_index,TShoe Index,-2.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,linecfbp_tshoe_index,TShoe Index,12.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,linecfbp_tshoe_index,TShoe Index,20.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,linecfbp_tshoe_index,TShoe Index,22.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,linecfbp_tshoe_index,TShoe Index,4.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,linecfbp_tshoe_index,TShoe Index,37.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,linecfbp_tshoe_index,TShoe Index,22.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,linecfbp_tshoe_index,TShoe Index,22.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,linecfbp_tshoe_index,TShoe Index,53.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,linecfbp_tshoe_index,TShoe Index,6.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,linecfbp_tshoe_index,TShoe Index,26.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,linecfbp_tshoe_index,TShoe Index,8.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,linecfbp_tshoe_index,TShoe Index,23.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,linecfbp_tshoe_index,TShoe Index,31.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,linecfbp_tshoe_index,TShoe Index,7.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,linecfbp_tshoe_index,TShoe Index,-10.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,linecfbp_tshoe_index,TShoe Index,33.5,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,linecfbp_tshoe_index,TShoe Index,-1.0,TShoe Index,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Akron,Wake Forest,24.0,teamrankings,TeamRankings.com,23.2,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Colorado,Georgia Tech,6.5,teamrankings,TeamRankings.com,9.1,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,UAB,Illinois,27.5,teamrankings,TeamRankings.com,29.7,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,San Jose St.,Eastern Mich.,3.0,teamrankings,TeamRankings.com,0.0,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Toledo,Michigan St.,9.5,teamrankings,TeamRankings.com,11.0,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Fresno St.,USC,22.0,teamrankings,TeamRankings.com,16.2,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,East Carolina,Alabama,28.0,teamrankings,TeamRankings.com,29.1,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Liberty,James Madison,6.5,teamrankings,TeamRankings.com,9.9,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,North Texas,Indiana,40.0,teamrankings,TeamRankings.com,39.7,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ohio,Nebraska,23.5,teamrankings,TeamRankings.com,23.1,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oregon St.,Houston,20.5,teamrankings,TeamRankings.com,21.4,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Ball St.,Ohio St.,50.0,teamrankings,TeamRankings.com,58.0,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Baylor,Auburn,7.5,teamrankings,TeamRankings.com,9.2,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boise St.,Oregon,24.5,teamrankings,TeamRankings.com,24.4,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Boston College,Cincinnati,7.5,teamrankings,TeamRankings.com,8.6,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Marshall,Penn St.,24.0,teamrankings,TeamRankings.com,27.4,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Texas St.,Texas,29.5,teamrankings,TeamRankings.com,30.2,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Tulane,Duke,7.5,teamrankings,TeamRankings.com,8.1,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Oklahoma St.,Tulsa,-13.5,teamrankings,TeamRankings.com,-13.3,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Northern Ill.,Iowa,31.5,teamrankings,TeamRankings.com,36.4,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip
+2026,2,Wyoming,Colorado St.,3.0,teamrankings,TeamRankings.com,6.1,TeamRankings,tableau_embedding_api_tooltip,explicit_home_margin_tooltip

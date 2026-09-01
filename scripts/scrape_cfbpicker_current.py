@@ -142,35 +142,66 @@ def direct_refresh(
     season: int,
     week: int,
     mapping_file: Path | None = None,
+    picker_file: Path | None = None,
     headed: bool = False,
     system_chrome: bool = False,
+    timeout_seconds: int = 3600,
 ) -> dict:
-    """Use the proven Embedding API + L# tooltip extractor for fresh current rows."""
+    """Use the proven Embedding API + L# tooltip extractor for fresh current rows.
+
+    The lower-level collector may remove its output when it finds zero matching
+    rows. Preserve the last verified cache until a new non-empty collection has
+    been validated so a diagnostic miss cannot destroy production state.
+    """
     api_script = Path(__file__).with_name("scrape_cfbpicker_current_api.py")
     if not api_script.exists():
         raise FileNotFoundError(f"Missing current API collector: {api_script}")
+    out = root / "data" / "current" / "cfbpicker_current_long.csv"
+    meta_path = root / "data" / "current" / "cfbpicker_mirror_status.json"
+    prior_out = out.read_bytes() if out.exists() else None
+    prior_meta = meta_path.read_bytes() if meta_path.exists() else None
+
+    def restore_prior_cache() -> None:
+        if prior_out is not None:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(prior_out)
+        if prior_meta is not None:
+            meta_path.parent.mkdir(parents=True, exist_ok=True)
+            meta_path.write_bytes(prior_meta)
     cmd = [
         sys.executable, str(api_script), "--root", str(root),
         "--season", str(int(season)), "--week", str(int(week)), "--strict",
     ]
     if mapping_file is not None:
         cmd += ["--mapping-file", str(mapping_file)]
+    if picker_file is not None:
+        cmd += ["--picker-file", str(picker_file)]
     if headed:
         cmd.append("--headed")
     if system_chrome:
         cmd.append("--system-chrome")
-    proc = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True, timeout=900)
+    proc = subprocess.run(
+        cmd, cwd=str(root), capture_output=True, text=True,
+        timeout=max(60, int(timeout_seconds)),
+    )
     if proc.returncode != 0:
+        restore_prior_cache()
         raise RuntimeError(
-            "Embedding API current collector failed. "
+            "Embedding API current collector failed; prior verified CFB cache was preserved. "
             + (proc.stderr.strip() or proc.stdout.strip() or f"returncode={proc.returncode}")[-5000:]
         )
-    out = root / "data" / "current" / "cfbpicker_current_long.csv"
     if not out.exists():
-        raise RuntimeError("Embedding API collector returned success but did not write cfbpicker_current_long.csv.")
+        restore_prior_cache()
+        raise RuntimeError(
+            "Embedding API collector returned success but did not write cfbpicker_current_long.csv; "
+            "prior verified CFB cache was preserved."
+        )
     frame = pd.read_csv(out, low_memory=False)
     if frame.empty:
-        raise RuntimeError("Embedding API current collector returned zero rows.")
+        restore_prior_cache()
+        raise RuntimeError(
+            "Embedding API current collector returned zero rows; prior verified CFB cache was preserved."
+        )
     meta = write_current(root, frame, season=season, week=week, transport="tableau_embedding_api_tooltip")
     meta["collector_stdout_tail"] = proc.stdout[-2500:]
     return meta
@@ -182,6 +213,14 @@ def main() -> int:
     ap.add_argument("--season", type=int, required=True)
     ap.add_argument("--week", type=int, required=True)
     ap.add_argument("--mapping-file", type=Path, default=None)  # accepted for current_week.py compatibility
+    ap.add_argument(
+        "--picker-file", type=Path, default=None,
+        help="Optional picker-name file. Missing explicit files fail instead of falling back to all models.",
+    )
+    ap.add_argument(
+        "--timeout-seconds", type=int, default=3600,
+        help="Watchdog for the full Tableau API child process (default: 3600).",
+    )
     ap.add_argument("--strict", action="store_true")
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--force-download", action="store_true")  # compatibility; API is always fresh
@@ -230,7 +269,8 @@ def main() -> int:
     try:
         meta = direct_refresh(
             root, season=args.season, week=args.week, mapping_file=args.mapping_file,
-            headed=args.headed, system_chrome=args.system_chrome,
+            picker_file=args.picker_file, headed=args.headed,
+            system_chrome=args.system_chrome, timeout_seconds=args.timeout_seconds,
         )
         print(json.dumps({"status": "ok", **meta}, indent=2))
         return 0

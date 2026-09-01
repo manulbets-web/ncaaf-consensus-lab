@@ -276,7 +276,7 @@ app_ui = ui.page_fluid(
     ui.h2("NCAAF Consensus Lab", class_="app-title"),
     ui.p(
         "Past performance → current board → strategy discovery → upcoming picks → line movement → forecast plots. "
-        "CFB Picker is intentionally inactive until its 2026 feed is available.",
+        "PredictionTracker defines the live game slate; CFB Picker expands model coverage on those games.",
         class_="app-subtitle",
     ),
     ui.navset_card_tab(
@@ -347,7 +347,7 @@ app_ui = ui.page_fluid(
                     ui.tags.li("Treat the discovery ranking as model-combination discovery and the recent held-out weeks as the cleaner validation check."),
                     ui.tags.li("On Page 4, use the Absolute spread trust check to compare the final Diversified META strategy across small spreads through 35+, including META-vs-market MAE and separate favorite/underdog betting performance."),
                 ),
-                ui.p("CFB Picker is currently inactive and can be added back when its current-season feed is available.", class_="muted"),
+                ui.p("CFB Picker is active as a supplemental model source. The latest verified PredictionTracker board defines which games are live, so stale/completed CFB Picker rows cannot re-enter the upcoming slate.", class_="muted"),
             ),
             ui.p(
                 "This app is a research and decision-support tool. Historical performance and model agreement do not guarantee future results.",
@@ -1340,10 +1340,26 @@ def server(input, output, session):
             cfb_models = int(cfb["canonical_model_id"].nunique()) if len(cfb) else 0
             transport = ((r or {}).get("refresh_status") or {}).get("predictiontracker_transport") or "unknown"
             via = "direct source" if transport == "direct" else "verified GitHub mirror" if transport == "github_mirror" else transport
+            excluded_rows = int((r or {}).get("cfbpicker_rows_excluded_off_slate", 0))
+            excluded_games = int((r or {}).get("cfbpicker_games_excluded_off_slate", 0))
+            completed_excluded = int((r or {}).get("history_completed_games_excluded", 0))
+            suffix = ""
+            if excluded_rows or completed_excluded:
+                parts = []
+                if excluded_rows:
+                    parts.append(
+                        f"{excluded_rows} cached CFB Picker rows across {excluded_games} off-slate games were excluded"
+                    )
+                if completed_excluded:
+                    parts.append(
+                        f"{completed_excluded} already-graded game{'s' if completed_excluded != 1 else ''} were removed"
+                    )
+                suffix = " " + "; ".join(parts) + "."
             return (
                 f"PredictionTracker verified and loaded via {via}. {live} PT model columns are posting. "
-                f"The season/week-matched CFB Picker cache contributes {len(cfb)} incremental "
+                f"The CFB Picker cache contributes {len(cfb)} incremental live-slate "
                 f"model-game rows across {cfb_models} canonical models after PT-first de-duplication."
+                f"{suffix}"
             )
         if s == "error":
             return "PredictionTracker refresh failed. Connect Cloud is blocked by the source and no matching verified GitHub mirror was available. Run the local mirror helper on your Mac, then click Refresh again."
@@ -1375,9 +1391,18 @@ def server(input, output, session):
         transport = rs.get("predictiontracker_transport") or rec.get("transport") or "unknown"
         source_fetched = rec.get("source_fetched_at_utc")
         source_txt = f" · source fetched: {source_fetched}" if source_fetched else ""
+        live_games = int(r.get("master_games", 0))
+        raw_pt_games = int(r.get("raw_pt_master_games", live_games))
+        off_slate_games = int(r.get("cfbpicker_games_excluded_off_slate", 0))
+        completed_games = int(r.get("history_completed_games_excluded", 0))
+        slate_audit = (
+            f" · live games: {live_games}/{raw_pt_games} PT games"
+            f" · CFB off-slate games excluded: {off_slate_games}"
+            f" · graded/completed PT games excluded: {completed_games}"
+        )
         return (
             f"PT published: {published} · app fetched: {fetched}{source_txt} · transport: {transport} · "
-            f"prospective snapshot: {snap_txt}{validation}"
+            f"prospective snapshot: {snap_txt}{validation}{slate_audit}"
         )
 
     @render.text

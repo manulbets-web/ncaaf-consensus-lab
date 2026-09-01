@@ -111,7 +111,7 @@ else:
     print("CFB Picker mirror metadata not present; current boards will use PredictionTracker only.")
 PYMIRROR
 
-echo "Preflight: verifying v3.5.39 Patrick preset + CFB Picker API transport..."
+echo "Preflight: verifying v3.5.41 Patrick preset + CFB Picker API transport..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -160,7 +160,7 @@ if "save_prospective_current_week_snapshot" not in current_week:
 if "PT_MIRROR_CSV_URL" not in current_week:
     refresh_missing.append("GitHub mirror fallback")
 if refresh_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.39 refresh code detected:\n  " + "\n  ".join(refresh_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.41 refresh code detected:\n  " + "\n  ".join(refresh_missing))
 line_path = Path("strategy_lab/line_movement.py")
 if not line_path.exists():
     raise SystemExit("REFUSING TO PUSH: strategy_lab/line_movement.py is missing")
@@ -179,7 +179,7 @@ for x in ["line_active_strategy_status", '"discovery_periods": tuple(search_peri
     if x not in s:
         line_missing.append(x)
 if line_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.39 line-movement module detected:\n  " + "\n  ".join(line_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.41 line-movement module detected:\n  " + "\n  ".join(line_missing))
 fs_start = s.find("async def forward_stability_task(")
 fs_end = s.find("@reactive.effect", fs_start)
 fs_body = s[fs_start:fs_end] if fs_start >= 0 and fs_end > fs_start else ""
@@ -187,7 +187,7 @@ if "input." in fs_body:
     raise SystemExit("REFUSING TO PUSH: forward_stability_task reads Shiny reactive input inside Extended Task")
 for token in ["min_discovery: int, min_games: int", "min_discovery_periods=int(min_discovery)", "min_games_per_period=int(min_games)"]:
     if token not in s:
-        raise SystemExit(f"REFUSING TO PUSH: v3.5.39 Extended Task hotfix marker missing: {token}")
+        raise SystemExit(f"REFUSING TO PUSH: v3.5.41 Extended Task hotfix marker missing: {token}")
 cfb_files = {
     "scripts/scrape_cfbpicker_history_api.py": ["TableauViz", 'activeSheet, "Year "', "picker_items_from_objects"],
     "scripts/cfbpicker_tooltip_legacy.py": ["click_and_read_tooltip_response", "collect_header_rows"],
@@ -216,18 +216,24 @@ if "load_cfbpicker_current(root, season=int(season), week=int(week))" not in cur
 for token in [
     'source_order = {"predictiontracker": 0, "cfbpicker": 1}',
     "refresh_cfbpicker: bool = True",
+    "completed_game_keys_from_history",
+    "cfbpicker_rows_excluded_off_slate",
+    "latest verified PredictionTracker board is the live game-universe",
 ]:
     if token not in current_week:
         raise SystemExit(f"REFUSING TO PUSH: current CFB Picker merge marker missing: {token}")
 for token in ["include_cfbpicker=True", "refresh_cfbpicker=False", "current_cfbpicker_model_map"]:
     if token not in s:
         raise SystemExit(f"REFUSING TO PUSH: app does not consume the deployed CFB Picker cache: {token}")
-print("Verified: Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | line movement | rolling OOS | nested forward stability | CFB Picker Embedding API + L# tooltips + canonical de-dup | strict PT/CFB mirrors")
+cfb_refresh_helper = Path("refresh_cfbpicker_local_and_push.sh").read_text(encoding="utf-8")
+if "refresh_predictiontracker_mirror.py" not in cfb_refresh_helper:
+    raise SystemExit("REFUSING TO PUSH: CFB Picker refresh does not refresh PredictionTracker first")
+print("Verified: Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | line movement | rolling OOS | nested forward stability | CFB Picker live-slate filter + PT-first de-dup | strict PT/CFB mirrors")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.39"
+  git commit -m "Deploy NCAAF Consensus Lab v3.5.41"
 else
   echo "No new changes to commit."
 fi

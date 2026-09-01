@@ -1,0 +1,43 @@
+Action Network
+All-Takes
+CFB Geek
+CFB Insiders
+CFB Professor
+CFB Victory
+Congrove
+David Sasser
+Dokter Entropy
+DRatings
+ESPN FPI
+FEI
+G3 Projections
+Harville
+John Harris
+JP+
+Keeper
+LAZ Index
+Massey
+McConnell
+McIllece Sports
+Moore Ratings
+OddsTrader AI
+PEARatings
+PiRate
+PiRate: Bias
+PiRate: Mean
+Power Rank
+Power Rank: Free
+Room44 Bets
+Ryder Analytics
+Sagarin
+Sagarin: Golden
+Sagarin: Predictor
+Sagarin: Recent
+Slate Index
+SP+
+SportsLine
+SportsRatings
+TeamRankings
+TShoe Index
+University Foot-Ball
+Wilson Ratings

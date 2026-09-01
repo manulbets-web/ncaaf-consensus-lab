@@ -18,6 +18,8 @@ from current_week import (  # noqa: E402
     game_key_from_names,
     load_cfbpicker_current,
     load_predictiontracker_current,
+    predictiontracker_master_slate,
+    completed_game_keys_from_history,
 )
 from engine import load_strategy_data  # noqa: E402
 
@@ -74,6 +76,21 @@ def main() -> int:
     pt, _ = load_predictiontracker_current(root, mapping)
     pt = add_keys(pt)
 
+    raw_cfb_rows = int(cfb["model_game_key"].nunique())
+    raw_cfb_games = int(cfb["game_join_key"].nunique())
+    master = predictiontracker_master_slate(root)
+    completed_keys = completed_game_keys_from_history(history, season=int(args.season))
+    if len(master) and completed_keys:
+        master = master[~master["game_join_key"].astype(str).isin(completed_keys)].copy()
+    live_keys = set(master["game_join_key"].astype(str)) if len(master) else set()
+
+    if completed_keys:
+        cfb = cfb[~cfb["game_join_key"].astype(str).isin(completed_keys)].copy()
+        pt = pt[~pt["game_join_key"].astype(str).isin(completed_keys)].copy()
+    if live_keys:
+        cfb = cfb[cfb["game_join_key"].astype(str).isin(live_keys)].copy()
+        pt = pt[pt["game_join_key"].astype(str).isin(live_keys)].copy()
+
     pt_keys = set(pt["model_game_key"].astype(str)) if len(pt) else set()
     cfb["predictiontracker_overlap"] = cfb["model_game_key"].astype(str).isin(pt_keys)
     cfb["incremental_after_pt_first_dedup"] = ~cfb["predictiontracker_overlap"]
@@ -95,9 +112,15 @@ def main() -> int:
     summary = {
         "season": int(args.season),
         "week": int(args.week),
+        "raw_cfbpicker_rows": raw_cfb_rows,
+        "raw_cfbpicker_games": raw_cfb_games,
         "cfbpicker_rows": int(cfb["model_game_key"].nunique()),
         "cfbpicker_models": int(cfb["canonical_model_id"].nunique()),
         "cfbpicker_games": int(cfb["game_join_key"].nunique()),
+        "cfbpicker_rows_excluded_off_live_slate": int(raw_cfb_rows - cfb["model_game_key"].nunique()),
+        "cfbpicker_games_excluded_off_live_slate": int(raw_cfb_games - cfb["game_join_key"].nunique()),
+        "live_predictiontracker_games": int(len(master)),
+        "graded_current_season_games_known": int(len(completed_keys)),
         "predictiontracker_rows": int(pt["model_game_key"].nunique()) if len(pt) else 0,
         "overlap_rows_pt_preferred": int(cfb["predictiontracker_overlap"].sum()),
         "incremental_cfbpicker_rows": int(cfb["incremental_after_pt_first_dedup"].sum()),
