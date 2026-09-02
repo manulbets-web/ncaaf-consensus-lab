@@ -111,7 +111,7 @@ else:
     print("CFB Picker mirror metadata not present; current boards will use PredictionTracker only.")
 PYMIRROR
 
-echo "Preflight: verifying v3.5.41 Patrick preset + CFB Picker API transport..."
+echo "Preflight: verifying v3.5.43 Patrick preset + formal backtest + CFB Picker API transport..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -130,7 +130,6 @@ expected = [
     'PATRICK_OVERLAP_THRESHOLD = 0.50',
     'committee_model_exposure_table',
     'committee_line_reference_table',
-    '5 · Line Movement',
     'line_fixed_reprice_table',
     'line_migration_summary_table',
     'run_line_pipelines',
@@ -147,6 +146,20 @@ expected = [
 missing = [x for x in expected if x not in s]
 if missing:
     raise SystemExit("REFUSING TO PUSH: stale Patrick preset detected:\n  " + "\n  ".join(missing))
+production_ui_required = [
+    '"1 · Model Performance"', '"2 · Current Slate"', '"3 · Strategy"',
+    '"4 · Picks"', '"5 · Validation"', '"6 · Forecast"', 'ui.card_header("Current recommendations")',
+]
+production_ui_forbidden = [
+    'ui.card_header("Raw model projection matrix")',
+    'ui.card_header("Season-by-season model performance")',
+    'ui.card_header("Absolute spread trust check")',
+    'ui.nav_panel(\n            "5 · Line Movement"',
+]
+ui_missing = [x for x in production_ui_required if x not in s]
+ui_stale = [x for x in production_ui_forbidden if x in s]
+if ui_missing or ui_stale:
+    raise SystemExit("REFUSING TO PUSH: production UI cleanup mismatch: " + repr({"missing": ui_missing, "still_visible": ui_stale}))
 refresh_expected = [
     "cached prior-week rows were NOT used",
     "Download prospective snapshots",
@@ -160,7 +173,7 @@ if "save_prospective_current_week_snapshot" not in current_week:
 if "PT_MIRROR_CSV_URL" not in current_week:
     refresh_missing.append("GitHub mirror fallback")
 if refresh_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.41 refresh code detected:\n  " + "\n  ".join(refresh_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.43 refresh code detected:\n  " + "\n  ".join(refresh_missing))
 line_path = Path("strategy_lab/line_movement.py")
 if not line_path.exists():
     raise SystemExit("REFUSING TO PUSH: strategy_lab/line_movement.py is missing")
@@ -179,7 +192,7 @@ for x in ["line_active_strategy_status", '"discovery_periods": tuple(search_peri
     if x not in s:
         line_missing.append(x)
 if line_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.41 line-movement module detected:\n  " + "\n  ".join(line_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.43 line-movement module detected:\n  " + "\n  ".join(line_missing))
 fs_start = s.find("async def forward_stability_task(")
 fs_end = s.find("@reactive.effect", fs_start)
 fs_body = s[fs_start:fs_end] if fs_start >= 0 and fs_end > fs_start else ""
@@ -187,7 +200,21 @@ if "input." in fs_body:
     raise SystemExit("REFUSING TO PUSH: forward_stability_task reads Shiny reactive input inside Extended Task")
 for token in ["min_discovery: int, min_games: int", "min_discovery_periods=int(min_discovery)", "min_games_per_period=int(min_games)"]:
     if token not in s:
-        raise SystemExit(f"REFUSING TO PUSH: v3.5.41 Extended Task hotfix marker missing: {token}")
+        raise SystemExit(f"REFUSING TO PUSH: v3.5.43 Extended Task hotfix marker missing: {token}")
+formal_path = Path("strategy_lab/formal_backtest.py")
+if not formal_path.exists():
+    raise SystemExit("REFUSING TO PUSH: strategy_lab/formal_backtest.py is missing")
+formal_text = formal_path.read_text(encoding="utf-8")
+for token in [
+    "FORMAL_ANCHOR_GRID", "multi_anchor_combination_search",
+    "run_formal_walkforward_backtest", "adaptive_min_prior_bets",
+    "units_flat", "units_win1", "edge_calibration",
+]:
+    if token not in formal_text:
+        raise SystemExit(f"REFUSING TO PUSH: formal backtest marker missing: {token}")
+for token in ["run_formal_backtest", "formal_anchor_plot", "formal_equity_plot", "formal_adaptive_path_table"]:
+    if token not in s:
+        raise SystemExit(f"REFUSING TO PUSH: formal validation UI marker missing: {token}")
 cfb_files = {
     "scripts/scrape_cfbpicker_history_api.py": ["TableauViz", 'activeSheet, "Year "', "picker_items_from_objects"],
     "scripts/cfbpicker_tooltip_legacy.py": ["click_and_read_tooltip_response", "collect_header_rows"],
@@ -228,12 +255,12 @@ for token in ["include_cfbpicker=True", "refresh_cfbpicker=False", "current_cfbp
 cfb_refresh_helper = Path("refresh_cfbpicker_local_and_push.sh").read_text(encoding="utf-8")
 if "refresh_predictiontracker_mirror.py" not in cfb_refresh_helper:
     raise SystemExit("REFUSING TO PUSH: CFB Picker refresh does not refresh PredictionTracker first")
-print("Verified: Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | exposure audit | line movement | rolling OOS | nested forward stability | CFB Picker live-slate filter + PT-first de-dup | strict PT/CFB mirrors")
+print("Verified: streamlined production UI + formal anchor/staking validation | Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | CFB Picker live-slate filter + PT-first de-dup | research backend retained")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.41"
+  git commit -m "Deploy NCAAF Consensus Lab v3.5.43"
 else
   echo "No new changes to commit."
 fi

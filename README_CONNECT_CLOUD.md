@@ -1,4 +1,4 @@
-# NCAAF Consensus Lab v3.5.41 — Posit Connect Cloud bundle
+# NCAAF Consensus Lab v3.5.43 — Posit Connect Cloud bundle
 
 This directory was generated from:
 
@@ -11,7 +11,7 @@ The deployment is public-session safe: strategy selections and alternate-line ov
 PredictionTracker currently blocks Posit Connect Cloud worker IPs. The deployed app therefore falls back to a strict season/week-tagged GitHub mirror refreshed from the user's Mac.
 Use `./refresh_predictiontracker_local_and_push.sh SEASON WEEK` whenever PredictionTracker changes; the helper also persists unique source snapshots in Git.
 
-Page 5 includes the repeated chronological and nested forward-stability experiments. v3.5.41 integrates Andrew Percival's CFB Picker via the Tableau Embedding API + L# tooltip transport proven on 2023–2025. The latest verified PredictionTracker board is now authoritative for live game membership; CFB Picker expands model coverage only on those games, so cumulative/stale Tableau rows cannot re-enter Pages 2 or 4. Matchups already graded in the current season are also excluded defensively. PredictionTracker remains preferred when the same canonical model/game exists in both sources. Live-only models are logged prospectively but remain ineligible for historically selected strategies. The slow Tableau collection remains a Mac-side weekly refresh rather than an in-app task. v3.5.41 also bundles the smoke-test picker files, refuses missing explicit --picker-file paths instead of silently scraping all models, and extends the wrapper watchdog for full 43-model runs.
+Page 5 is the streamlined formal chronological Validation page. It evaluates the 0.00–2.00 SD combination-anchor grid independently inside each untouched OOS block, adapts the anchor using prior OOS Wilson lower bound only, and reports both flat-1u-risk and risk-to-win-1u staking. The legacy line-movement and nested forward-stability research code remains available in the backend but is not exposed in the production UI. v3.5.43 integrates Andrew Percival's CFB Picker via the Tableau Embedding API + L# tooltip transport proven on 2023–2025. The latest verified PredictionTracker board is now authoritative for live game membership; CFB Picker expands model coverage only on those games, so cumulative/stale Tableau rows cannot re-enter Pages 2 or 4. Matchups already graded in the current season are also excluded defensively. PredictionTracker remains preferred when the same canonical model/game exists in both sources. Live-only models are logged prospectively but remain ineligible for historically selected strategies. The slow Tableau collection remains a Mac-side weekly refresh rather than an in-app task. v3.5.43 also bundles the smoke-test picker files, refuses missing explicit --picker-file paths instead of silently scraping all models, and extends the wrapper watchdog for full 43-model runs.
 
 ## CFB Picker historical enrichment
 

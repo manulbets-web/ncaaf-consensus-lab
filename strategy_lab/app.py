@@ -9,6 +9,7 @@ import time
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from shiny import App, reactive, render, ui
 
 from engine import load_strategy_data
@@ -30,6 +31,10 @@ from line_movement import (
     clean_line_history_for_analysis, individual_line_reference_by_period,
     run_line_specific_pipelines, run_rolling_line_selection_validation,
     run_forward_stability_validation, FORWARD_STABILITY_METHODS, LINE_REFS,
+)
+from formal_backtest import (
+    FORMAL_ANCHOR_GRID, load_formal_backtest_outputs,
+    run_formal_walkforward_backtest, save_formal_backtest_outputs,
 )
 from streamlined_engine import (
     StreamlinedBacktestConfig,
@@ -157,6 +162,7 @@ PT_LINE_HISTORY = PT_LINE_HISTORY_RAW
 INDIVIDUAL_LINE_HISTORY = individual_model_line_reference_performance(
     DATA, PT_LINE_HISTORY_RAW, standard_price=-110
 )
+CACHED_FORMAL_BACKTEST = load_formal_backtest_outputs(PROJECT_ROOT)
 
 
 def _saved_strategy() -> dict:
@@ -269,100 +275,47 @@ def _style_css():
 
 
 # ---------------------------------------------------------------------------
-# Six-page UI
+# Production UI (v3.5.43 streamlined + formal validation)
 # ---------------------------------------------------------------------------
 app_ui = ui.page_fluid(
     _style_css(),
     ui.h2("NCAAF Consensus Lab", class_="app-title"),
     ui.p(
-        "Past performance → current board → strategy discovery → upcoming picks → line movement → forecast plots. "
+        "Historical model evidence → current slate → strategy selection → current picks → formal validation → forecast detail. "
         "PredictionTracker defines the live game slate; CFB Picker expands model coverage on those games.",
         class_="app-subtitle",
     ),
     ui.navset_card_tab(
-        # ------------------------------------------------------------------
-        # Instructions
-        # ------------------------------------------------------------------
         ui.nav_panel(
             "How to Use",
             ui.card(
-                ui.card_header("Quick start"),
+                ui.card_header("Weekly workflow"),
                 ui.tags.ol(
-                    ui.tags.li(ui.strong("Refresh the current slate on Page 2."), " This loads PredictionTracker's current games, market lines, and model projections."),
-                    ui.tags.li(ui.strong("Review Page 1 if you want context on individual models."), " Historical ATS, ROI, Wilson lower bound, forecast error, and season-by-season history are shown there."),
-                    ui.tags.li(ui.strong("Build a strategy on Page 3."), " Automatic screening ranks only models that are posting this week, searches promising model combinations on historical discovery data, and evaluates frozen finalists on a recent chronological holdout."),
-                    ui.tags.li(ui.strong("Choose one or more finalists on Page 3."), " The selected combinations become C1, C2, C3, and so on for the current session."),
-                    ui.tags.li(ui.strong("Apply them on Page 4."), " Each combination independently forms a mean projected spread, an SD across its component models, and a BET/PASS decision. The page also summarizes agreement across combinations."),
-                    ui.tags.li(ui.strong("Patrick\'s one-click recipe on Page 4."), " After Page 2 is refreshed, it takes the top 35 currently posting models by discovery Wilson lower bound (minimum 25 bets/model), holds out 6 sufficiently covered completed weeks, searches set sizes 3–6 at k = 0.75 SD, ranks combinations by discovery ATS, applies the top 50, tunes each finalist's k on discovery data, and builds the overlap-adjusted META backtest."),
-                    ui.tags.li(ui.strong("Diagnose line movement on Page 5."), " Separate price effects from selection effects, inspect Open→Midweek→Updated signal migration/CLV, and optionally rebuild three independent line-specific discovery pipelines."),
-                    ui.tags.li(ui.strong("Visualize the hierarchy on Page 6."), " Pick any current game to see every mapped model projection, the selected finalist-combination forecasts, and the final portfolio/meta estimate against the market line."),
-                ),
-            ),
-            ui.layout_columns(
-                ui.card(
-                    ui.card_header("How the betting signal works"),
-                    ui.p("For each selected combination, the app averages the available model projected spreads for a game and calculates the sample SD across those model projections."),
-                    ui.tags.ul(
-                        ui.tags.li(ui.strong("Expected spread"), ": mean of the combination's available model projections."),
-                        ui.tags.li(ui.strong("Model SD"), ": disagreement among models inside that combination."),
-                        ui.tags.li(ui.strong("Raw edge"), ": expected spread minus the market-implied margin, expressed in points."),
-                        ui.tags.li(ui.strong("Standardized edge (×SD)"), ": absolute raw edge divided by model SD. This is a unitless number of SDs, not the SD itself."),
-                        ui.tags.li(ui.strong("k"), ": the required signal threshold. Smaller k values are less restrictive and produce more bets."),
-                    ),
-                    ui.p("A combination produces a BET only when enough of its models are available and the market lies outside that combination's mean ± k×SD decision boundary.", class_="muted"),
-                ),
-                ui.card(
-                    ui.card_header("How to read the combination portfolio"),
-                    ui.tags.ul(
-                        ui.tags.li(ui.strong("C1, C2, ..."), ": the finalist combinations you selected on Page 3. Search rank remains available in the detailed table, but the short labels are used throughout Page 4."),
-                        ui.tags.li(ui.strong("Portfolio mean ± SD"), ": the old raw equal-weight summary across C1–C12, retained as a benchmark."),
-                        ui.tags.li(ui.strong("Diversified META"), ": near-duplicate combinations are grouped by 0.50 Jaccard model overlap; each overlap community gets equal influence. META consensus SD combines uncertainty in the ensemble means with disagreement between independent overlap communities; raw within-model dispersion is not counted a second time at full strength."),
-                        ui.tags.li(ui.strong("Automatic k"), ": each frozen finalist is evaluated across 0.25–2.00 SD on discovery data only. The app requires a centered three-k stability plateau (so 0.25 and 2.00 cannot win from one-sided endpoint evidence), then favors the lower/more-supported k when robust Wilson performance is essentially tied. The frozen k is tested on holdout."),
-                        ui.tags.li(ui.strong("Mean direction"), ": how many combination means lie on each side of the current betting line."),
-                        ui.tags.li(ui.strong("Bet direction"), ": how many combinations actually clear their k×SD threshold in each direction."),
-                        ui.tags.li(ui.strong("PASS"), ": a combination has enough models to score the game, but the available line remains inside its decision boundary."),
-                    ),
-                ),
-                col_widths=(6, 6),
-            ),
-            ui.card(
-                ui.card_header("Line shopping / alternate lines"),
-                ui.p(
-                    "Page 4 lets you temporarily replace the PredictionTracker market line with a line you can actually bet. "
-                    "Choose a game and enter the home team's point spread exactly as a sportsbook displays it: negative if the home team is favored and positive if the home team is the underdog. "
-                    "For example, for NC State @ Virginia, enter -3.0 to test Virginia -3 instead of Virginia -4."
+                    ui.tags.li(ui.strong("Refresh Current Slate."), " Confirm the live games and market lines."),
+                    ui.tags.li(ui.strong("Run the recommended strategy."), " The one-click recipe selects the current model universe, freezes the historical discovery/holdout split, searches combinations, tunes k, and scores the slate."),
+                    ui.tags.li(ui.strong("Review Picks."), " Use the game-level agreement table and line-shopping override for actionable decisions."),
+                    ui.tags.li(ui.strong("Review Validation."), " Run or inspect the strict chronological anchor/staking backtest before relying on the live strategy."),
+                    ui.tags.li(ui.strong("Open Forecast."), " Inspect the full model → finalist → META hierarchy for any game that needs a closer look."),
                 ),
                 ui.p(
-                    "The override immediately re-scores every selected combination and updates the agreement counts. "
-                    "It does not change the historical data, PredictionTracker's stored line, or anyone else's session.",
+                    "Historical scorecards and custom screening remain available for research, but development-only diagnostics are no longer shown in the production interface.",
                     class_="muted",
                 ),
             ),
             ui.card(
-                ui.card_header("Recommended workflow for automatic screening"),
-                ui.tags.ul(
-                    ui.tags.li("Refresh Page 2 first so the candidate pool contains only models that are actually posting this week."),
-                    ui.tags.li(ui.strong("Patrick\'s recommended recipe:"), " Top 35 current-week models by discovery Wilson lower bound (minimum 25 discovery bets/model), hold out the latest 6 completed weeks with adequate model coverage, screen set sizes 3–6 at k = 0.75 SD, rank combinations by ATS, freeze the top 50, then automatically tune each finalist's k across 0.25–2.00 SD on discovery only and build a diversity-adjusted META backtest."),
-                    ui.tags.li("The Page 4 button runs that recipe end-to-end; Page 3 remains available when you want to inspect or alter the research settings."),
-                    ui.tags.li("Treat the discovery ranking as model-combination discovery and the recent held-out weeks as the cleaner validation check."),
-                    ui.tags.li("On Page 4, use the Absolute spread trust check to compare the final Diversified META strategy across small spreads through 35+, including META-vs-market MAE and separate favorite/underdog betting performance."),
+                ui.card_header("Signal definition"),
+                ui.p(
+                    "Each finalist uses the mean projected home margin across its available models and the sample SD of those projections. "
+                    "A BET requires the market to lie outside mean ± k×SD; otherwise the combination passes. The diversified META reduces duplicate influence by grouping highly overlapping finalist sets before forming the final consensus.",
+                    class_="muted",
                 ),
-                ui.p("CFB Picker is active as a supplemental model source. The latest verified PredictionTracker board defines which games are live, so stale/completed CFB Picker rows cannot re-enter the upcoming slate.", class_="muted"),
-            ),
-            ui.p(
-                "This app is a research and decision-support tool. Historical performance and model agreement do not guarantee future results.",
-                class_="muted",
             ),
         ),
 
-        # ------------------------------------------------------------------
-        # Page 1
-        # ------------------------------------------------------------------
         ui.nav_panel(
-            "1 · Historical Performance",
+            "1 · Model Performance",
             ui.p(
-                "Standalone historical performance for every canonical model. "
-                "A model's ATS side is the direction of its projected margin relative to the market line.",
+                "Historical standalone performance for every canonical model. Use this page to understand the model pool; combination selection is handled on the Strategy page.",
                 class_="muted",
             ),
             ui.layout_columns(
@@ -373,36 +326,15 @@ app_ui = ui.page_fluid(
                 col_widths=(3, 3, 3, 3),
             ),
             ui.card(
-                ui.card_header("All-model historical scorecard"),
+                ui.card_header("Historical model scorecard"),
                 ui.output_data_frame("historical_model_table"),
-            ),
-            ui.card(
-                ui.card_header("Season-by-season model performance"),
-                ui.output_data_frame("historical_season_table"),
-            ),
-            ui.card(
-                ui.card_header("Individual models vs opening, midweek, and close"),
-                ui.p(
-                    "Re-grades each model against PredictionTracker's stored Opening, Midweek, and final Updated line. "
-                    "The final Updated field is shown as the close proxy; it is not a timestamped sportsbook close. "
-                    "Because historical model publication timestamps are unavailable, Open/Midweek rows are retrospective price-sensitivity tests, not claims that every model prediction was executable at that earlier line. "
-                    "Every non-zero model-vs-line edge is graded, matching the standalone Page 1 convention. "
-                    "The Open rows use the same anomaly filter configured on Page 5; suspect raw PT opening values are excluded by default.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("historical_model_line_reference_table"),
             ),
         ),
 
-        # ------------------------------------------------------------------
-        # Page 2
-        # ------------------------------------------------------------------
         ui.nav_panel(
-            "2 · Upcoming Games",
+            "2 · Current Slate",
             ui.p(
-                "Raw PredictionTracker board. Connect Cloud direct access is blocked by PredictionTracker, so Refresh falls back to a season/week-verified GitHub mirror created by the local sync helper. "
-                "If neither route can provide the selected season/week, the app fails rather than silently showing a cached prior-week slate. Every unique changed "
-                "board is timestamped for prospective early-line / closing-line-value analysis.",
+                "PredictionTracker is authoritative for live game membership. CFB Picker predictions are merged only onto those current games, with PredictionTracker preferred for overlapping model/game rows.",
                 class_="muted",
             ),
             ui.layout_columns(
@@ -410,8 +342,8 @@ app_ui = ui.page_fluid(
                 ui.input_numeric("current_week", "Week", 1, min=0, max=22, step=1),
                 ui.input_task_button(
                     "refresh_upcoming",
-                    "Refresh PredictionTracker",
-                    label_busy="Refreshing PredictionTracker…",
+                    "Refresh current slate",
+                    label_busy="Refreshing current slate…",
                     type="primary",
                 ),
                 col_widths=(3, 3, 6),
@@ -431,270 +363,133 @@ app_ui = ui.page_fluid(
                 class_="btn-outline-secondary mb-3",
             ),
             ui.card(
-                ui.card_header("Upcoming game board"),
+                ui.card_header("Current game board"),
                 ui.output_data_frame("upcoming_board_table"),
             ),
-            ui.card(
-                ui.card_header("Raw model projection matrix"),
-                ui.p(
-                    "Values are projected home-team margins. Positive = home projected ahead; negative = away projected ahead.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("upcoming_matrix_table"),
-            ),
         ),
 
-        # ------------------------------------------------------------------
-        # Page 3
-        # ------------------------------------------------------------------
         ui.nav_panel(
-            "3 · Strategy Lab",
-            ui.p(
-                "A strategy is quantitative: collective expected spread = mean(model spreads), "
-                "uncertainty = sample SD(model spreads), and signal = |mean − market| / SD. "
-                "A bet is recommended when signal ≥ k and enough selected models are available.",
-                class_="muted",
-            ),
-            ui.layout_columns(
-                ui.card(
-                    ui.card_header("Manual model set"),
-                    ui.input_selectize(
-                        "manual_models",
-                        "Models",
-                        choices=ALL_MODEL_CHOICES,
-                        selected=DEFAULT_MANUAL_IDS,
-                        multiple=True,
-                        options={"plugins": ["remove_button"], "placeholder": "Choose models…"},
-                    ),
-                    ui.layout_columns(
-                        ui.input_select(
-                            "manual_k", "Decision threshold", choices=K_CHOICES,
-                            selected=f"{DEFAULT_K:.2f}",
-                        ),
-                        ui.input_numeric(
-                            "manual_min_available", "Minimum available models",
-                            min(4, max(2, len(DEFAULT_MANUAL_IDS))), min=2, max=20, step=1,
-                        ),
-                        col_widths=(6, 6),
-                    ),
-                    ui.input_checkbox_group(
-                        "manual_seasons",
-                        "Backtest seasons",
-                        choices=SEASON_CHOICES,
-                        selected=[str(y) for y in HISTORICAL_SEASONS],
-                        inline=True,
-                    ),
-                    ui.input_task_button(
-                        "run_manual",
-                        "Backtest manual set",
-                        label_busy="Backtesting…",
-                        type="primary",
-                    ),
-                    ui.input_action_button(
-                        "use_manual_strategy",
-                        "Use this strategy for upcoming games",
-                        class_="btn-sm",
-                    ),
-                    ui.output_text("manual_status"),
-                ),
-                ui.card(
-                    ui.card_header("Automatic combination screening"),
-                    ui.input_radio_buttons(
-                        "auto_pool_mode",
-                        "Candidate pool",
-                        choices={
-                            "top": "Top N models automatically",
-                            "manual": "Choose candidates manually",
-                        },
-                        selected="top",
-                        inline=True,
-                    ),
-                    ui.layout_columns(
-                        ui.input_numeric("auto_pool_n", "Top N", 20, min=4, max=50, step=1),
-                        ui.input_select(
-                            "auto_pool_metric", "Rank individual models by",
-                            choices={
-                                "wilson": "Wilson lower bound",
-                                "ats": "ATS %",
-                                "roi": "ROI",
-                                "mae": "Forecast MAE (lower is better)",
-                            },
-                            selected="wilson",
-                        ),
-                        ui.input_numeric(
-                            "auto_pool_min_bets", "Min discovery bets/model",
-                            25, min=0, max=500, step=5,
-                        ),
-                        col_widths=(3, 5, 4),
-                    ),
-                    ui.input_selectize(
-                        "auto_models",
-                        "Manual candidate list (used only in manual mode)",
-                        choices=ALL_MODEL_CHOICES,
-                        selected=DEFAULT_AUTO_IDS,
-                        multiple=True,
-                        options={"plugins": ["remove_button"], "placeholder": "Choose candidate universe…"},
-                    ),
-                    ui.input_checkbox_group(
-                        "auto_history_seasons", "Historical seasons available to screening",
-                        choices=SEASON_CHOICES,
-                        selected=[str(y) for y in HISTORICAL_SEASONS],
-                        inline=True,
-                    ),
-                    ui.layout_columns(
-                        ui.input_numeric(
-                            "auto_holdout_weeks", "Hold out latest chronology weeks",
-                            6, min=0, max=20, step=1,
-                        ),
-                        ui.input_numeric("auto_min_size", "Min set size", 4, min=2, max=20, step=1),
-                        ui.input_numeric("auto_max_size", "Max set size", 10, min=2, max=20, step=1),
-                        col_widths=(4, 4, 4),
-                    ),
-                    ui.p(
-                        "The holdout uses completed/graded chronology weeks by season/week, not by whole season. "
-                        "This lets newer models contribute discovery history and still receive a genuine recent holdout.",
-                        class_="muted",
-                    ),
-                    ui.layout_columns(
-                        ui.input_select(
-                            "auto_k", "Search threshold", choices=K_CHOICES,
-                            selected=f"{DEFAULT_K:.2f}",
-                        ),
-                        ui.input_numeric("auto_min_available", "Min available", 4, min=2, max=20, step=1),
-                        ui.input_numeric("auto_min_bets", "Minimum discovery bets", 50, min=10, max=1000, step=10),
-                        col_widths=(4, 4, 4),
-                    ),
-                    ui.layout_columns(
-                        ui.input_select(
-                            "auto_rank_metric", "Rank combinations by",
-                            choices={"ats": "ATS %", "wilson": "Wilson lower bound", "roi": "ROI"},
-                            selected="wilson",
-                        ),
-                        ui.input_numeric("auto_top_n", "Finalists retained", 25, min=5, max=100, step=5),
-                        ui.input_numeric(
-                            "auto_max_combinations_m",
-                            "Exact-search safety cap (millions)",
-                            EXACT_SEARCH_DEFAULT_MAX // 1_000_000,
-                            min=1, max=EXACT_SEARCH_HARD_MAX // 1_000_000, step=1,
-                        ),
-                        col_widths=(4, 4, 4),
-                    ),
-                    ui.p(
-                        "The search is exhaustive, not sampled. Multi-million searches stream in batches and retain only the bounded leaderboard. "
-                        "Raise the safety cap deliberately for larger candidate pools; very large searches can take several minutes on Connect Cloud.",
-                        class_="muted",
-                    ),
-                    ui.p(
-                        "Automatic screening is restricted to models that are actually posting in the current PredictionTracker week. "
-                        "Refresh Page 2 before running the search.",
-                        class_="muted",
-                    ),
-                    ui.output_text("auto_pool_status"),
-                    ui.output_data_frame("auto_candidate_table"),
-                    ui.output_text("auto_combo_count"),
-                    ui.input_task_button(
-                        "run_auto",
-                        "Find promising combinations",
-                        label_busy="Searching combinations…",
-                        type="primary",
-                    ),
-                    ui.output_ui("auto_progress_bar"),
-                    ui.output_text("auto_status"),
-                ),
-                col_widths=(5, 7),
-            ),
-            ui.layout_columns(
-                ui.value_box("Manual bets @ chosen k", ui.output_text("manual_primary_bets")),
-                ui.value_box("Manual ATS", ui.output_text("manual_primary_ats")),
-                ui.value_box("Manual ROI", ui.output_text("manual_primary_roi")),
-                ui.value_box("Selected strategy", ui.output_text("strategy_short")),
-                col_widths=(3, 3, 3, 3),
-            ),
-            ui.layout_columns(
-                ui.card(
-                    ui.card_header("Manual threshold curve"),
-                    ui.p("The full 0.25–2.00 SD grid is always shown.", class_="muted"),
-                    ui.output_data_frame("manual_threshold_table"),
-                ),
-                ui.card(
-                    ui.card_header("Manual season results at chosen k"),
-                    ui.output_data_frame("manual_season_table"),
-                ),
-                col_widths=(6, 6),
-            ),
+            "3 · Strategy",
             ui.card(
-                ui.card_header("Promising combinations"),
+                ui.card_header("Recommended weekly strategy"),
                 ui.p(
-                    "The exhaustive search uses one chosen k on discovery weeks only. Finalists are then frozen and evaluated "
-                    "on the recent chronological holdout; holdout results never rank the discovery search.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("auto_top_table"),
-            ),
-            ui.layout_columns(
-                ui.card(
-                    ui.card_header("Inspect and select finalists"),
-                    ui.input_numeric("auto_pick_rank", "Inspect search rank", 1, min=1, max=100, step=1),
-                    ui.output_text_verbatim("auto_selected_models"),
-                    ui.hr(),
-                    ui.input_selectize(
-                        "auto_portfolio_ranks",
-                        "Finalist ranks for upcoming predictions",
-                        choices={str(i): f"Rank {i}" for i in range(1, 101)},
-                        selected=["1", "2", "3"],
-                        multiple=True,
-                        options={"plugins": ["remove_button"], "placeholder": "Choose one or more finalist ranks…"},
-                    ),
-                    ui.input_action_button(
-                        "use_auto_strategy",
-                        "Use selected finalist portfolio",
-                        class_="btn-sm",
-                    ),
-                ),
-                ui.card(
-                    ui.card_header("Threshold robustness on holdout for chosen finalist"),
-                    ui.output_data_frame("auto_threshold_detail"),
-                ),
-                col_widths=(5, 7),
-            ),
-            ui.card(
-                ui.card_header("Finalist robustness summary"),
-                ui.output_data_frame("auto_robust_summary"),
-            ),
-        ),
-
-        # ------------------------------------------------------------------
-        # Page 4
-        # ------------------------------------------------------------------
-        ui.nav_panel(
-            "4 · Upcoming Predictions",
-            ui.div(ui.output_text("strategy_banner"), class_="strategy-banner"),
-            ui.p(
-                "Applies every finalist combination selected on Page 3 to the same cached PredictionTracker slate. "
-                "Each combination independently calculates its collective expected spread, model SD, k×SD boundary, and BET/PASS decision.",
-                class_="muted",
-            ),
-            ui.card(
-                ui.card_header("Patrick's recommended settings"),
-                ui.p(
-                    "One-click current-week recipe: Top 35 currently posting models by discovery Wilson lower bound (minimum 25 discovery bets/model); "
-                    "latest 6 completed weeks with adequate candidate-model coverage held out; combination sizes 3–6; 0.75 SD search anchor; "
-                    "combinations ranked by discovery ATS and top 50 frozen, then each finalist gets an automatic stable k from 0.25–2.00 SD. "
-                    "Near-duplicate combinations are collapsed at Jaccard ≥ 0.50 into overlap communities for the final META estimate and backtest. Models inside every individual ensemble are equal-weighted.",
+                    "Top 35 currently posting models by discovery Wilson lower bound (minimum 25 bets/model); latest 6 usable completed weeks held out; set sizes 3–6; 0.75-SD search anchor; combinations ranked by discovery ATS; top 50 frozen; finalist k tuned on discovery only; near-duplicates collapsed at Jaccard ≥ 0.50 for the diversified META.",
                     class_="muted",
                 ),
                 ui.input_action_button(
                     "run_patrick",
-                    "Run Patrick's recommended settings",
+                    "Run recommended strategy",
                     class_="btn-primary",
                 ),
                 ui.output_ui("patrick_progress_bar"),
                 ui.output_text("patrick_status"),
             ),
-            ui.p("Or apply a portfolio you selected manually on Page 3:", class_="muted"),
+            ui.card(
+                ui.card_header("Custom combination screening"),
+                ui.p("Use these controls only when you want to deviate from the recommended weekly recipe.", class_="muted"),
+                ui.input_radio_buttons(
+                    "auto_pool_mode",
+                    "Candidate pool",
+                    choices={"top": "Top N models automatically", "manual": "Choose candidates manually"},
+                    selected="top",
+                    inline=True,
+                ),
+                ui.layout_columns(
+                    ui.input_numeric("auto_pool_n", "Top N", 20, min=4, max=50, step=1),
+                    ui.input_select(
+                        "auto_pool_metric", "Rank individual models by",
+                        choices={"wilson": "Wilson lower bound", "ats": "ATS %", "roi": "ROI", "mae": "Forecast MAE (lower is better)"},
+                        selected="wilson",
+                    ),
+                    ui.input_numeric("auto_pool_min_bets", "Min discovery bets/model", 25, min=0, max=500, step=5),
+                    col_widths=(3, 5, 4),
+                ),
+                ui.input_selectize(
+                    "auto_models",
+                    "Manual candidate list (manual mode only)",
+                    choices=ALL_MODEL_CHOICES,
+                    selected=DEFAULT_AUTO_IDS,
+                    multiple=True,
+                    options={"plugins": ["remove_button"], "placeholder": "Choose candidate universe…"},
+                ),
+                ui.input_checkbox_group(
+                    "auto_history_seasons", "Historical seasons",
+                    choices=SEASON_CHOICES,
+                    selected=[str(y) for y in HISTORICAL_SEASONS],
+                    inline=True,
+                ),
+                ui.layout_columns(
+                    ui.input_numeric("auto_holdout_weeks", "Holdout weeks", 6, min=0, max=20, step=1),
+                    ui.input_numeric("auto_min_size", "Min set size", 4, min=2, max=20, step=1),
+                    ui.input_numeric("auto_max_size", "Max set size", 10, min=2, max=20, step=1),
+                    col_widths=(4, 4, 4),
+                ),
+                ui.layout_columns(
+                    ui.input_select("auto_k", "Search threshold", choices=K_CHOICES, selected=f"{DEFAULT_K:.2f}"),
+                    ui.input_numeric("auto_min_available", "Min available", 4, min=2, max=20, step=1),
+                    ui.input_numeric("auto_min_bets", "Minimum discovery bets", 50, min=10, max=1000, step=10),
+                    col_widths=(4, 4, 4),
+                ),
+                ui.layout_columns(
+                    ui.input_select(
+                        "auto_rank_metric", "Rank combinations by",
+                        choices={"ats": "ATS %", "wilson": "Wilson lower bound", "roi": "ROI"},
+                        selected="wilson",
+                    ),
+                    ui.input_numeric("auto_top_n", "Finalists retained", 25, min=5, max=100, step=5),
+                    ui.input_numeric(
+                        "auto_max_combinations_m",
+                        "Exact-search cap (millions)",
+                        EXACT_SEARCH_DEFAULT_MAX // 1_000_000,
+                        min=1, max=EXACT_SEARCH_HARD_MAX // 1_000_000, step=1,
+                    ),
+                    col_widths=(4, 4, 4),
+                ),
+                ui.output_text("auto_pool_status"),
+                ui.output_text("auto_combo_count"),
+                ui.input_task_button(
+                    "run_auto",
+                    "Find promising combinations",
+                    label_busy="Searching combinations…",
+                    type="primary",
+                ),
+                ui.output_ui("auto_progress_bar"),
+                ui.output_text("auto_status"),
+            ),
+            ui.card(
+                ui.card_header("Promising combinations"),
+                ui.p("Discovery ranks the search; the recent chronological holdout is shown only as validation and never determines search rank.", class_="muted"),
+                ui.output_data_frame("auto_top_table"),
+            ),
+            ui.card(
+                ui.card_header("Select a custom finalist portfolio"),
+                ui.layout_columns(
+                    ui.input_numeric("auto_pick_rank", "Inspect search rank", 1, min=1, max=100, step=1),
+                    ui.input_selectize(
+                        "auto_portfolio_ranks",
+                        "Finalist ranks",
+                        choices={str(i): f"Rank {i}" for i in range(1, 101)},
+                        selected=["1", "2", "3"],
+                        multiple=True,
+                        options={"plugins": ["remove_button"], "placeholder": "Choose finalist ranks…"},
+                    ),
+                    col_widths=(4, 8),
+                ),
+                ui.output_text_verbatim("auto_selected_models"),
+                ui.input_action_button("use_auto_strategy", "Use selected finalist portfolio", class_="btn-sm"),
+            ),
+        ),
+
+        ui.nav_panel(
+            "4 · Picks",
+            ui.div(ui.output_text("strategy_banner"), class_="strategy-banner"),
+            ui.p(
+                "The recommended strategy automatically scores the current slate when it finishes. If you selected a custom finalist portfolio on Page 3, apply it here.",
+                class_="muted",
+            ),
             ui.input_task_button(
                 "apply_strategy_current",
-                "Apply selected finalist portfolio",
+                "Apply selected custom portfolio",
                 label_busy="Scoring combinations…",
                 type="primary",
             ),
@@ -702,16 +497,14 @@ app_ui = ui.page_fluid(
             ui.layout_columns(
                 ui.value_box("Selected combos", ui.output_text("strategy_combo_n")),
                 ui.value_box("Unique models", ui.output_text("strategy_model_n")),
-                ui.value_box("Required k", ui.output_text("strategy_k")),
+                ui.value_box("Automatic k", ui.output_text("strategy_k")),
                 ui.value_box("Games scored", ui.output_text("strategy_games_n")),
                 col_widths=(3, 3, 3, 3),
             ),
             ui.card(
-                ui.card_header("Final consensus: overlap, automatic k, and META backtest"),
+                ui.card_header("Portfolio snapshot"),
                 ui.p(
-                    "The top combinations are often close relatives. A 0.50 Jaccard overlap groups near-duplicates into communities so one core model family cannot masquerade as many independent votes. "
-                    "Each finalist's k is selected from 0.25–2.00 SD using discovery data only with a centered three-k stability rule; endpoint k values cannot be selected merely from one-sided evidence, and near-tied plateaus favor the more-supported/lower threshold. The six completed-week holdout remains untouched until those choices are frozen. "
-                    "The diversified META forecast gives each overlap community equal influence and uses a consensus-uncertainty scale based on uncertainty of ensemble means plus between-community disagreement, avoiding the overly conservative double-counting of raw within-ensemble SD.",
+                    "Recent holdout performance is shown here only as a compact portfolio sanity check. Use Page 5 · Validation for the formal repeated chronological backtest.",
                     class_="muted",
                 ),
                 ui.layout_columns(
@@ -722,81 +515,17 @@ app_ui = ui.page_fluid(
                     col_widths=(3, 3, 3, 3),
                 ),
                 ui.p(ui.strong("Backtest split: "), ui.output_text("committee_holdout_window"), class_="muted"),
-                ui.h5("Final META backtest"),
                 ui.output_data_frame("committee_meta_backtest_table"),
-                ui.h5("META automatic-k profile"),
-                ui.p(
-                    "Shows every discovery threshold before the META k is frozen. The selector uses a centered three-k plateau and prefers the lower/more-supported threshold when robust Wilson performance is within 1 percentage point of the best plateau.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("committee_meta_k_profile_table"),
-                ui.h5("Automatic k by finalist"),
-                ui.output_data_frame("committee_combo_k_table"),
-                ui.h5("Overlap communities"),
-                ui.p(
-                    "Representatives are labeled rather than shown as 100% self-overlap. Nearest-other overlap shows the closest distinct finalist; with a 0.50 threshold, two 3-model sets sharing 2 of 3 models are treated as relatives.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("committee_overlap_table"),
-                ui.h5("Effective underlying-model exposure"),
-                ui.p(
-                    "Nominal META weight is propagated through the actual hierarchy: equal community weight → equal finalist weight within community → equal model weight within finalist. This reveals when one model appears across many nominally distinct communities.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("committee_model_exposure_table"),
-                ui.h5("Overlap-threshold sensitivity: 0.50 vs previous 0.60"),
-                ui.p(
-                    "Uses the same frozen finalist sets. Each overlap rule selects its META k on discovery only, then reports the untouched holdout. This is the direct check that moving to 0.50 improves redundancy handling rather than merely changing the number of communities.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("committee_overlap_sensitivity_table"),
-                ui.h5("Finalists and META vs opening, midweek, and close"),
-                ui.p(
-                    "Frozen finalist memberships and discovery-selected k values are re-graded separately against each PredictionTracker line reference, with edge/signal recomputed at that line while k stays frozen. Discovery and untouched holdout are shown separately. "
-                    "Because historical model publication timestamps are unavailable, Open/Midweek are retrospective price-sensitivity tests rather than executable-timing claims. The 'close' column is PT's final Updated archive field, not a timestamped sportsbook close.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("committee_line_reference_table"),
             ),
             ui.card(
-                ui.card_header("Absolute spread trust check"),
+                ui.card_header("Line shopping"),
                 ui.p(
-                    "Large favorites and underdogs are a distinct forecasting regime. This diagnostic keeps the frozen Diversified META strategy unchanged, then asks how its forecast accuracy and betting performance vary with |market spread|. "
-                    "The tail is split into 22–27.5, 28–34.5, and 35+ so a -38 game is not pooled with an ordinary -23 favorite. Negative ΔMAE vs market means META was closer to the final margin than the market on average.",
-                    class_="muted",
-                ),
-                ui.h5("Current slate mapped to historical spread regimes"),
-                ui.output_data_frame("committee_current_spread_context_table"),
-                ui.h5("Diversified META performance by |market spread|"),
-                ui.output_data_frame("committee_meta_spread_table"),
-                ui.p(
-                    "These rows are diagnostics, not new optimization rules. The same discovery-selected META k is used in every bucket. Favorite/underdog columns classify the side actually bet, which is especially important for very large spreads.",
-                    class_="muted",
-                ),
-            ),
-            ui.card(
-                ui.card_header("Line shopping / alternate market"),
-                ui.p(
-                    "Test a sportsbook line without refreshing the slate or rerunning the combination search. "
-                    "Enter the home team's spread exactly as displayed by the book: negative = home favorite, positive = home underdog. "
-                    "Example: NC State @ Virginia → enter -3.0 to test Virginia -3.",
+                    "Choose a game and enter the home team's available spread exactly as displayed by the sportsbook. The override is session-only and immediately re-scores the current portfolio.",
                     class_="muted",
                 ),
                 ui.layout_columns(
-                    ui.input_select(
-                        "line_override_game",
-                        "Game",
-                        choices={"": "Apply the portfolio first"},
-                        selected="",
-                    ),
-                    ui.input_numeric(
-                        "line_override_value",
-                        "Available home-team spread",
-                        0.0,
-                        min=-80,
-                        max=80,
-                        step=0.5,
-                    ),
+                    ui.input_select("line_override_game", "Game", choices={"": "Run/apply a strategy first"}, selected=""),
+                    ui.input_numeric("line_override_value", "Available home-team spread", 0.0, min=-80, max=80, step=0.5),
                     col_widths=(8, 4),
                 ),
                 ui.output_text("line_override_prompt"),
@@ -810,281 +539,91 @@ app_ui = ui.page_fluid(
                 ui.output_text("line_override_game_result"),
             ),
             ui.card(
-                ui.card_header("Combination agreement by game"),
+                ui.card_header("Current recommendations"),
                 ui.p(
-                    "Counts how many selected finalist combinations independently produce a bet in each direction. "
-                    "Raw portfolio mean ± SD is retained for comparison; diversified META collapses near-duplicate combinations into equal-weight overlap communities. "
-                    "Each C1/C2/etc. uses its own discovery-selected k when automatic threshold tuning is available.",
+                    "One row per game. Combination votes and the diversified META are shown together so the actionable slate can be reviewed without the underlying development tables.",
                     class_="muted",
                 ),
                 ui.output_data_frame("strategy_combo_summary_table"),
             ),
-            ui.card(
-                ui.card_header("Per-combination expected spreads"),
-                ui.p(
-                    "One row per game × finalist. Mean ± SD describes the model set itself; standardized edge is |raw edge|/SD, and the k×SD interval is the actual decision boundary.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("strategy_combo_detail_table"),
+        ),
+
+        ui.nav_panel(
+            "5 · Validation",
+            ui.p(
+                "Formal as-if-live validation of the production recipe against PredictionTracker Updated/final lines. "
+                "Each OOS block rebuilds the historical posting universe, Top-35 Wilson pool, exact 3–6 model combination search, Top-50 finalists, overlap communities, and META using only earlier data.",
+                class_="muted",
             ),
             ui.card(
-                ui.card_header("Selected-model projections by game"),
-                ui.output_data_frame("strategy_model_predictions_table"),
+                ui.card_header("Chronological backtest"),
+                ui.p(
+                    "The combination search anchor is not fixed at 0.75. Every block evaluates the predeclared 0.00–2.00 SD grid in 0.25 steps in one exact search. "
+                    "The adaptive strategy may choose an anchor only from earlier OOS blocks (Wilson lower bound; minimum 50 prior bets). Both flat 1u-risk and risk-to-win-1u staking are tracked.",
+                    class_="muted",
+                ),
+                ui.layout_columns(
+                    ui.input_numeric("formal_oos_blocks", "OOS blocks", 8, min=2, max=48, step=1),
+                    ui.input_numeric("formal_block_size", "Usable weeks / block", 6, min=1, max=8, step=1),
+                    ui.input_numeric("formal_min_prior", "Minimum prior usable weeks", 24, min=12, max=80, step=1),
+                    col_widths=(4, 4, 4),
+                ),
+                ui.p(
+                    "Set weeks/block = 1 for literal weekly re-selection. Larger blocks are a faster non-overlapping stress test and freeze the portfolio within each block.",
+                    class_="muted",
+                ),
+                ui.input_task_button(
+                    "run_formal_backtest",
+                    "Run formal backtest",
+                    label_busy="Running formal backtest…",
+                    type="primary",
+                ),
+                ui.output_ui("formal_progress_bar"),
+                ui.output_text("formal_status"),
+            ),
+            ui.card(
+                ui.card_header("Adaptive-anchor OOS headline"),
+                ui.layout_columns(
+                    ui.value_box("Bets", ui.output_text("formal_adaptive_bets")),
+                    ui.value_box("ATS", ui.output_text("formal_adaptive_ats")),
+                    ui.value_box("Flat 1u ROI", ui.output_text("formal_adaptive_roi")),
+                    ui.value_box("Flat max drawdown", ui.output_text("formal_adaptive_drawdown")),
+                    col_widths=(3, 3, 3, 3),
+                ),
+                ui.output_data_frame("formal_adaptive_path_table"),
+            ),
+            ui.card(
+                ui.card_header("Fixed-anchor OOS surface"),
+                ui.p(
+                    "Each anchor gets its own independently selected Top-50 portfolio in every OOS block. A broad plateau is more credible than a single sharp optimum.",
+                    class_="muted",
+                ),
+                ui.output_plot("formal_anchor_plot", height="360px"),
+                ui.output_data_frame("formal_anchor_table"),
+            ),
+            ui.card(
+                ui.card_header("Equity and standardized-edge check"),
+                ui.p(
+                    "Equity uses only the anchor chosen prospectively for each OOS block. The edge table asks whether larger META disagreement relative to consensus SD is actually associated with better directional results.",
+                    class_="muted",
+                ),
+                ui.output_plot("formal_equity_plot", height="360px"),
+                ui.output_data_frame("formal_edge_table"),
             ),
         ),
 
-        # ------------------------------------------------------------------
-        # Page 5
-        # ------------------------------------------------------------------
         ui.nav_panel(
-            "5 · Line Movement",
+            "6 · Forecast",
             ui.p(
-                "This page separates three questions that were mixed together in the simple Open/Midweek/Updated re-grade: "
-                "(1) what happens to the exact same bets when only the price changes, (2) how much the selected bet set itself changes across line references, and "
-                "(3) whether a strategy built independently for each line reference behaves differently on untouched holdout data.",
+                "Inspect one game at a time: every mapped model projection → selected finalist forecasts → diversified META versus the active market line.",
                 class_="muted",
             ),
             ui.layout_columns(
-                ui.input_select(
-                    "line_movement_entity", "Consortium",
-                    choices={"Diversified META":"Diversified META"}, selected="Diversified META",
-                ),
-                ui.input_radio_buttons(
-                    "line_movement_period", "Backtest period",
-                    choices={"Discovery":"Discovery", "Holdout":"Holdout"}, selected="Holdout", inline=True,
-                ),
-                ui.input_numeric(
-                    "line_qc_move_threshold", "Open-line anomaly threshold",
-                    10.0, min=3.0, max=30.0, step=0.5,
-                ),
-                ui.input_checkbox(
-                    "line_qc_exclude_suspect", "Exclude clearly suspect Opens", True,
-                ),
-                col_widths=(4, 3, 3, 2),
-            ),
-            ui.output_text("line_active_strategy_status"),
-            ui.card(
-                ui.card_header("Opening-line quality control"),
-                ui.p(
-                    "PredictionTracker's historical archive contains a small number of opening-line anomalies. The table shows the literal PT home-margin values for audit. "
-                    "Primary Open analyses conservatively omit only values classified as suspect (large favorite flips, gross gaps, or an Open value far from a stable Midweek/Updated pair); no replacement line is invented. "
-                    "Turn off the exclusion checkbox to run the raw-archive sensitivity instead.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("line_qc_summary_table"),
-                ui.output_data_frame("line_qc_table"),
-            ),
-            ui.card(
-                ui.card_header("Fixed-bet repricing: same game + same side, different line"),
-                ui.p(
-                    "The selection reference freezes the exact games and sides using the consortium's frozen k. Those same bets are then re-graded at Open, Midweek, and PT Updated. "
-                    "This isolates the value of the price itself; eligibility and side are NOT recomputed when the grading line changes.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("line_fixed_reprice_table"),
-                ui.h5("How much the selected portfolios actually overlap"),
-                ui.p(
-                    "Jaccard is computed on game+side selections. A low Open-vs-Updated value means the earlier table was comparing materially different portfolios, not merely different prices on the same wagers.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("line_betset_overlap_table"),
-            ),
-            ui.card(
-                ui.card_header("Open → Midweek → Updated signal migration and CLV"),
-                ui.layout_columns(
-                    ui.value_box("Open bets", ui.output_text("line_open_bets")),
-                    ui.value_box("Mean Open→Updated CLV", ui.output_text("line_open_clv")),
-                    ui.value_box("Positive CLV", ui.output_text("line_positive_clv")),
-                    ui.value_box("Open↔Updated bet Jaccard", ui.output_text("line_open_close_jaccard")),
-                    col_widths=(3,3,3,3),
-                ),
-                ui.p(
-                    "CLV is directional in the app's home-margin convention: sign(Open model edge) × (Updated margin − Open margin). Positive means the later market moved toward the side the model preferred at Open. "
-                    "Migration classes show whether the signal existed only early, persisted, emerged late, or changed direction.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("line_migration_summary_table"),
-                ui.h5("Game-level migration detail"),
-                ui.output_data_frame("line_migration_detail_table"),
-            ),
-            ui.card(
-                ui.card_header("Individual models on the same discovery / holdout split"),
-                ui.p(
-                    "This uses the currently active consortium's chronology split and independently re-grades each standalone model against Open, Midweek, and PT Updated. It is descriptive; historical model publication timestamps remain unavailable.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("line_individual_period_table"),
-            ),
-            ui.card(
-                ui.card_header("Fully independent Open / Midweek / Updated model-building pipelines"),
-                ui.p(
-                    "This is the clean selection-bias test. Each line reference separately re-ranks eligible current-week models on discovery data, takes its own Top 35, exhaustively searches sizes 3–6 at the 0.75-SD anchor, freezes its own top 50, tunes finalist/META k on discovery only, and then evaluates the same untouched holdout weeks. "
-                    "It runs three multi-million-combination searches, so use this after the Patrick recipe has established the active holdout split.",
-                    class_="muted",
-                ),
-                ui.input_task_button(
-                    "run_line_pipelines",
-                    "Run independent Open / Midweek / Updated pipelines",
-                    label_busy="Running three exact line-reference searches…",
-                    type="primary",
-                ),
-                ui.output_ui("line_pipeline_progress_bar"),
-                ui.output_text("line_pipeline_status"),
-                ui.h5("Independent META holdout comparison"),
-                ui.output_data_frame("line_pipeline_summary_table"),
-                ui.h5("3×3 selection architecture × execution-line holdout matrix"),
-                ui.p(
-                    "Rows freeze the models, finalists, overlap communities, and discovery-selected META k from the pipeline named at left. Columns change only the market reference used to recompute edge/signal and choose bets on the untouched holdout. "
-                    "This is the production-style question: can an Open- or Midweek-selected META remain useful when it must execute against a later/current line?",
-                    class_="muted",
-                ),
-                ui.output_data_frame("line_pipeline_cross_matrix_table"),
-                ui.h5("Fixed holdout portfolio price decay"),
-                ui.p(
-                    "For each independently built META, the exact holdout games + sides are selected once at that pipeline's native reference. Those identical wagers are then repriced at Open, Midweek, and PT Updated. "
-                    "Unlike the 3×3 matrix above, eligibility and side do not change here; this isolates pure price capture / decay.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("line_pipeline_fixed_reprice_table"),
-                ui.h5("Top-35 candidate-pool overlap"),
-                ui.output_data_frame("line_pipeline_candidate_overlap_table"),
-                ui.h5("Underlying-model selection + effective META exposure"),
-                ui.p(
-                    "Shows which models enter each Top 35 and how much nominal weight each ultimately receives after Top-50 finalist clustering. This helps distinguish a genuinely different early-line model family from the same models being reweighted.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("line_pipeline_model_selection_table"),
-                ui.h5("Top-50 finalist overlap"),
-                ui.output_data_frame("line_pipeline_finalist_overlap_table"),
-                ui.h5("Line-specific candidate rankings"),
-                ui.output_data_frame("line_pipeline_candidate_table"),
-            ),
-            ui.card(
-                ui.card_header("Repeated chronological stress test"),
-                ui.p(
-                    "Final architecture-selection validation. Each fold rebuilds Open-, Midweek-, and Updated-selected META from scratch using only earlier data, then evaluates a common non-overlapping future block. "
-                    "The window expands forward through time; no finalist membership, effective weight, or k value is carried backward from later folds. "
-                    "The primary comparison executes every architecture against PT Updated so model-selection target and execution price are separated.",
-                    class_="muted",
-                ),
-                ui.layout_columns(
-                    ui.input_numeric("rolling_line_folds", "OOS blocks", 8, min=3, max=12, step=1),
-                    ui.input_numeric("rolling_line_block_size", "Usable weeks / block", 6, min=2, max=10, step=1),
-                    ui.input_numeric("rolling_line_min_discovery", "Minimum prior usable weeks", 24, min=12, max=60, step=2),
-                    ui.input_numeric("rolling_line_min_games", "Minimum common games / week", 10, min=3, max=30, step=1),
-                    col_widths=(3,3,3,3),
-                ),
-                ui.input_task_button(
-                    "run_rolling_line_validation",
-                    "Run rolling chronological validation",
-                    label_busy="Rebuilding all three META architectures through time…",
-                    type="primary",
-                ),
-                ui.output_ui("rolling_line_progress_bar"),
-                ui.output_text("rolling_line_status"),
-                ui.h5("Aggregate OOS performance at PT Updated execution"),
-                ui.p(
-                    "This is the production-style headline: the model-selection architecture changes, but every row is executed against the same PT Updated reference. Winning blocks count blocks with positive units.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("rolling_line_current_aggregate_table"),
-                ui.h5("Aggregate rolling OOS 3×3 matrix"),
-                ui.p(
-                    "All non-overlapping OOS blocks pooled. Each cell shows aggregate ATS, ROI, bet count, and the number of profitable blocks.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("rolling_line_matrix_table"),
-                ui.h5("Fold-by-fold PT Updated execution"),
-                ui.output_data_frame("rolling_line_fold_table"),
-                ui.h5("Paired block comparison at PT Updated"),
-                ui.p(
-                    "Pairs compare architectures within the same future blocks. The exact sign-test p-value treats each non-tied block as one vote; it is a stability diagnostic, not a substitute for the game-level OOS results.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("rolling_line_paired_table"),
-                ui.h5("Architecture stability by fold"),
-                ui.output_data_frame("rolling_line_architecture_table"),
-                ui.h5("Chronology used"),
-                ui.output_data_frame("rolling_line_folds_table"),
-            ),
-            ui.card(
-                ui.card_header("Forward-facing stable combination selection"),
-                ui.p(
-                    "Nested walk-forward experiment motivated by the repeated-OOS result above. Every outer block is untouched. Before each outer block, candidate 3–6 model sets are scored only on earlier forward blocks, then the selected finalist portfolio is frozen and evaluated on the next future block at PT Updated. "
-                    "Four selection rules are compared on identical outer blocks: pooled ATS, pooled Wilson, forward stability (mean block ATS − 1 SD), and forward stability with exponential recency weighting. Jaccard clustering and META-k tuning occur only inside the pre-outer history.",
-                    class_="muted",
-                ),
-                ui.layout_columns(
-                    ui.input_numeric("forward_stability_outer_blocks", "Outer OOS blocks", 8, min=3, max=12, step=1),
-                    ui.input_numeric("forward_stability_outer_size", "Weeks / outer block", 6, min=2, max=10, step=1),
-                    ui.input_numeric("forward_stability_inner_blocks", "Inner forward blocks", 4, min=2, max=8, step=1),
-                    ui.input_numeric("forward_stability_inner_size", "Weeks / inner block", 4, min=2, max=8, step=1),
-                    col_widths=(3,3,3,3),
-                ),
-                ui.layout_columns(
-                    ui.input_numeric("forward_stability_pool_n", "Stability candidate models", 24, min=8, max=24, step=1),
-                    ui.input_numeric("forward_stability_half_life", "Recency half-life (blocks)", 2.0, min=0.5, max=6.0, step=0.5),
-                    ui.input_numeric("forward_stability_min_inner_bets", "Minimum pooled inner bets", 40, min=10, max=200, step=10),
-                    ui.input_numeric("forward_stability_min_block_bets", "Minimum bets / inner block", 5, min=1, max=30, step=1),
-                    col_widths=(3,3,3,3),
-                ),
-                ui.input_task_button(
-                    "run_forward_stability",
-                    "Run nested forward-stability backtest",
-                    label_busy="Selecting stable combination sets through time…",
-                    type="primary",
-                ),
-                ui.output_ui("forward_stability_progress_bar"),
-                ui.output_text("forward_stability_status"),
-                ui.h5("Aggregate untouched outer-OOS performance"),
-                ui.p(
-                    "All methods execute against the same PT Updated reference. This is the primary comparison; none of the outer outcomes are used to choose that block's models, combinations, communities, or k.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("forward_stability_aggregate_table"),
-                ui.h5("Outer block-by-block performance"),
-                ui.output_data_frame("forward_stability_fold_table"),
-                ui.h5("Paired selection-method comparison"),
-                ui.output_data_frame("forward_stability_paired_table"),
-                ui.h5("Selected finalist diagnostics"),
-                ui.p(
-                    "Shows the combinations actually selected within each historical cutoff, including their pooled historical metrics and their forward-block stability diagnostics. Use the filters to inspect one method or outer block.",
-                    class_="muted",
-                ),
-                ui.output_data_frame("forward_stability_finalists_table"),
-                ui.h5("Nested chronology used"),
-                ui.output_data_frame("forward_stability_chronology_table"),
-            ),
-            ui.p(
-                "Historical Open/Midweek results remain retrospective price-sensitivity analyses because exact model publication timestamps are unavailable. The timestamped 2026 PredictionTracker snapshots collected on Page 2 will support a genuinely prospective version of these tests going forward.",
-                class_="muted",
-            ),
-        ),
-
-        # ------------------------------------------------------------------
-        # Page 6
-        # ------------------------------------------------------------------
-        ui.nav_panel(
-            "6 · Forecast Plots",
-            ui.p(
-                "Visualizes the complete current forecast hierarchy for one game at a time: every mapped model posting for the game → "
-                "every selected finalist ensemble → the diversity-adjusted META estimate. Models do not need to belong to a finalist to appear. Alternate lines entered on Page 4 are reflected automatically.",
-                class_="muted",
-            ),
-            ui.layout_columns(
-                ui.input_select(
-                    "plot_game",
-                    "Game",
-                    choices={"": "Apply a portfolio on Page 4 first"},
-                    selected="",
-                ),
+                ui.input_select("plot_game", "Game", choices={"": "Run/apply a strategy first"}, selected=""),
                 ui.input_radio_buttons(
                     "plot_style",
-                    "Plot style",
-                    choices={
-                        "hierarchy": "Forecast hierarchy",
-                        "distribution": "Distribution / rug (legacy style)",
-                    },
+                    "View",
+                    choices={"hierarchy": "Forecast hierarchy", "distribution": "Distribution / rug"},
                     selected="hierarchy",
                     inline=True,
                 ),
@@ -1092,21 +631,8 @@ app_ui = ui.page_fluid(
             ),
             ui.output_text("forecast_plot_status"),
             ui.card(
-                ui.card_header("Complete current-game forecast hierarchy"),
+                ui.card_header("Forecast hierarchy"),
                 ui.output_plot("forecast_plot", height="1500px"),
-            ),
-            ui.card(
-                ui.card_header("What each layer means"),
-                ui.tags.ul(
-                    ui.tags.li(ui.strong("Individual models"), ": every mapped model currently posting for that game gets its own labeled row, including models not selected into C1–C12. Models used by at least one finalist are highlighted, with the number of finalist ensembles using each model shown at right."),
-                    ui.tags.li(ui.strong("C1, C2, ..."), ": every finalist ensemble gets its own row. The thin interval is ±1 within-ensemble SD; the heavier interval is that finalist's actual ±k×SD decision band."),
-                    ui.tags.li(ui.strong("META"), ": the diversity-adjusted final consensus. Near-duplicate finalist sets are collapsed into overlap communities, each community gets equal influence, and both ±1 consensus SD and the frozen META ±k×SD decision band are shown."),
-                    ui.tags.li(ui.strong("Market"), ": the line currently being used on Page 4, including any session-only line-shopping override. If overridden, the original PredictionTracker line is also shown."),
-                ),
-                ui.p(
-                    "C1–C12 retain their own BET/PASS rules. META now also has its own discovery-selected k and an independently backtested BET/PASS rule shown on Page 4.",
-                    class_="muted",
-                ),
             ),
         ),
     ),
@@ -1143,6 +669,19 @@ def server(input, output, session):
         "done": 0, "total": 0, "label": "", "started": None, "updated": None,
     }
     forward_stability_progress_lock = threading.Lock()
+    formal_result_state = reactive.Value(dict(CACHED_FORMAL_BACKTEST) if CACHED_FORMAL_BACKTEST else {})
+    formal_progress = {
+        "done": 0, "total": 0, "label": "", "started": None, "updated": None,
+    }
+    formal_progress_lock = threading.Lock()
+
+    def set_formal_progress(**kwargs):
+        with formal_progress_lock:
+            formal_progress.update(kwargs)
+
+    def get_formal_progress():
+        with formal_progress_lock:
+            return dict(formal_progress)
 
     def set_forward_stability_progress(**kwargs):
         with forward_stability_progress_lock:
@@ -2457,7 +1996,7 @@ def server(input, output, session):
         s = strategy.get()
         combos = s.get("combinations", [])
         if not combos:
-            return "No active strategy. Choose a manual set or one or more automatic finalists on Page 3."
+            return "No active strategy. Run the recommended strategy or select custom finalists on Page 3."
         if len(combos) == 1:
             c = combos[0]
             names = ", ".join(MODEL_NAME_MAP.get(x, x) for x in c.get("model_ids", []))
@@ -4280,6 +3819,249 @@ def server(input, output, session):
             "combo_memberships": "Used by combos", "source": "Source",
         })
         return render.DataGrid(d, filters=True, height="520px")
+
+
+    # ------------------------------------------------------------------
+    # Page 5: formal production-equivalent chronological validation
+    # ------------------------------------------------------------------
+    @ui.bind_task_button(button_id="run_formal_backtest")
+    @reactive.extended_task
+    async def formal_backtest_task(oos_blocks: int, block_size: int, min_prior: int):
+        def compute():
+            start = time.monotonic()
+            set_formal_progress(
+                done=0, total=max(1, int(oos_blocks) * 1000),
+                label="Preparing formal chronology…", started=start, updated=start,
+            )
+
+            def progress(done, total, label):
+                set_formal_progress(
+                    done=int(done), total=int(total), label=str(label), updated=time.monotonic()
+                )
+                if int(done) == int(total) or int(done) % 250 < 5:
+                    print(f"[Formal backtest] {done:,}/{total:,} · {label}", flush=True)
+
+            result = run_formal_walkforward_backtest(
+                DATA,
+                PT_LINE_HISTORY_RAW.copy(),
+                MODEL_NAME_MAP,
+                anchors=FORMAL_ANCHOR_GRID,
+                oos_blocks=int(oos_blocks),
+                oos_block_size=int(block_size),
+                min_discovery_periods=int(min_prior),
+                min_games_per_period=10,
+                pool_n=PATRICK_POOL_N,
+                pool_min_bets=PATRICK_POOL_MIN_BETS,
+                min_size=PATRICK_MIN_SIZE,
+                max_size=PATRICK_MAX_SIZE,
+                min_available_models=PATRICK_MIN_AVAILABLE,
+                min_search_bets=PATRICK_MIN_SEARCH_BETS,
+                finalists=PATRICK_FINALISTS,
+                overlap_threshold=PATRICK_OVERLAP_THRESHOLD,
+                min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
+                meta_thresholds=K_GRID,
+                max_combinations=EXACT_SEARCH_DEFAULT_MAX,
+                standard_price=-110,
+                adaptive_min_prior_bets=50,
+                fallback_anchor=PATRICK_K,
+                progress_callback=progress,
+            )
+            try:
+                save_formal_backtest_outputs(result, PROJECT_ROOT)
+            except Exception as exc:
+                print(f"[Formal backtest] warning: could not save cached outputs: {exc}", flush=True)
+            return result
+        return await asyncio.to_thread(compute)
+
+    @reactive.effect
+    @reactive.event(input.run_formal_backtest)
+    def start_formal_backtest():
+        if formal_backtest_task.status() == "running":
+            return
+        if PT_LINE_HISTORY_RAW is None or PT_LINE_HISTORY_RAW.empty:
+            ui.notification_show(
+                "Historical PredictionTracker Updated/final lines are unavailable in this deployment.",
+                type="error", duration=12,
+            )
+            return
+        formal_backtest_task(
+            int(input.formal_oos_blocks()),
+            int(input.formal_block_size()),
+            int(input.formal_min_prior()),
+        )
+
+    def formal_result():
+        if formal_backtest_task.status() == "success":
+            r = formal_backtest_task.result()
+            if r:
+                return r
+        return formal_result_state.get() or {}
+
+    @reactive.effect
+    def cache_formal_task_result():
+        if formal_backtest_task.status() == "success":
+            r = formal_backtest_task.result()
+            if r:
+                formal_result_state.set(r)
+
+    @render.ui
+    def formal_progress_bar():
+        st = formal_backtest_task.status()
+        if st not in {"running", "success"}:
+            return ui.div()
+        if st == "running":
+            reactive.invalidate_later(0.5)
+        p = get_formal_progress()
+        total = int(p.get("total") or 0); done = int(p.get("done") or 0)
+        pct = 100.0 * done / total if total else (100.0 if st == "success" else 0.0)
+        return ui.div(
+            ui.div(class_="search-progress-fill", style=f"width: {max(0,min(100,pct)):.1f}%"),
+            class_="search-progress-track",
+        )
+
+    @render.text
+    def formal_status():
+        st = formal_backtest_task.status()
+        if st == "running":
+            reactive.invalidate_later(0.5)
+            p = get_formal_progress(); done = int(p.get("done") or 0); total = int(p.get("total") or 0)
+            started = p.get("started"); elapsed = max(0.0, time.monotonic() - started) if started else 0.0
+            pct = 100.0 * done / total if total else 0.0
+            return f"{done:,}/{total:,} ({pct:.1f}%) · elapsed {elapsed/60:.1f} min · {p.get('label','')}"
+        if st == "error":
+            return "Formal backtest failed; see the notification / Connect log for details."
+        r = formal_result()
+        if r:
+            n = int(r.get("oos_blocks_completed", 0) or 0)
+            bs = int(r.get("oos_block_size", 0) or 0)
+            rule = str(r.get("adaptive_rule", ""))
+            source = "Current run" if st == "success" else "Cached result"
+            return f"{source}: {n} untouched OOS blocks × {bs} usable week(s). Adaptive rule: {rule}."
+        return "No formal backtest cached yet. The anchor grid is 0.00–2.00 SD by 0.25; execution is PT Updated/final at -110."
+
+    @reactive.effect
+    def show_formal_error():
+        if formal_backtest_task.status() == "error":
+            try:
+                formal_backtest_task.result()
+            except Exception as exc:
+                ui.notification_show(f"Formal backtest error: {exc}", type="error", duration=20)
+
+    def _formal_adaptive_row():
+        r = formal_result()
+        d = r.get("adaptive_summary", pd.DataFrame()).copy() if r else pd.DataFrame()
+        return d.iloc[0] if isinstance(d, pd.DataFrame) and len(d) else pd.Series(dtype=object)
+
+    @render.text
+    def formal_adaptive_bets():
+        rr = _formal_adaptive_row()
+        return f"{int(pd.to_numeric(pd.Series([rr.get('bets',0)]), errors='coerce').fillna(0).iloc[0]):,}" if len(rr) else "—"
+
+    @render.text
+    def formal_adaptive_ats():
+        rr = _formal_adaptive_row(); v = pd.to_numeric(pd.Series([rr.get("ats_pct")]), errors="coerce").iloc[0] if len(rr) else np.nan
+        return f"{100*float(v):.1f}%" if np.isfinite(v) else "—"
+
+    @render.text
+    def formal_adaptive_roi():
+        rr = _formal_adaptive_row(); v = pd.to_numeric(pd.Series([rr.get("roi_flat")]), errors="coerce").iloc[0] if len(rr) else np.nan
+        return f"{100*float(v):+.1f}%" if np.isfinite(v) else "—"
+
+    @render.text
+    def formal_adaptive_drawdown():
+        rr = _formal_adaptive_row(); v = pd.to_numeric(pd.Series([rr.get("max_drawdown_flat")]), errors="coerce").iloc[0] if len(rr) else np.nan
+        return f"{float(v):.1f}u" if np.isfinite(v) else "—"
+
+    @render.data_frame
+    def formal_adaptive_path_table():
+        r = formal_result(); d = r.get("adaptive_path", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        for c in ["prior_anchor_wilson_low", "ats_pct", "roi_flat", "roi_win1"]:
+            if c in d.columns:
+                d[c] = 100.0 * pd.to_numeric(d[c], errors="coerce")
+        keep = ["fold","oos_start","oos_end","selected_anchor","anchor_selection_reason","prior_anchor_bets","prior_anchor_wilson_low","bets","wins","losses","ats_pct","units_flat","roi_flat","units_win1","roi_win1","meta_k"]
+        out = d[[c for c in keep if c in d.columns]].rename(columns={
+            "fold":"Block","oos_start":"OOS start","oos_end":"OOS end","selected_anchor":"Search anchor",
+            "anchor_selection_reason":"Anchor rule","prior_anchor_bets":"Prior OOS bets","prior_anchor_wilson_low":"Prior Wilson LB %",
+            "bets":"Bets","wins":"Wins","losses":"Losses","ats_pct":"ATS %","units_flat":"Flat-risk units","roi_flat":"Flat-risk ROI %",
+            "units_win1":"Win-1u units","roi_win1":"Win-1u ROI %","meta_k":"META k",
+        })
+        return render.DataGrid(out, filters=False, height="330px")
+
+    @render.data_frame
+    def formal_anchor_table():
+        r = formal_result(); d = r.get("fixed_anchor_surface", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        for c in ["ats_pct","wilson_low","wilson_high","roi_flat","roi_win1","median_block_roi_flat"]:
+            if c in d.columns:
+                d[c] = 100.0 * pd.to_numeric(d[c], errors="coerce")
+        keep = ["search_anchor","blocks","bets","wins","losses","ats_pct","wilson_low","wilson_high","units_flat","roi_flat","units_win1","roi_win1","profitable_blocks_flat","max_drawdown_flat","max_drawdown_win1","longest_losing_streak","mean_meta_k"]
+        out = d[[c for c in keep if c in d.columns]].rename(columns={
+            "search_anchor":"Search anchor","blocks":"OOS blocks","bets":"Bets","wins":"Wins","losses":"Losses","ats_pct":"ATS %",
+            "wilson_low":"Wilson LB %","wilson_high":"Wilson UB %","units_flat":"Flat-risk units","roi_flat":"Flat-risk ROI %",
+            "units_win1":"Win-1u units","roi_win1":"Win-1u ROI %","profitable_blocks_flat":"Profitable blocks",
+            "max_drawdown_flat":"Flat-risk max DD","max_drawdown_win1":"Win-1u max DD","longest_losing_streak":"Longest L streak","mean_meta_k":"Mean META k",
+        })
+        return render.DataGrid(out, filters=False, height="390px")
+
+    @render.plot
+    def formal_anchor_plot():
+        r = formal_result(); d = r.get("fixed_anchor_surface", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return None
+        x = pd.to_numeric(d["search_anchor"], errors="coerce").to_numpy(float)
+        ats = 100.0 * pd.to_numeric(d["ats_pct"], errors="coerce").to_numpy(float)
+        lo = 100.0 * pd.to_numeric(d["wilson_low"], errors="coerce").to_numpy(float)
+        hi = 100.0 * pd.to_numeric(d["wilson_high"], errors="coerce").to_numpy(float)
+        fig, ax = plt.subplots(figsize=(9.5, 4.0))
+        ax.plot(x, ats, marker="o", label="OOS ATS")
+        ax.plot(x, lo, marker=".", linestyle="--", label="Wilson lower bound")
+        if np.isfinite(lo).any() and np.isfinite(hi).any():
+            ax.fill_between(x, lo, hi, alpha=0.12, label="95% Wilson interval")
+        ax.axhline(52.380952, linestyle=":", linewidth=1.2, label="-110 breakeven")
+        ax.set_xlabel("Combination search anchor (SD)")
+        ax.set_ylabel("OOS win rate (%)")
+        ax.set_xticks(x)
+        ax.grid(axis="y", alpha=0.2)
+        ax.legend(frameon=False, ncol=2)
+        fig.tight_layout()
+        return fig
+
+    @render.plot
+    def formal_equity_plot():
+        r = formal_result(); d = r.get("adaptive_bet_rows", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return None
+        d = d.sort_values(["season","week","game_key"], kind="mergesort").reset_index(drop=True)
+        flat = pd.to_numeric(d["units_flat"], errors="coerce").fillna(0).cumsum().to_numpy(float)
+        win1 = pd.to_numeric(d["units_win1"], errors="coerce").fillna(0).cumsum().to_numpy(float)
+        x = np.arange(1, len(d) + 1)
+        fig, ax = plt.subplots(figsize=(9.5, 4.0))
+        ax.plot(x, flat, label="Flat 1u risk")
+        ax.plot(x, win1, label="Risk to win 1u")
+        ax.axhline(0, linestyle=":", linewidth=1.0)
+        ax.set_xlabel("Chronological OOS bets")
+        ax.set_ylabel("Cumulative units")
+        ax.grid(axis="y", alpha=0.2)
+        ax.legend(frameon=False)
+        fig.tight_layout()
+        return fig
+
+    @render.data_frame
+    def formal_edge_table():
+        r = formal_result(); d = r.get("edge_calibration", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        for c in ["ats_pct","wilson_low","wilson_high"]:
+            if c in d.columns:
+                d[c] = 100.0 * pd.to_numeric(d[c], errors="coerce")
+        keep = ["edge_bin","games","wins","losses","pushes","ats_pct","wilson_low","wilson_high"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
+            "edge_bin":"META |edge| / SD","games":"Games","wins":"Directional wins","losses":"Directional losses","pushes":"Pushes",
+            "ats_pct":"Directional ATS %","wilson_low":"Wilson LB %","wilson_high":"Wilson UB %",
+        }), filters=False, height="250px")
 
 
     # ------------------------------------------------------------------
