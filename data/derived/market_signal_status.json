@@ -1,0 +1,44 @@
+{
+  "version": "v3.5.45-market-anchored-signal",
+  "oos_blocks_completed": 8,
+  "oos_block_size": 6,
+  "standard_price": -110,
+  "top_n_grid": [
+    3,
+    5,
+    8,
+    10,
+    15,
+    20,
+    25,
+    35,
+    999
+  ],
+  "ranking_methods": [
+    "wilson",
+    "mae",
+    "incremental"
+  ],
+  "edge_grid": [
+    0.0,
+    0.5,
+    1.0,
+    1.5,
+    2.0,
+    3.0,
+    4.0
+  ],
+  "common_line_game_count": 3890,
+  "outputs": {
+    "forecast_summary": "data/derived/market_signal_forecast_summary.csv",
+    "betting_summary": "data/derived/market_signal_betting_summary.csv",
+    "fold_coefficients": "data/derived/market_signal_fold_coefficients.csv",
+    "oos_predictions": "data/derived/market_signal_oos_predictions.csv",
+    "residual_calibration": "data/derived/market_signal_residual_calibration.csv",
+    "model_rankings": "data/derived/market_signal_model_rankings.csv",
+    "chronology": "data/derived/market_signal_chronology.csv",
+    "live_matches": "data/derived/market_signal_live_matches.csv",
+    "live_unmatched": "data/derived/market_signal_live_unmatched.csv",
+    "live_forensics": "data/derived/market_signal_live_forensics.csv"
+  }
+}

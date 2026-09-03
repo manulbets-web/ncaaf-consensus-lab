@@ -1,0 +1,88 @@
+Date,Bet,American Odds,Decimal Odds,Win/Loss,Profit if risk 1u,bet_team,bet_team_norm,bet_spread,is_moneyline,match_reason
+8/23/25,Sam Houston +10.5,-110,1.91,W,0.91,Sam Houston,sam houston,10.5,False,ambiguous team/spread match
+8/28/25,Ohio +15.5,-110,1.91,W,0.91,Ohio,ohio,15.5,False,ambiguous team/spread match
+8/30/25,Colorado +4.5,-110,1.91,L,-1.0,Colorado,colorado,4.5,False,ambiguous team/spread match
+8/31/25,Baylor +2.5,-110,1.91,L,-1.0,Baylor,baylor,2.5,False,ambiguous team/spread match
+8/30/25,Ball State +18.5,-110,1.91,L,-1.0,Ball State,ball state,18.5,False,ambiguous team/spread match
+9/2/25,Kent State -5.5,-105,1.95,L,-1.0,Kent State,kent state,-5.5,False,ambiguous team/spread match
+9/1/25,Notre Dame -2.5,-105,1.95,L,-1.0,Notre Dame,notre dame,-2.5,False,no unique team/spread match
+9/1/25,TCU -3.5,-100,2.0,W,1.0,TCU,tcu,-3.5,False,ambiguous team/spread match
+9/8/25,Pitt -20.5,-125,1.8,W,0.8,Pitt,pitt,-20.5,False,no unique team/spread match
+9/10/25,Illinois -2.5,-105,1.95,W,0.95,Illinois,illinois,-2.5,False,no unique team/spread match
+9/12/25,SMU -2.5,-108,1.93,L,-1.0,SMU,smu,-2.5,False,ambiguous team/spread match
+9/13/25,Jax State +7.5,-156,1.64,W,0.64,Jax State,jacksonville state,7.5,False,no unique team/spread match
+9/14/25,Missouri -3.5,-129,1.78,W,0.78,Missouri,missouri,-3.5,False,ambiguous team/spread match
+9/16/25,Wake forest -15.5,-149,1.67,W,0.67,Wake forest,wake forest,-15.5,False,ambiguous team/spread match
+13-Sep,UVA -26.5,-122,1.82,W,0.82,UVA,virginia,-26.5,False,no unique team/spread match
+18-Sep,USC -20.5,-105,1.95,L,-1.0,USC,usc,-20.5,False,ambiguous team/spread match
+19-Sep,Jax State +3.5,-134,1.75,L,-1.0,Jax State,jacksonville state,3.5,False,ambiguous team/spread match
+20-Sep,Ohio State -24.5,-135,1.74,W,0.74,Ohio State,ohio state,-24.5,False,ambiguous team/spread match
+21-Sep,App State -2.5,-144,1.69,L,-1.0,App State,app state,-2.5,False,ambiguous team/spread match
+25-Sep,Navy -13.5,-127,1.79,W,0.79,Navy,navy,-13.5,False,ambiguous team/spread match
+19-Sep,Oklahoma State -6.5,-173,1.58,L,-1.0,Oklahoma State,oklahoma state,-6.5,False,ambiguous team/spread match
+23-Sep,Troy +7.5,-150,1.67,W,0.67,Troy,troy,7.5,False,no unique team/spread match
+25-Sep,ECU -3,-133,1.75,W,0.75,ECU,east carolina,-3.0,False,ambiguous team/spread match
+26-Sep,UVA +7,-112,1.89,W,0.89,UVA,virginia,7.0,False,ambiguous team/spread match
+27-Sep,CMU -3,-113,1.88,W,0.88,CMU,central michigan,-3.0,False,ambiguous team/spread match
+28-Sep,Kansas -4.5,-107,1.93,L,-1.0,Kansas,kansas,-4.5,False,ambiguous team/spread match
+30-Sep,Navy -13.5,-110,1.91,L,-1.0,Navy,navy,-13.5,False,ambiguous team/spread match
+1-Oct,Oklahoma State +21.5,-120,1.83,W,0.83,Oklahoma State,oklahoma state,21.5,False,ambiguous team/spread match
+5-Oct,Iowa State -5,-108,1.93,W,0.93,Iowa State,iowa state,-5.0,False,ambiguous team/spread match
+3-Oct,New Mexico +3,-115,1.87,L,-1.0,New Mexico,new mexico,3.0,False,ambiguous team/spread match
+5-Oct,Western Kentucky +3,-125,1.8,W,0.8,Western Kentucky,western kentucky,3.0,False,ambiguous team/spread match
+6-Oct,Troy +1.5,-107,1.93,W,0.93,Troy,troy,1.5,False,no unique team/spread match
+7-Oct,Uconn -6.5,-118,1.85,W,0.85,Uconn,connecticut,-6.5,False,ambiguous team/spread match
+8-Oct,Syracuse +17.5,-104,1.96,W,0.96,Syracuse,syracuse,17.5,False,no unique team/spread match
+10-Oct,UNC +16.5,-119,1.84,L,-1.0,UNC,north carolina,16.5,False,ambiguous team/spread match
+11-Oct,Iowa State +1.5,-107,1.93,L,-1.0,Iowa State,iowa state,1.5,False,ambiguous team/spread match
+12-Oct,Navy -12.5,-122,1.82,L,-1.0,Navy,navy,-12.5,False,ambiguous team/spread match
+14-Oct,Colorado +14.5,-132,1.76,W,0.76,Colorado,colorado,14.5,False,ambiguous team/spread match
+17-Oct,Fresno -11.5,-119,1.84,L,-1.0,Fresno,fresno,-11.5,False,no unique team/spread match
+9-Oct,Jax State -6.5,-108,1.93,L,-1.0,Jax State,jacksonville state,-6.5,False,ambiguous team/spread match
+10-Oct,Fresno State -6.5,100,2.0,L,-1.0,Fresno State,fresno state,-6.5,False,ambiguous team/spread match
+11-Oct,North Texas -1,-107,1.93,L,-1.0,North Texas,north texas,-1.0,False,ambiguous team/spread match
+12-Oct,Army -17.5,-110,1.91,L,-1.0,Army,army,-17.5,False,no unique team/spread match
+19-Oct,Kent State -1.5,-110,1.91,W,0.91,Kent State,kent state,-1.5,False,ambiguous team/spread match
+21-Oct,LSU -9,-115,1.87,W,0.87,LSU,lsu,-9.0,False,ambiguous team/spread match
+22-Oct,Akron +13.5,-130,1.77,W,0.77,Akron,akron,13.5,False,ambiguous team/spread match
+14-Oct,Western Kentucky -9.5,-110,1.91,L,-1.0,Western Kentucky,western kentucky,-9.5,False,ambiguous team/spread match
+16-Oct,ECU -16.5,-110,1.91,L,-1.0,ECU,east carolina,-16.5,False,no unique team/spread match
+17-Oct,Miami -10,-128,1.78,L,-1.0,Miami,miami,-10.0,False,no unique team/spread match
+18-Oct,Cal -7,-121,1.83,L,-1.0,Cal,cal,-7.0,False,no unique team/spread match
+20-Oct,LSU +3.5,-132,1.76,L,-1.0,LSU,lsu,3.5,False,ambiguous team/spread match
+21-Oct,Bowling Green -4,-108,1.93,L,-1.0,Bowling Green,bowling green,-4.0,False,ambiguous team/spread match
+23-Oct,Maryland +3.5,-118,1.85,W,0.85,Maryland,maryland,3.5,False,ambiguous team/spread match
+24-Oct,UNLV +13.5,-122,1.82,L,-1.0,UNLV,unlv,13.5,False,no unique team/spread match
+29-Oct,Jacksonville State -3,-122,1.82,P,0.0,Jacksonville State,jacksonville state,-3.0,False,ambiguous team/spread match
+29-Oct,Missouri State -3,-120,1.83,W,0.83,Missouri State,missouri state,-3.0,False,ambiguous team/spread match
+1-Nov,Colorado +4.5,-110,1.91,L,-1.0,Colorado,colorado,4.5,False,ambiguous team/spread match
+1-Nov,Auburn -11,-110,1.91,L,-1.0,Auburn,auburn,-11.0,False,no unique team/spread match
+1-Nov,Washington State -3.5,-110,1.91,L,-1.0,Washington State,washington state,-3.5,False,ambiguous team/spread match
+1-Nov,Troy -7,-110,1.91,L,-1.0,Troy,troy,-7.0,False,no unique team/spread match
+1-Nov,Arizona State +8,-110,1.91,W,0.91,Arizona State,arizona state,8.0,False,ambiguous team/spread match
+4-Nov,Ohio -3,-120,1.83,W,0.83,Ohio,ohio,-3.0,False,ambiguous team/spread match
+5-Nov,Toledo -13.5,-130,1.77,W,0.77,Toledo,toledo,-13.5,False,ambiguous team/spread match
+8-Nov,Arkansas State +5,-120,1.83,L,-1.0,Arkansas State,arkansas state,5.0,False,ambiguous team/spread match
+8-Nov,SMU -10.5,-110,1.91,W,0.91,SMU,smu,-10.5,False,no unique team/spread match
+8-Nov,Arizona -3,-120,1.83,W,0.83,Arizona,arizona,-3.0,False,ambiguous team/spread match
+15-Nov,Uconn -6.5,-143,1.7,W,0.7,Uconn,connecticut,-6.5,False,ambiguous team/spread match
+15-Nov,Pitt +12.5,-101,1.99,L,-1.0,Pitt,pitt,12.5,False,no unique team/spread match
+15-Nov,LSU -4.5,-102,1.98,L,-1.0,LSU,lsu,-4.5,False,ambiguous team/spread match
+15-Nov,ASU -10.5,-113,1.88,L,-1.0,ASU,arizona state,-10.5,False,ambiguous team/spread match
+15-Nov,Marshall -6.5,-146,1.68,W,0.68,Marshall,marshall,-6.5,False,no unique team/spread match
+15-Nov,Iowa +7.5,-132,1.76,W,0.76,Iowa,iowa,7.5,False,ambiguous team/spread match
+15-Nov,Southern Miss -2.5,-133,1.75,L,-1.0,Southern Miss,southern miss,-2.5,False,ambiguous team/spread match
+22-Nov,Iowa State -3,-118,1.85,W,0.85,Iowa State,iowa state,-3.0,False,ambiguous team/spread match
+22-Nov,Wake forest -15.5,-134,1.75,W,0.75,Wake forest,wake forest,-15.5,False,ambiguous team/spread match
+22-Nov,SMU -2.5,-150,1.67,W,0.67,SMU,smu,-2.5,False,ambiguous team/spread match
+22-Nov,Oklahoma -3.5,-124,1.81,W,0.81,Oklahoma,oklahoma,-3.5,False,ambiguous team/spread match
+22-Nov,Wyoming -5.5,-111,1.9,L,-1.0,Wyoming,wyoming,-5.5,False,ambiguous team/spread match
+22-Nov,Iowa -17,-109,1.92,L,-1.0,Iowa,iowa,-17.0,False,no unique team/spread match
+22-Nov,UCF -13,-109,1.92,L,-1.0,UCF,ucf,-13.0,False,no unique team/spread match
+22-Nov,Troy -9,-114,1.88,W,0.88,Troy,troy,-9.0,False,no unique team/spread match
+22-Nov,SDSU -12,-110,1.91,W,0.91,SDSU,san diego state,-12.0,False,no unique team/spread match
+29-Nov,Pitt +7,-110,1.91,L,-1.0,Pitt,pitt,7.0,False,no unique team/spread match
+29-Nov,BYU -17,-116,1.86,W,0.86,BYU,byu,-17.0,False,no unique team/spread match
+29-Nov,Troy +7.5,-110,1.91,W,0.91,Troy,troy,7.5,False,no unique team/spread match
+29-Nov,New Mexico State -3,-105,1.95,L,-1.0,New Mexico State,new mexico state,-3.0,False,ambiguous team/spread match
+29-Nov,Washington State -13,-119,1.84,W,0.84,Washington State,washington state,-13.0,False,ambiguous team/spread match

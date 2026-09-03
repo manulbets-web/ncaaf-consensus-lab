@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from shiny import App, reactive, render, ui
 
-from engine import load_strategy_data
+from engine import load_strategy_data, selection_diagnostics
 from forecast_plots import build_forecast_plot
 from committee import (
     analyze_finalist_portfolio, meta_spread_bucket_label,
@@ -32,9 +32,19 @@ from line_movement import (
     run_line_specific_pipelines, run_rolling_line_selection_validation,
     run_forward_stability_validation, FORWARD_STABILITY_METHODS, LINE_REFS,
 )
-from formal_backtest import (
-    FORMAL_ANCHOR_GRID, load_formal_backtest_outputs,
-    run_formal_walkforward_backtest, save_formal_backtest_outputs,
+from ablation_backtest import (
+    ABLATION_ARCHITECTURES, PURE_THRESHOLD_GRID, load_ablation_backtest_outputs,
+    run_ablation_walkforward_backtest, save_ablation_backtest_outputs,
+)
+from market_signal import (
+    TOP_N_GRID, RANKING_METHODS, BET_EDGE_GRID, load_market_signal_outputs,
+    run_market_signal_walkforward, save_market_signal_outputs,
+    load_live_bets_reference, match_live_spread_bets, live_forensics_summary,
+)
+from cohort_market import (
+    model_quality_table, assisted_cohort, resolve_legacy_cohort,
+    current_cohort_summary, load_odds_archive, odds_archive_coverage,
+    price_historical_market_shelf, shelf_backtest_summary,
 )
 from streamlined_engine import (
     StreamlinedBacktestConfig,
@@ -154,6 +164,16 @@ else:
 
 DEFAULT_MANUAL_IDS = DEFAULT_AUTO_IDS[: min(10, len(DEFAULT_AUTO_IDS))]
 
+# v3.6.2: the production workflow is centered on a fixed, user-controlled
+# cohort.  The legacy 2025 hand-curated model list is resolved onto the current
+# canonical registry when possible; otherwise a small quality-ranked fallback is
+# used. Automatic selection is deliberately constrained to a quality screen plus
+# correlation collapse -- never an exhaustive combination search.
+COHORT_QUALITY = model_quality_table(DATA)
+DEFAULT_COHORT_IDS = resolve_legacy_cohort(MODELS, DEFAULT_AUTO_IDS[: min(12, len(DEFAULT_AUTO_IDS))])
+ODDS_QUOTES = load_odds_archive(PROJECT_ROOT)
+ODDS_COVERAGE = odds_archive_coverage(ODDS_QUOTES)
+
 INDIVIDUAL_HISTORY = individual_model_performance(DATA, standard_price=-110)
 PT_LINE_HISTORY_RAW = load_predictiontracker_line_history(PROJECT_ROOT, DATA)
 # Preserve the literal archive mapping for QC.  Primary line-movement analyses
@@ -162,7 +182,8 @@ PT_LINE_HISTORY = PT_LINE_HISTORY_RAW
 INDIVIDUAL_LINE_HISTORY = individual_model_line_reference_performance(
     DATA, PT_LINE_HISTORY_RAW, standard_price=-110
 )
-CACHED_FORMAL_BACKTEST = load_formal_backtest_outputs(PROJECT_ROOT)
+CACHED_FORMAL_BACKTEST = load_ablation_backtest_outputs(PROJECT_ROOT)
+CACHED_MARKET_SIGNAL = load_market_signal_outputs(PROJECT_ROOT)
 
 
 def _saved_strategy() -> dict:
@@ -275,14 +296,14 @@ def _style_css():
 
 
 # ---------------------------------------------------------------------------
-# Production UI (v3.5.43 streamlined + formal validation)
+# Production UI (v3.5.44 streamlined + ablation validation)
 # ---------------------------------------------------------------------------
 app_ui = ui.page_fluid(
     _style_css(),
     ui.h2("NCAAF Consensus Lab", class_="app-title"),
     ui.p(
-        "Historical model evidence → current slate → strategy selection → current picks → formal validation → forecast detail. "
-        "PredictionTracker defines the live game slate; CFB Picker expands model coverage on those games.",
+        "Choose a trusted model cohort → inspect its current forecast distribution → compare it with the full sportsbook market shelf. "
+        "PredictionTracker defines the live game slate; CFB Picker expands model coverage, while the bundled Odds API archive supplies historical prices and alternate markets.",
         class_="app-subtitle",
     ),
     ui.navset_card_tab(
@@ -291,11 +312,10 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Weekly workflow"),
                 ui.tags.ol(
-                    ui.tags.li(ui.strong("Refresh Current Slate."), " Confirm the live games and market lines."),
-                    ui.tags.li(ui.strong("Run the recommended strategy."), " The one-click recipe selects the current model universe, freezes the historical discovery/holdout split, searches combinations, tunes k, and scores the slate."),
-                    ui.tags.li(ui.strong("Review Picks."), " Use the game-level agreement table and line-shopping override for actionable decisions."),
-                    ui.tags.li(ui.strong("Review Validation."), " Run or inspect the strict chronological anchor/staking backtest before relying on the live strategy."),
-                    ui.tags.li(ui.strong("Open Forecast."), " Inspect the full model → finalist → META hierarchy for any game that needs a closer look."),
+                    ui.tags.li(ui.strong("Choose the cohort."), " Start with Patrick Core or manually select models. Assisted mode can rank models and remove near-duplicates without searching arbitrary combinations."),
+                    ui.tags.li(ui.strong("Refresh Current Slate."), " Confirm the live games and PredictionTracker market lines, then inspect the cohort mean, median, dispersion, and model agreement."),
+                    ui.tags.li(ui.strong("Open Market Shelf."), " Explore the bundled Odds API archive: moneyline, main/alternate spreads, game totals, and team-total ladders. ML is treated as the ±0.5 rung of the margin ladder."),
+                    ui.tags.li(ui.strong("Use Research when needed."), " The earlier combination/META and formal validation work is retained as research evidence, but it no longer defines the weekly production workflow."),
                 ),
                 ui.p(
                     "Historical scorecards and custom screening remain available for research, but development-only diagnostics are no longer shown in the production interface.",
@@ -303,21 +323,65 @@ app_ui = ui.page_fluid(
                 ),
             ),
             ui.card(
-                ui.card_header("Signal definition"),
+                ui.card_header("Production signal"),
                 ui.p(
-                    "Each finalist uses the mean projected home margin across its available models and the sample SD of those projections. "
-                    "A BET requires the market to lie outside mean ± k×SD; otherwise the combination passes. The diversified META reduces duplicate influence by grouping highly overlapping finalist sets before forming the final consensus.",
+                    "The production forecast is the fixed cohort's distribution of predicted home margins. Mean/median describe location; SD/IQR and model counts describe disagreement. "
+                    "The market shelf then asks which available price or line best expresses that forecast. We do not assume that a universal k×SD cutoff is itself a calibrated betting probability.",
                     class_="muted",
                 ),
             ),
         ),
 
         ui.nav_panel(
-            "1 · Model Performance",
+            "1 · Cohort",
             ui.p(
-                "Historical standalone performance for every canonical model. Use this page to understand the model pool; combination selection is handled on the Strategy page.",
+                "The production model is a fixed cohort, not an automatically rediscovered combination. Choose it directly, or use the constrained assisted selector to screen for quality and collapse highly correlated near-duplicates.",
                 class_="muted",
             ),
+            ui.card(
+                ui.card_header("Patrick Core · manual cohort"),
+                ui.input_selectize(
+                    "cohort_manual_models", "Models in cohort",
+                    choices=ALL_MODEL_CHOICES, selected=DEFAULT_COHORT_IDS, multiple=True,
+                    options={"plugins": ["remove_button"], "placeholder": "Choose the models you trust…"},
+                ),
+                ui.div(
+                    ui.input_action_button("apply_manual_cohort", "Use manual cohort", class_="btn-primary"),
+                    ui.input_action_button("reset_legacy_cohort", "Reset to Patrick Core", class_="btn-sm"),
+                    style="display:flex; gap:.5rem; flex-wrap:wrap; margin:.4rem 0;",
+                ),
+                ui.output_text("cohort_status"),
+                ui.layout_columns(
+                    ui.value_box("Models", ui.output_text("cohort_model_n")),
+                    ui.value_box("Historical games", ui.output_text("cohort_hist_games")),
+                    ui.value_box("Mean pairwise corr", ui.output_text("cohort_mean_corr")),
+                    ui.value_box("Forecast MAE", ui.output_text("cohort_mae")),
+                    col_widths=(3,3,3,3),
+                ),
+                ui.output_data_frame("cohort_selected_table"),
+            ),
+            ui.card(
+                ui.card_header("Assisted cohort · quality screen + correlation collapse"),
+                ui.p(
+                    "This is intentionally constrained: rank individual models, then greedily remove near-duplicates above the selected edge-correlation ceiling. It does not search combinations or optimize a downstream betting threshold.",
+                    class_="muted",
+                ),
+                ui.layout_columns(
+                    ui.input_select("cohort_assist_method", "Ranking", {"balanced":"Balanced forecast + ATS", "mae":"Forecast MAE", "wilson":"Wilson ATS"}, selected="balanced"),
+                    ui.input_numeric("cohort_assist_n", "Maximum models", 12, min=3, max=30, step=1),
+                    ui.input_numeric("cohort_assist_min_bets", "Min historical bets", 100, min=25, max=1000, step=25),
+                    ui.input_numeric("cohort_assist_corr", "Correlation ceiling", 0.90, min=0.50, max=0.99, step=0.01),
+                    col_widths=(3,3,3,3),
+                ),
+                ui.div(
+                    ui.input_action_button("preview_assisted_cohort", "Preview assisted cohort", class_="btn-outline-primary"),
+                    ui.input_action_button("apply_assisted_cohort", "Use assisted cohort", class_="btn-sm btn-primary"),
+                    style="display:flex; gap:.5rem; flex-wrap:wrap; margin:.4rem 0;",
+                ),
+                ui.output_text("cohort_assist_status"),
+                ui.output_data_frame("cohort_assist_table"),
+            ),
+            ui.p("Full individual-model history remains below as supporting evidence.", class_="muted"),
             ui.layout_columns(
                 ui.value_box("Historical games", ui.output_text("hist_games")),
                 ui.value_box("Seasons", ui.output_text("hist_seasons")),
@@ -366,10 +430,18 @@ app_ui = ui.page_fluid(
                 ui.card_header("Current game board"),
                 ui.output_data_frame("upcoming_board_table"),
             ),
+            ui.card(
+                ui.card_header("Patrick Core · current cohort forecasts"),
+                ui.p(
+                    "These are direct cohort summaries: mean/median predicted home margin, dispersion, number of cohort models posting, and raw disagreement with the current PredictionTracker line.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("current_cohort_table"),
+            ),
         ),
 
         ui.nav_panel(
-            "3 · Strategy",
+            "Research · Combination Lab",
             ui.card(
                 ui.card_header("Recommended weekly strategy"),
                 ui.p(
@@ -481,10 +553,83 @@ app_ui = ui.page_fluid(
         ),
 
         ui.nav_panel(
-            "4 · Picks",
+            "3 · Market Shelf",
+            ui.p(
+                "The paid Odds API archive is bundled into the deployed repo. This page evaluates the fixed cohort against the actual historical sportsbook shelf rather than only one consensus spread. Moneyline is treated as the ±0.5 rung of the margin ladder.",
+                class_="muted",
+            ),
+            ui.layout_columns(
+                ui.value_box("Archived events", ui.output_text("odds_event_n")),
+                ui.value_box("Sportsbooks", ui.output_text("odds_book_n")),
+                ui.value_box("Quote rows", ui.output_text("odds_quote_n")),
+                ui.value_box("Coverage", ui.output_text("odds_date_range")),
+                col_widths=(3,3,3,3),
+            ),
+            ui.card(
+                ui.card_header("Archive coverage"),
+                ui.output_text("market_shelf_status"),
+                ui.output_data_frame("odds_coverage_table"),
+            ),
+            ui.card(
+                ui.card_header("Odds API archive browser"),
+                ui.p(
+                    "The sportsbook rows themselves are part of the deployed website, not a local-only dependency. Filter the paid archive directly by market or team; pricing is not required to browse the collected quotes.",
+                    class_="muted",
+                ),
+                ui.layout_columns(
+                    ui.input_select(
+                        "odds_browser_market", "Market",
+                        {
+                            "All":"All full-game markets", "h2h":"Moneyline", "spreads":"Main spread",
+                            "alternate_spreads":"Alternate spreads", "totals":"Main total",
+                            "alternate_totals":"Alternate totals", "team_totals":"Team totals",
+                            "alternate_team_totals":"Alternate team totals",
+                        },
+                        selected="All",
+                    ),
+                    ui.input_text("odds_browser_team", "Team contains", placeholder="e.g. Ohio State"),
+                    ui.input_numeric("odds_browser_rows", "Rows shown", 500, min=25, max=5000, step=25),
+                    col_widths=(4,4,4),
+                ),
+                ui.output_data_frame("odds_quote_browser_table"),
+            ),
+            ui.card(
+                ui.card_header("Historical sportsbook opportunities"),
+                ui.p(
+                    "Spread/ML probabilities use only cohort margin errors from earlier games. Team totals use the market game total as the scoring anchor, split it using the cohort margin, and calibrate team-score residuals from earlier matched archived games only. Game totals are shown as market context because the cohort is a margin model.",
+                    class_="muted",
+                ),
+                ui.input_task_button(
+                    "price_market_shelf", "Price archive for active cohort",
+                    label_busy="Pricing historical shelf…", type="primary",
+                ),
+                ui.layout_columns(
+                    ui.input_select(
+                        "shelf_family", "Market family",
+                        {"All":"All priceable markets", "ML":"Moneyline", "Spread":"Spreads", "Team Total":"Team totals", "Game Total":"Game totals / context"},
+                        selected="All",
+                    ),
+                    ui.input_numeric("shelf_min_ev", "Minimum model EV", 0.00, min=-0.50, max=1.00, step=0.01),
+                    ui.input_numeric("shelf_max_rows", "Rows shown", 300, min=25, max=2000, step=25),
+                    col_widths=(4,4,4),
+                ),
+                ui.output_data_frame("market_shelf_table"),
+            ),
+            ui.card(
+                ui.card_header("Offer-level historical check"),
+                ui.p(
+                    "This is descriptive offer-level grading across books/rungs, not an independent-bet portfolio: multiple offers from the same game are correlated. It is useful for asking whether the model-price relationship behaves sensibly across ML, spreads, and team totals.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("market_shelf_backtest_table"),
+            ),
+        ),
+
+        ui.nav_panel(
+            "Legacy · META Picks",
             ui.div(ui.output_text("strategy_banner"), class_="strategy-banner"),
             ui.p(
-                "The recommended strategy automatically scores the current slate when it finishes. If you selected a custom finalist portfolio on Page 3, apply it here.",
+                "Legacy META workflow. If you selected a custom finalist portfolio in Research · Combination Lab, apply it here.",
                 class_="muted",
             ),
             ui.input_task_button(
@@ -504,7 +649,7 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Portfolio snapshot"),
                 ui.p(
-                    "Recent holdout performance is shown here only as a compact portfolio sanity check. Use Page 5 · Validation for the formal repeated chronological backtest.",
+                    "Recent holdout performance is shown here only as a compact portfolio sanity check. Use Research · Validation for the formal repeated chronological backtest.",
                     class_="muted",
                 ),
                 ui.layout_columns(
@@ -549,17 +694,15 @@ app_ui = ui.page_fluid(
         ),
 
         ui.nav_panel(
-            "5 · Validation",
+            "Research · Validation",
             ui.p(
-                "Formal as-if-live validation of the production recipe against PredictionTracker Updated/final lines. "
-                "Each OOS block rebuilds the historical posting universe, Top-35 Wilson pool, exact 3–6 model combination search, Top-50 finalists, overlap communities, and META using only earlier data.",
+                "Formal chronological validation now asks whether smaller, prior-ranked model pools add incremental information beyond the market. The prior A–E architecture ablation remains below as a negative-control result.",
                 class_="muted",
             ),
             ui.card(
-                ui.card_header("Chronological backtest"),
+                ui.card_header("Chronological model-ablation backtest"),
                 ui.p(
-                    "The combination search anchor is not fixed at 0.75. Every block evaluates the predeclared 0.00–2.00 SD grid in 0.25 steps in one exact search. "
-                    "The adaptive strategy may choose an anchor only from earlier OOS blocks (Wilson lower bound; minimum 50 prior bets). Both flat 1u-risk and risk-to-win-1u staking are tracked.",
+                    "The headline A–E comparison uses k=0 (every non-tie directional disagreement) so model-selection quality is separated from threshold tuning. Open-line anomalies are conservatively excluded, and the line comparison uses only games with verified Open, Midweek, and Updated values.",
                     class_="muted",
                 ),
                 ui.layout_columns(
@@ -569,51 +712,105 @@ app_ui = ui.page_fluid(
                     col_widths=(4, 4, 4),
                 ),
                 ui.p(
-                    "Set weeks/block = 1 for literal weekly re-selection. Larger blocks are a faster non-overlapping stress test and freeze the portfolio within each block.",
+                    "Set weeks/block = 1 for literal weekly re-selection. Strategy E keeps the predeclared 0.75-SD combination-search anchor here; the separate frozen-portfolio sweep below changes only the execution threshold.",
                     class_="muted",
                 ),
                 ui.input_task_button(
                     "run_formal_backtest",
-                    "Run formal backtest",
-                    label_busy="Running formal backtest…",
+                    "Run A–E validation",
+                    label_busy="Running A–E validation…",
                     type="primary",
                 ),
                 ui.output_ui("formal_progress_bar"),
                 ui.output_text("formal_status"),
             ),
             ui.card(
-                ui.card_header("Adaptive-anchor OOS headline"),
+                ui.card_header("Market-anchored signal · smaller Top-N pools"),
+                ui.p(
+                    "Instead of treating the model consensus as the fair spread, this test estimates how much model-minus-market disagreement should move us away from the market. Each OOS block re-ranks models using prior data only, tests Top 3/5/8/10/15/20/25/35/All, and fits the market-shrinkage coefficient on the discovery window only.",
+                    class_="muted",
+                ),
+                ui.input_task_button(
+                    "run_market_signal", "Run market-signal validation",
+                    label_busy="Running market-signal validation…", type="primary",
+                ),
+                ui.output_text("market_signal_status"),
                 ui.layout_columns(
-                    ui.value_box("Bets", ui.output_text("formal_adaptive_bets")),
-                    ui.value_box("ATS", ui.output_text("formal_adaptive_ats")),
-                    ui.value_box("Flat 1u ROI", ui.output_text("formal_adaptive_roi")),
-                    ui.value_box("Flat max drawdown", ui.output_text("formal_adaptive_drawdown")),
-                    col_widths=(3, 3, 3, 3),
+                    ui.input_select("market_signal_rank", "Prior ranking", {"wilson":"Wilson ATS", "mae":"Margin MAE", "incremental":"Incremental-to-market"}, selected="wilson"),
+                    ui.input_select("market_signal_line", "Execution line", {"Open":"Open", "Midweek":"Midweek", "Close (PT Updated/final)":"PT Updated/final"}, selected="Close (PT Updated/final)"),
+                    col_widths=(6,6),
                 ),
-                ui.output_data_frame("formal_adaptive_path_table"),
+                ui.output_plot("market_signal_topn_plot", height="380px"),
+                ui.output_data_frame("market_signal_topn_table"),
             ),
             ui.card(
-                ui.card_header("Fixed-anchor OOS surface"),
+                ui.card_header("Market-anchored betting surface"),
                 ui.p(
-                    "Each anchor gets its own independently selected Top-50 portfolio in every OOS block. A broad plateau is more credible than a single sharp optimum.",
+                    "Choose a Top-N pool and inspect bets only when the market-anchored fair spread differs from the market by at least the selected number of points. This threshold is applied after the regression is frozen; it is not used to select the models.",
                     class_="muted",
                 ),
-                ui.output_plot("formal_anchor_plot", height="360px"),
-                ui.output_data_frame("formal_anchor_table"),
+                ui.layout_columns(
+                    ui.input_select("market_bet_topn", "Top N", {str(x):("All" if x >= 999 else str(x)) for x in TOP_N_GRID}, selected="10"),
+                    ui.input_select("market_bet_rank", "Prior ranking", {"wilson":"Wilson ATS", "mae":"Margin MAE", "incremental":"Incremental-to-market"}, selected="wilson"),
+                    ui.input_select("market_bet_line", "Execution line", {"Open":"Open", "Midweek":"Midweek", "Close (PT Updated/final)":"PT Updated/final"}, selected="Close (PT Updated/final)"),
+                    col_widths=(4,4,4),
+                ),
+                ui.output_plot("market_signal_bet_plot", height="360px"),
+                ui.output_data_frame("market_signal_bet_table"),
             ),
             ui.card(
-                ui.card_header("Equity and standardized-edge check"),
+                ui.card_header("2025 live-process forensics"),
                 ui.p(
-                    "Equity uses only the anchor chosen prospectively for each OOS block. The edge table asks whether larger META disagreement relative to consensus SD is actually associated with better directional results.",
+                    "The supplied 2025 log is treated as a reference rather than a perfect export. Spread bets are fuzzy-matched to unique 2025 OOS games by team and line; moneylines and ambiguous rows are left unmatched. This is descriptive evidence about the live selection process, not a new optimization target.",
                     class_="muted",
                 ),
-                ui.output_plot("formal_equity_plot", height="360px"),
-                ui.output_data_frame("formal_edge_table"),
+                ui.output_text("live_forensics_status"),
+                ui.output_data_frame("live_forensics_table"),
+            ),
+            ui.card(
+                ui.card_header("Previous architecture ablation"),
+                ui.p(
+                    "Retained as the prior negative-control result: A = all posting models; B = prior-ranked Top 35 mean; C = best prior single model; D = diversified Top 35; E = exact combination → Top-50 → META.",
+                    class_="muted",
+                ),
+                ui.output_plot("ablation_architecture_plot", height="380px"),
+                ui.output_data_frame("ablation_architecture_table"),
+            ),
+            ui.card(
+                ui.card_header("Frozen-portfolio threshold sweep"),
+                ui.p(
+                    "Within each OOS block the architecture is frozen first. Only the execution cutoff changes from 0.00 to 2.00 SD. Bet count therefore must fall (or stay equal) as k rises; this is the clean threshold experiment that the earlier independent-anchor search could not provide.",
+                    class_="muted",
+                ),
+                ui.layout_columns(
+                    ui.input_select(
+                        "ablation_threshold_arch", "Architecture",
+                        {"A":"A · All-model consensus", "B":"B · Top-35 consensus", "C":"C · Best single model", "D":"D · Diversified Top-35", "E":"E · Exact Top-50 META"},
+                        selected="E",
+                    ),
+                    ui.input_select(
+                        "ablation_threshold_line", "Execution line",
+                        {"Open":"Open", "Midweek":"Midweek", "Close (PT Updated/final)":"PT Updated/final"},
+                        selected="Close (PT Updated/final)",
+                    ),
+                    col_widths=(6, 6),
+                ),
+                ui.output_plot("ablation_threshold_plot", height="380px"),
+                ui.output_data_frame("ablation_threshold_table"),
+            ),
+            ui.card(
+                ui.card_header("Grading and orientation QC"),
+                ui.p(
+                    "A deterministic sample of up to 100 Strategy-E / Updated-line OOS wagers at k=0.75 is retained for manual audit. The opposite-side check must swap wins and losses exactly (excluding pushes); failure indicates a sign/orientation bug rather than a strategy result.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("ablation_qc_summary_table"),
+                ui.output_data_frame("ablation_qc_sample_table"),
             ),
         ),
 
         ui.nav_panel(
-            "6 · Forecast",
+            "4 · Forecast",
             ui.p(
                 "Inspect one game at a time: every mapped model projection → selected finalist forecasts → diversified META versus the active market line.",
                 class_="muted",
@@ -644,6 +841,8 @@ app_ui = ui.page_fluid(
 # ---------------------------------------------------------------------------
 def server(input, output, session):
     strategy = reactive.Value(dict(SAVED_STRATEGY))
+    cohort = reactive.Value(list(DEFAULT_COHORT_IDS))
+    assisted_preview = reactive.Value({"ids": list(DEFAULT_COHORT_IDS), "audit": pd.DataFrame()})
     # Session-only sportsbook line overrides. Values use the app's internal
     # market_home_margin convention (positive = home favored). They never
     # overwrite PredictionTracker's cached line or another visitor's session.
@@ -670,6 +869,7 @@ def server(input, output, session):
     }
     forward_stability_progress_lock = threading.Lock()
     formal_result_state = reactive.Value(dict(CACHED_FORMAL_BACKTEST) if CACHED_FORMAL_BACKTEST else {})
+    market_signal_result_state = reactive.Value(dict(CACHED_MARKET_SIGNAL) if CACHED_MARKET_SIGNAL else {})
     formal_progress = {
         "done": 0, "total": 0, "label": "", "started": None, "updated": None,
     }
@@ -804,6 +1004,151 @@ def server(input, output, session):
             "model_mae":"Model MAE", "market_mae":"Market MAE", "mean_abs_edge":"Mean |edge|",
         })
         return render.DataGrid(d, filters=True, height="650px")
+
+    # ------------------------------------------------------------------
+    # v3.6.2 production cohort
+    # ------------------------------------------------------------------
+    def _active_cohort_ids() -> list[str]:
+        return [str(x) for x in (cohort.get() or []) if str(x) in MODEL_NAME_MAP]
+
+    def _cohort_hist_metrics(ids: list[str]) -> dict:
+        if not ids:
+            return {"games": 0, "mae": np.nan, "mean_corr": np.nan}
+        d = DATA[DATA["canonical_model_id"].astype(str).isin(ids)].drop_duplicates(["game_key", "canonical_model_id"]).copy()
+        if d.empty:
+            return {"games": 0, "mae": np.nan, "mean_corr": np.nan}
+        d["prediction_margin"] = pd.to_numeric(d["prediction_margin"], errors="coerce")
+        d["actual_margin"] = pd.to_numeric(d["actual_margin"], errors="coerce")
+        g = d.groupby("game_key", as_index=False).agg(
+            cohort_prediction=("prediction_margin", "mean"),
+            actual_margin=("actual_margin", "median"),
+            cohort_n=("canonical_model_id", "nunique"),
+        )
+        g = g[np.isfinite(g["cohort_prediction"]) & np.isfinite(g["actual_margin"])]
+        diag = selection_diagnostics(DATA, ids, PAIRWISE)
+        return {
+            "games": int(len(g)),
+            "mae": float(np.mean(np.abs(g["cohort_prediction"] - g["actual_margin"]))) if len(g) else np.nan,
+            "mean_corr": float(diag.get("mean_edge_correlation", np.nan)),
+        }
+
+    @reactive.effect
+    @reactive.event(input.apply_manual_cohort)
+    def apply_manual_cohort():
+        ids = [str(x) for x in (input.cohort_manual_models() or []) if str(x) in MODEL_NAME_MAP]
+        if len(ids) < 2:
+            ui.notification_show("Choose at least two models for the production cohort.", type="warning", duration=6)
+            return
+        cohort.set(list(dict.fromkeys(ids)))
+        ui.notification_show(f"Production cohort set to {len(ids)} models.", type="message", duration=5)
+
+    @reactive.effect
+    @reactive.event(input.reset_legacy_cohort)
+    def reset_legacy_cohort():
+        ids = list(DEFAULT_COHORT_IDS)
+        cohort.set(ids)
+        ui.update_selectize("cohort_manual_models", selected=ids)
+        ui.notification_show("Restored Patrick Core from the original hand-curated cohort where mappings were available.", type="message", duration=6)
+
+    def _compute_assisted() -> tuple[list[str], pd.DataFrame]:
+        return assisted_cohort(
+            DATA, PAIRWISE,
+            method=str(input.cohort_assist_method()),
+            max_models=int(input.cohort_assist_n()),
+            min_bets=int(input.cohort_assist_min_bets()),
+            correlation_ceiling=float(input.cohort_assist_corr()),
+        )
+
+    @reactive.effect
+    @reactive.event(input.preview_assisted_cohort)
+    def preview_assisted_cohort():
+        ids, audit = _compute_assisted()
+        assisted_preview.set({"ids": ids, "audit": audit})
+
+    @reactive.effect
+    @reactive.event(input.apply_assisted_cohort)
+    def apply_assisted_cohort():
+        state = assisted_preview.get() or {}
+        ids = list(state.get("ids") or [])
+        if not ids:
+            ids, audit = _compute_assisted()
+            assisted_preview.set({"ids": ids, "audit": audit})
+        if len(ids) < 2:
+            ui.notification_show("The assisted screen did not return a usable cohort.", type="warning", duration=6)
+            return
+        cohort.set(ids)
+        ui.update_selectize("cohort_manual_models", selected=ids)
+        ui.notification_show(f"Applied assisted cohort with {len(ids)} diversified models.", type="message", duration=6)
+
+    @render.text
+    def cohort_status():
+        ids = _active_cohort_ids()
+        names = [MODEL_NAME_MAP.get(x, x) for x in ids]
+        return "Active production cohort: " + (", ".join(names) if names else "none")
+
+    @render.text
+    def cohort_model_n():
+        return f"{len(_active_cohort_ids())}"
+
+    @render.text
+    def cohort_hist_games():
+        return f"{_cohort_hist_metrics(_active_cohort_ids())['games']:,}"
+
+    @render.text
+    def cohort_mean_corr():
+        v = _cohort_hist_metrics(_active_cohort_ids())["mean_corr"]
+        return "—" if not np.isfinite(v) else f"{v:.2f}"
+
+    @render.text
+    def cohort_mae():
+        v = _cohort_hist_metrics(_active_cohort_ids())["mae"]
+        return "—" if not np.isfinite(v) else f"{v:.2f} pts"
+
+    @render.data_frame
+    def cohort_selected_table():
+        ids = _active_cohort_ids()
+        d = COHORT_QUALITY[COHORT_QUALITY["canonical_model_id"].astype(str).isin(ids)].copy()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        order = {mid: i for i, mid in enumerate(ids)}
+        d["_order"] = d["canonical_model_id"].map(order)
+        d = d.sort_values("_order")
+        for c in ["ats_pct", "wilson_low"]:
+            d[c] = 100 * pd.to_numeric(d[c], errors="coerce")
+        keep = ["model_name", "games", "bets", "ats_pct", "wilson_low", "mae", "delta_mae_vs_market", "mean_abs_edge"]
+        d = d[keep].rename(columns={
+            "model_name":"Model", "games":"Games", "bets":"Bets", "ats_pct":"ATS %",
+            "wilson_low":"Wilson LB %", "mae":"MAE", "delta_mae_vs_market":"ΔMAE vs market",
+            "mean_abs_edge":"Mean |model-market|",
+        })
+        return render.DataGrid(d, filters=False, height="420px")
+
+    @render.text
+    def cohort_assist_status():
+        state = assisted_preview.get() or {}
+        ids = list(state.get("ids") or [])
+        if not ids:
+            return "Preview a constrained assisted cohort."
+        names = [MODEL_NAME_MAP.get(x, x) for x in ids]
+        return f"Suggested {len(ids)} models after quality screening and correlation collapse: " + ", ".join(names)
+
+    @render.data_frame
+    def cohort_assist_table():
+        d = (assisted_preview.get() or {}).get("audit", pd.DataFrame())
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = d.copy()
+        for c in ["ats_pct", "wilson_low"]:
+            d[c] = 100 * pd.to_numeric(d[c], errors="coerce")
+        d["blocking_corr"] = pd.to_numeric(d["blocking_corr"], errors="coerce").round(3)
+        d = d.rename(columns={
+            "model_name":"Model", "accepted":"Keep", "blocked_by":"Correlated with",
+            "blocking_corr":"Correlation", "bets":"Bets", "ats_pct":"ATS %",
+            "wilson_low":"Wilson LB %", "mae":"MAE", "delta_mae_vs_market":"ΔMAE vs market",
+            "balanced_score":"Balanced score",
+        })
+        keep = ["Model", "Keep", "Correlated with", "Correlation", "Bets", "ATS %", "Wilson LB %", "MAE", "ΔMAE vs market", "Balanced score"]
+        return render.DataGrid(d[[c for c in keep if c in d.columns]], filters=False, height="460px")
 
     # ------------------------------------------------------------------
     # Page 2: verified PredictionTracker + CFB Picker upcoming board
@@ -1043,6 +1388,29 @@ def server(input, output, session):
         return render.DataGrid(d, filters=True, height="420px")
 
     @render.data_frame
+    def current_cohort_table():
+        r = upcoming_result()
+        if r is None:
+            return render.DataGrid(pd.DataFrame([{"Status": "Refresh the current slate first."}]))
+        d = current_cohort_summary(
+            r.get("board", pd.DataFrame()), r.get("predictions", pd.DataFrame()),
+            _active_cohort_ids(), min_models=2,
+        )
+        if d.empty:
+            return render.DataGrid(pd.DataFrame([{"Status": "No active cohort game currently has at least two posted models."}]))
+        d["Game"] = d["away"].astype(str) + " @ " + d["home"].astype(str)
+        d["Market"] = [_spread_label(a, h, m) for a, h, m in zip(d["away"], d["home"], d["market_home_margin"])]
+        d["Cohort mean"] = [_spread_label(a, h, m) for a, h, m in zip(d["away"], d["home"], d["cohort_mean"])]
+        d["Cohort median"] = [_spread_label(a, h, m) for a, h, m in zip(d["away"], d["home"], d["cohort_median"])]
+        d["SD"] = pd.to_numeric(d["cohort_sd"], errors="coerce").round(2)
+        d["N"] = pd.to_numeric(d["cohort_n"], errors="coerce").astype("Int64")
+        d["Raw edge home"] = pd.to_numeric(d["raw_edge_home"], errors="coerce").round(2)
+        d["Home lean"] = pd.to_numeric(d["home_lean"], errors="coerce").astype("Int64")
+        d["Away lean"] = pd.to_numeric(d["away_lean"], errors="coerce").astype("Int64")
+        keep = ["Game", "Market", "Cohort mean", "Cohort median", "SD", "N", "Raw edge home", "Home lean", "Away lean"]
+        return render.DataGrid(d[keep], filters=True, height="520px")
+
+    @render.data_frame
     def upcoming_matrix_table():
         r = upcoming_result()
         if r is None:
@@ -1066,6 +1434,189 @@ def server(input, output, session):
             ]
             matrix = b[["Game", "Current market"]].drop_duplicates("Game").merge(matrix, on="Game", how="left")
         return render.DataGrid(matrix, filters=True, height="650px")
+
+    # ------------------------------------------------------------------
+    # v3.6.2 bundled historical sportsbook market shelf
+    # ------------------------------------------------------------------
+    @ui.bind_task_button(button_id="price_market_shelf")
+    @reactive.extended_task
+    async def shelf_task(model_ids: tuple[str, ...]):
+        ids = list(model_ids)
+        def compute():
+            return price_historical_market_shelf(
+                DATA, ODDS_QUOTES, ids, root=PROJECT_ROOT,
+                min_models=2, min_margin_calibration=100, min_team_total_calibration=40,
+            )
+        return await asyncio.to_thread(compute)
+
+    @reactive.effect
+    @reactive.event(input.price_market_shelf)
+    def start_shelf_task():
+        if ODDS_QUOTES.empty:
+            ui.notification_show(
+                "The bundled Odds API archive is missing. Rebuild v3.6.2 from the Mac source project so data/odds/ncaaf_rich_quotes.csv.gz is included.",
+                type="error", duration=10,
+            )
+            return
+        ids = tuple(_active_cohort_ids())
+        if len(ids) < 2:
+            ui.notification_show("Choose a production cohort first.", type="warning", duration=6)
+            return
+        shelf_task(ids)
+
+    def _shelf_result() -> pd.DataFrame:
+        if shelf_task.status() != "success":
+            return pd.DataFrame()
+        try:
+            r = shelf_task.result()
+            return r if isinstance(r, pd.DataFrame) else pd.DataFrame()
+        except Exception:
+            return pd.DataFrame()
+
+    @render.text
+    def odds_event_n():
+        return "—" if ODDS_QUOTES.empty else f"{ODDS_QUOTES['event_id'].nunique():,}"
+
+    @render.text
+    def odds_book_n():
+        return "—" if ODDS_QUOTES.empty else f"{ODDS_QUOTES['bookmaker_key'].nunique():,}"
+
+    @render.text
+    def odds_quote_n():
+        return "—" if ODDS_QUOTES.empty else f"{len(ODDS_QUOTES):,}"
+
+    @render.text
+    def odds_date_range():
+        if ODDS_QUOTES.empty or "commence_time" not in ODDS_QUOTES:
+            return "—"
+        z = pd.to_datetime(ODDS_QUOTES["commence_time"], errors="coerce", utc=True).dropna()
+        if z.empty:
+            return "—"
+        return f"{z.min().strftime('%Y-%m-%d')} → {z.max().strftime('%Y-%m-%d')}"
+
+    @render.text
+    def market_shelf_status():
+        if ODDS_QUOTES.empty:
+            return "Odds API archive not present in this deployment. v3.6.2 production builds are expected to bundle it under data/odds/."
+        st = shelf_task.status()
+        if st == "initial":
+            return "Archive loaded. Click ‘Price archive for active cohort’ to evaluate the historical shelf using the currently selected cohort."
+        if st == "running":
+            return "Pricing all matched historical ML/spread/team-total offers using only earlier calibration data…"
+        if st == "success":
+            d = _shelf_result()
+            priceable = int(pd.to_numeric(d.get("model_prob"), errors="coerce").notna().sum()) if len(d) else 0
+            return f"Priced {priceable:,} historical offers across {d['event_id'].nunique() if len(d) else 0:,} matched games for the active cohort."
+        if st == "error":
+            try:
+                shelf_task.result()
+            except Exception as exc:
+                return f"Shelf pricing failed: {exc}"
+        return str(st)
+
+    @render.data_frame
+    def odds_coverage_table():
+        d = ODDS_COVERAGE.copy()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        for c in ["first_game", "last_game"]:
+            if c in d:
+                d[c] = pd.to_datetime(d[c], errors="coerce", utc=True).dt.strftime("%Y-%m-%d")
+        d = d.rename(columns={
+            "market_key":"Market", "events":"Events", "books":"Books", "quotes":"Quote rows",
+            "first_game":"First game", "last_game":"Last game",
+        })
+        return render.DataGrid(d, filters=False, height="360px")
+
+    @render.data_frame
+    def odds_quote_browser_table():
+        d = ODDS_QUOTES.copy()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame([{"Status": "Bundled archive is empty."}]))
+        mk = str(input.odds_browser_market())
+        if mk != "All":
+            d = d[d["market_key"].astype(str).eq(mk)].copy()
+        team = str(input.odds_browser_team() or "").strip().lower()
+        if team:
+            mask = (
+                d["home_team"].astype(str).str.lower().str.contains(team, regex=False, na=False)
+                | d["away_team"].astype(str).str.lower().str.contains(team, regex=False, na=False)
+                | d.get("outcome_description", pd.Series("", index=d.index)).astype(str).str.lower().str.contains(team, regex=False, na=False)
+                | d.get("outcome_name", pd.Series("", index=d.index)).astype(str).str.lower().str.contains(team, regex=False, na=False)
+            )
+            d = d[mask].copy()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame([{"Status": "No archived quotes match these filters."}]))
+        d = d.sort_values(["commence_time", "event_id", "bookmaker_title", "market_key", "point"], ascending=[False, True, True, True, True], na_position="last")
+        d = d.head(int(input.odds_browser_rows())).copy()
+        d["Date"] = pd.to_datetime(d["commence_time"], errors="coerce", utc=True).dt.strftime("%Y-%m-%d")
+        d["Game"] = d["away_team"].astype(str) + " @ " + d["home_team"].astype(str)
+        d["Book"] = d.get("bookmaker_title", d.get("bookmaker_key", "")).astype(str)
+        d["Market"] = d["market_key"].astype(str)
+        d["Outcome"] = d["outcome_name"].astype(str)
+        desc = d.get("outcome_description", pd.Series("", index=d.index)).fillna("").astype(str)
+        d["Description"] = desc
+        d["Point"] = pd.to_numeric(d.get("point"), errors="coerce")
+        d["Price"] = pd.to_numeric(d.get("price_american"), errors="coerce").round().astype("Int64")
+        keep = ["Date", "Game", "Book", "Market", "Outcome", "Description", "Point", "Price"]
+        return render.DataGrid(d[keep], filters=True, height="620px")
+
+    @render.data_frame
+    def market_shelf_table():
+        d = _shelf_result().copy()
+        if d.empty:
+            msg = "Price the archive for the active cohort." if shelf_task.status() == "initial" else "No priced offers available."
+            return render.DataGrid(pd.DataFrame([{"Status": msg}]))
+        fam = str(input.shelf_family())
+        if fam == "All":
+            d = d[d["family"].isin(["ML", "Spread", "Team Total"])].copy()
+        else:
+            d = d[d["family"].eq(fam)].copy()
+        if fam != "Game Total":
+            ev = pd.to_numeric(d["ev"], errors="coerce")
+            d = d[np.isfinite(ev) & (ev >= float(input.shelf_min_ev()))].copy()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame([{"Status": "No offers meet the current family / EV filter."}]))
+        def bet_label(r):
+            if r.family == "ML":
+                return f"{r.outcome_name} ML"
+            if r.family == "Spread":
+                return f"{r.outcome_name} {r.point:+g}" if pd.notna(r.point) else str(r.outcome_name)
+            if r.family == "Team Total":
+                return f"{r.outcome_description} {r.outcome_name} {r.point:g}" if pd.notna(r.point) else f"{r.outcome_description} {r.outcome_name}"
+            return f"{r.outcome_name} {r.point:g}" if pd.notna(r.point) else str(r.outcome_name)
+        d["Bet"] = [bet_label(r) for r in d.itertuples(index=False)]
+        d["Model P %"] = 100 * pd.to_numeric(d["model_prob"], errors="coerce")
+        d["Book implied %"] = 100 * pd.to_numeric(d["implied_prob"], errors="coerce")
+        d["EV %"] = 100 * pd.to_numeric(d["ev"], errors="coerce")
+        d["Cohort margin"] = pd.to_numeric(d["cohort_home_margin"], errors="coerce").round(2)
+        d["Cohort SD"] = pd.to_numeric(d["cohort_sd"], errors="coerce").round(2)
+        d["Derived team mean"] = pd.to_numeric(d["derived_team_mean"], errors="coerce").round(2)
+        d["Price"] = pd.to_numeric(d["price_american"], errors="coerce").round().astype("Int64")
+        d = d.sort_values("EV %", ascending=False, na_position="last").head(int(input.shelf_max_rows()))
+        keep = ["season", "week", "game", "book", "family", "Bet", "Price", "Model P %", "Book implied %", "EV %", "Cohort margin", "Cohort SD", "Derived team mean", "grade"]
+        d = d[[c for c in keep if c in d.columns]].rename(columns={"season":"Season", "week":"Week", "game":"Game", "book":"Book", "family":"Market", "grade":"Grade"})
+        return render.DataGrid(d, filters=True, height="720px")
+
+    @render.data_frame
+    def market_shelf_backtest_table():
+        d = _shelf_result().copy()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        fam = str(input.shelf_family())
+        if fam != "All":
+            d = d[d["family"].eq(fam)].copy()
+        out = shelf_backtest_summary(d, ev_cutoff=float(input.shelf_min_ev()))
+        if out.empty:
+            return render.DataGrid(pd.DataFrame())
+        out["win_pct"] = 100 * pd.to_numeric(out["win_pct"], errors="coerce")
+        out["roi_flat_risk"] = 100 * pd.to_numeric(out["roi_flat_risk"], errors="coerce")
+        out["mean_model_ev"] = 100 * pd.to_numeric(out["mean_model_ev"], errors="coerce")
+        out = out.rename(columns={
+            "family":"Market", "offers":"Offers", "graded":"Graded", "wins":"Wins", "losses":"Losses", "pushes":"Pushes",
+            "win_pct":"Win %", "units_flat_risk":"Units (1u risk)", "roi_flat_risk":"ROI %", "mean_model_ev":"Mean modeled EV %",
+        })
+        return render.DataGrid(out, filters=False, height="320px")
 
     # ------------------------------------------------------------------
     # Page 3a: manual strategy
@@ -1217,7 +1768,7 @@ def server(input, output, session):
                 season=int(input.current_season()), week=int(input.current_week()),
                 primary_k=k, min_available_models=min_n, combinations=combos,
             )
-        ui.notification_show("Manual strategy selected for Page 4.", type="message")
+        ui.notification_show("Manual legacy strategy selected.", type="message")
 
     # ------------------------------------------------------------------
     # Page 3b: automatic combination discovery
@@ -1977,7 +2528,7 @@ def server(input, output, session):
                 primary_k=k, min_available_models=min_n, combinations=combos,
             )
         ui.notification_show(
-            f"Selected {len(combos)} finalist combinations for Page 4.", type="message"
+            f"Selected {len(combos)} finalist combinations for the legacy META scorer.", type="message"
         )
 
     # ------------------------------------------------------------------
@@ -1996,7 +2547,7 @@ def server(input, output, session):
         s = strategy.get()
         combos = s.get("combinations", [])
         if not combos:
-            return "No active strategy. Run the recommended strategy or select custom finalists on Page 3."
+            return "No active legacy META strategy. Run the legacy recommended strategy or select custom finalists in Research · Combination Lab."
         if len(combos) == 1:
             c = combos[0]
             names = ", ".join(MODEL_NAME_MAP.get(x, x) for x in c.get("model_ids", []))
@@ -2158,7 +2709,7 @@ def server(input, output, session):
         s = strategy.get()
         combos = list(s.get("combinations", []))
         if not combos:
-            ui.notification_show("Choose one or more finalist combinations on Page 3 first.", type="error")
+            ui.notification_show("Choose one or more finalist combinations in Research · Combination Lab first.", type="error")
             return
         strategy_current_task(
             combos,
@@ -2592,7 +3143,7 @@ def server(input, output, session):
     def strategy_current_status():
         s = strategy_current_task.status()
         if s == "initial":
-            return "Refresh PredictionTracker on Page 2, choose finalists on Page 3, then apply the portfolio here."
+            return "Refresh the Current Slate, choose finalists in Research · Combination Lab, then apply the legacy portfolio here."
         if s == "running":
             return "Scoring each selected finalist combination independently…"
         if s == "success":
@@ -3822,7 +4373,193 @@ def server(input, output, session):
 
 
     # ------------------------------------------------------------------
-    # Page 5: formal production-equivalent chronological validation
+    # Page 5a: market-anchored incremental signal + 2025 live forensics
+    # ------------------------------------------------------------------
+    @ui.bind_task_button(button_id="run_market_signal")
+    @reactive.extended_task
+    async def market_signal_task(oos_blocks: int, block_size: int, min_prior: int):
+        def compute():
+            def progress(done, total, label):
+                if int(done) == int(total) or int(done) % 5 == 0:
+                    print(f"[Market signal] {done:,}/{total:,} · {label}", flush=True)
+            result = run_market_signal_walkforward(
+                DATA,
+                PT_LINE_HISTORY_RAW.copy(),
+                top_n_grid=TOP_N_GRID,
+                ranking_methods=RANKING_METHODS,
+                edge_grid=BET_EDGE_GRID,
+                oos_blocks=int(oos_blocks),
+                oos_block_size=int(block_size),
+                min_discovery_periods=int(min_prior),
+                min_games_per_period=10,
+                min_model_bets=PATRICK_POOL_MIN_BETS,
+                min_available_models=2,
+                standard_price=-110,
+                common_line_games=True,
+                progress_callback=progress,
+            )
+            live_path = PROJECT_ROOT / "data" / "reference" / "live_bets_2025_reference.csv"
+            if live_path.exists():
+                try:
+                    live = load_live_bets_reference(live_path)
+                    matched, unmatched = match_live_spread_bets(
+                        live, result.get("oos_predictions", pd.DataFrame()),
+                        ranking_method="wilson", top_n=10,
+                        line_reference="Close (PT Updated/final)",
+                    )
+                    result["live_matches"] = matched
+                    result["live_unmatched"] = unmatched
+                    result["live_forensics"] = live_forensics_summary(matched)
+                except Exception as exc:
+                    print(f"[Market signal] live-forensics warning: {exc}", flush=True)
+            try:
+                save_market_signal_outputs(result, PROJECT_ROOT)
+            except Exception as exc:
+                print(f"[Market signal] warning: could not save cached outputs: {exc}", flush=True)
+            return result
+        return await asyncio.to_thread(compute)
+
+    @reactive.effect
+    @reactive.event(input.run_market_signal)
+    def start_market_signal():
+        if market_signal_task.status() == "running":
+            return
+        if PT_LINE_HISTORY_RAW is None or PT_LINE_HISTORY_RAW.empty:
+            ui.notification_show("Historical PredictionTracker lines are unavailable.", type="error", duration=12)
+            return
+        market_signal_task(
+            int(input.formal_oos_blocks()),
+            int(input.formal_block_size()),
+            int(input.formal_min_prior()),
+        )
+
+    def market_signal_result():
+        if market_signal_task.status() == "success":
+            r = market_signal_task.result()
+            if r:
+                return r
+        return market_signal_result_state.get() or {}
+
+    @reactive.effect
+    def cache_market_signal_task_result():
+        if market_signal_task.status() == "success":
+            r = market_signal_task.result()
+            if r:
+                market_signal_result_state.set(r)
+
+    @render.text
+    def market_signal_status():
+        st = market_signal_task.status()
+        if st == "running":
+            return "Running prior-only Top-N ranking and market-anchored regressions…"
+        if st == "error":
+            return "Market-signal validation failed; see the notification / Connect log."
+        r = market_signal_result()
+        if r:
+            src = "Current run" if st == "success" else "Cached result"
+            return f"{src}: {int(r.get('oos_blocks_completed',0))} untouched OOS blocks × {int(r.get('oos_block_size',0))} usable week(s); Top 3/5/8/10/15/20/25/35/All; Wilson, MAE, and incremental-to-market rankings."
+        return "No market-anchored validation cached yet. Run locally or use the button above."
+
+    @reactive.effect
+    def show_market_signal_error():
+        if market_signal_task.status() == "error":
+            try:
+                market_signal_task.result()
+            except Exception as exc:
+                ui.notification_show(f"Market-signal backtest error: {exc}", type="error", duration=20)
+
+    @render.data_frame
+    def market_signal_topn_table():
+        r = market_signal_result(); d = r.get("forecast_summary", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        rank = str(input.market_signal_rank() or "wilson")
+        line = str(input.market_signal_line() or "Close (PT Updated/final)")
+        d = d[(d["ranking_method"].astype(str) == rank) & (d["line_reference"].astype(str) == line)].copy()
+        d["MAE gain %"] = 100.0 * pd.to_numeric(d["mae_improvement"], errors="coerce") / pd.to_numeric(d["market_mae"], errors="coerce")
+        keep = ["top_n_label","oos_games","mean_gamma","median_gamma","market_mae","signal_mae","mae_improvement","MAE gain %","market_rmse","signal_rmse","rmse_improvement","residual_corr","positive_gamma_folds","folds"]
+        out = d[[c for c in keep if c in d.columns]].rename(columns={
+            "top_n_label":"Top N","oos_games":"OOS games","mean_gamma":"Mean gamma","median_gamma":"Median gamma",
+            "market_mae":"Market-only MAE","signal_mae":"Market+models MAE","mae_improvement":"MAE improvement",
+            "market_rmse":"Market-only RMSE","signal_rmse":"Market+models RMSE","rmse_improvement":"RMSE improvement",
+            "residual_corr":"Residual corr","positive_gamma_folds":"Positive-gamma folds","folds":"Folds",
+        })
+        return render.DataGrid(out, filters=False, height="340px")
+
+    @render.plot
+    def market_signal_topn_plot():
+        r = market_signal_result(); d = r.get("forecast_summary", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return None
+        rank = str(input.market_signal_rank() or "wilson")
+        line = str(input.market_signal_line() or "Close (PT Updated/final)")
+        q = d[(d["ranking_method"].astype(str) == rank) & (d["line_reference"].astype(str) == line)].copy()
+        if q.empty: return None
+        order = {int(n): i for i, n in enumerate(TOP_N_GRID)}
+        q["_x"] = pd.to_numeric(q["top_n"], errors="coerce").map(order)
+        q = q.sort_values("_x")
+        fig, ax = plt.subplots(figsize=(9.5, 4.2))
+        ax.axhline(0, linestyle=":", linewidth=1.2)
+        ax.plot(q["_x"], pd.to_numeric(q["mae_improvement"], errors="coerce"), marker="o", label="OOS MAE improvement vs market-only")
+        ax.set_xticks(q["_x"], q["top_n_label"].astype(str))
+        ax.set_xlabel("Prior-ranked model pool size")
+        ax.set_ylabel("MAE improvement (points; >0 is better)")
+        ax.grid(axis="y", alpha=0.2)
+        ax2 = ax.twinx()
+        ax2.plot(q["_x"], pd.to_numeric(q["mean_gamma"], errors="coerce"), marker="s", linestyle="--", label="Mean model-residual gamma")
+        ax2.set_ylabel("Mean gamma")
+        l1, a1 = ax.get_legend_handles_labels(); l2, a2 = ax2.get_legend_handles_labels()
+        ax.legend(l1+l2, a1+a2, frameon=False, ncol=2)
+        fig.tight_layout(); return fig
+
+    @render.data_frame
+    def market_signal_bet_table():
+        r = market_signal_result(); d = r.get("betting_summary", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        n = int(input.market_bet_topn() or 10); rank = str(input.market_bet_rank() or "wilson"); line = str(input.market_bet_line() or "Close (PT Updated/final)")
+        q = d[(pd.to_numeric(d["top_n"], errors="coerce") == n) & (d["ranking_method"].astype(str) == rank) & (d["line_reference"].astype(str) == line)].copy().sort_values("edge_cutoff_points")
+        for c in ["ats_pct","wilson_low","wilson_high","roi_flat"]:
+            if c in q.columns: q[c] = 100.0 * pd.to_numeric(q[c], errors="coerce")
+        keep = ["edge_cutoff_points","bets","wins","losses","pushes","ats_pct","wilson_low","wilson_high","units_flat","roi_flat","profitable_folds"]
+        return render.DataGrid(q[[c for c in keep if c in q.columns]].rename(columns={
+            "edge_cutoff_points":"Adjusted edge ≥ points","bets":"Bets","wins":"Wins","losses":"Losses","pushes":"Pushes","ats_pct":"ATS %",
+            "wilson_low":"Wilson LB %","wilson_high":"Wilson UB %","units_flat":"Flat-risk units","roi_flat":"ROI %","profitable_folds":"Profitable folds",
+        }), filters=False, height="300px")
+
+    @render.plot
+    def market_signal_bet_plot():
+        r = market_signal_result(); d = r.get("betting_summary", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty: return None
+        n = int(input.market_bet_topn() or 10); rank = str(input.market_bet_rank() or "wilson"); line = str(input.market_bet_line() or "Close (PT Updated/final)")
+        q = d[(pd.to_numeric(d["top_n"], errors="coerce") == n) & (d["ranking_method"].astype(str) == rank) & (d["line_reference"].astype(str) == line)].copy().sort_values("edge_cutoff_points")
+        if q.empty: return None
+        x = pd.to_numeric(q["edge_cutoff_points"], errors="coerce").to_numpy(float); ats = 100.0 * pd.to_numeric(q["ats_pct"], errors="coerce").to_numpy(float); bets = pd.to_numeric(q["bets"], errors="coerce").to_numpy(float)
+        fig, ax = plt.subplots(figsize=(9.5, 4.0)); ax.plot(x, ats, marker="o", label="OOS ATS"); ax.axhline(52.380952, linestyle=":", linewidth=1.2, label="-110 breakeven")
+        ax.set_xlabel("Market-anchored adjusted edge cutoff (points)"); ax.set_ylabel("ATS (%)"); ax.grid(axis="y", alpha=0.2)
+        ax2 = ax.twinx(); ax2.plot(x, bets, marker=".", linestyle="--", label="Bet count"); ax2.set_ylabel("Bets")
+        l1,a1=ax.get_legend_handles_labels(); l2,a2=ax2.get_legend_handles_labels(); ax.legend(l1+l2,a1+a2,frameon=False,ncol=2); fig.tight_layout(); return fig
+
+    @render.text
+    def live_forensics_status():
+        r = market_signal_result(); m = r.get("live_matches", pd.DataFrame()) if r else pd.DataFrame(); u = r.get("live_unmatched", pd.DataFrame()) if r else pd.DataFrame()
+        if not isinstance(m, pd.DataFrame) or m.empty:
+            return "No matched 2025 live spread bets cached yet. The local runner will use data/reference/live_bets_2025_reference.csv automatically."
+        return f"Reference log: {len(m):,} spread bets matched uniquely to 2025 OOS games; {len(u):,} spread rows were ambiguous/unmatched. Moneylines are intentionally excluded from spread-model forensics."
+
+    @render.data_frame
+    def live_forensics_table():
+        r = market_signal_result(); d = r.get("live_forensics", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty: return render.DataGrid(pd.DataFrame())
+        for c in ["live_win_pct","raw_model_agreement_pct","market_anchored_agreement_pct"]:
+            if c in d.columns: d[c] = 100.0 * pd.to_numeric(d[c], errors="coerce")
+        return render.DataGrid(d.rename(columns={
+            "spread_bucket":"|Bet spread|","matched_bets":"Matched","graded_bets":"Graded","live_win_pct":"Live win %",
+            "raw_model_agreement_pct":"Raw consensus agrees %","market_anchored_agreement_pct":"Anchored model agrees %","mean_abs_model_edge":"Mean |raw model edge|",
+        }), filters=False, height="280px")
+
+    # ------------------------------------------------------------------
+    # Page 5: formal chronological architecture ablation + pure threshold QC
     # ------------------------------------------------------------------
     @ui.bind_task_button(button_id="run_formal_backtest")
     @reactive.extended_task
@@ -3830,8 +4567,8 @@ def server(input, output, session):
         def compute():
             start = time.monotonic()
             set_formal_progress(
-                done=0, total=max(1, int(oos_blocks) * 1000),
-                label="Preparing formal chronology…", started=start, updated=start,
+                done=0, total=max(1, int(oos_blocks) * 3 * 1000),
+                label="Preparing A–E chronology…", started=start, updated=start,
             )
 
             def progress(done, total, label):
@@ -3839,13 +4576,13 @@ def server(input, output, session):
                     done=int(done), total=int(total), label=str(label), updated=time.monotonic()
                 )
                 if int(done) == int(total) or int(done) % 250 < 5:
-                    print(f"[Formal backtest] {done:,}/{total:,} · {label}", flush=True)
+                    print(f"[Ablation backtest] {done:,}/{total:,} · {label}", flush=True)
 
-            result = run_formal_walkforward_backtest(
+            result = run_ablation_walkforward_backtest(
                 DATA,
                 PT_LINE_HISTORY_RAW.copy(),
                 MODEL_NAME_MAP,
-                anchors=FORMAL_ANCHOR_GRID,
+                thresholds=PURE_THRESHOLD_GRID,
                 oos_blocks=int(oos_blocks),
                 oos_block_size=int(block_size),
                 min_discovery_periods=int(min_prior),
@@ -3860,16 +4597,18 @@ def server(input, output, session):
                 overlap_threshold=PATRICK_OVERLAP_THRESHOLD,
                 min_meta_communities=PATRICK_META_MIN_COMMUNITIES,
                 meta_thresholds=K_GRID,
-                max_combinations=EXACT_SEARCH_DEFAULT_MAX,
+                combo_search_anchor=PATRICK_K,
                 standard_price=-110,
-                adaptive_min_prior_bets=50,
-                fallback_anchor=PATRICK_K,
+                max_combinations=EXACT_SEARCH_DEFAULT_MAX,
+                common_line_games=True,
+                qc_threshold=PATRICK_K,
+                qc_n=100,
                 progress_callback=progress,
             )
             try:
-                save_formal_backtest_outputs(result, PROJECT_ROOT)
+                save_ablation_backtest_outputs(result, PROJECT_ROOT)
             except Exception as exc:
-                print(f"[Formal backtest] warning: could not save cached outputs: {exc}", flush=True)
+                print(f"[Ablation backtest] warning: could not save cached outputs: {exc}", flush=True)
             return result
         return await asyncio.to_thread(compute)
 
@@ -3880,7 +4619,7 @@ def server(input, output, session):
             return
         if PT_LINE_HISTORY_RAW is None or PT_LINE_HISTORY_RAW.empty:
             ui.notification_show(
-                "Historical PredictionTracker Updated/final lines are unavailable in this deployment.",
+                "Historical PredictionTracker Open/Midweek/Updated lines are unavailable in this deployment.",
                 type="error", duration=12,
             )
             return
@@ -3929,15 +4668,15 @@ def server(input, output, session):
             pct = 100.0 * done / total if total else 0.0
             return f"{done:,}/{total:,} ({pct:.1f}%) · elapsed {elapsed/60:.1f} min · {p.get('label','')}"
         if st == "error":
-            return "Formal backtest failed; see the notification / Connect log for details."
+            return "A–E validation failed; see the notification / Connect log for details."
         r = formal_result()
         if r:
             n = int(r.get("oos_blocks_completed", 0) or 0)
             bs = int(r.get("oos_block_size", 0) or 0)
-            rule = str(r.get("adaptive_rule", ""))
+            common = int(r.get("common_line_game_count", 0) or 0)
             source = "Current run" if st == "success" else "Cached result"
-            return f"{source}: {n} untouched OOS blocks × {bs} usable week(s). Adaptive rule: {rule}."
-        return "No formal backtest cached yet. The anchor grid is 0.00–2.00 SD by 0.25; execution is PT Updated/final at -110."
+            return f"{source}: {n} untouched OOS blocks × {bs} usable week(s) · common verified line-game pool={common:,} · E search anchor fixed at {float(r.get('combo_search_anchor', PATRICK_K)):g} SD."
+        return "No A–E validation cached yet. Run locally for the full exact-search experiment, then deploy the saved outputs."
 
     @reactive.effect
     def show_formal_error():
@@ -3945,123 +4684,122 @@ def server(input, output, session):
             try:
                 formal_backtest_task.result()
             except Exception as exc:
-                ui.notification_show(f"Formal backtest error: {exc}", type="error", duration=20)
-
-    def _formal_adaptive_row():
-        r = formal_result()
-        d = r.get("adaptive_summary", pd.DataFrame()).copy() if r else pd.DataFrame()
-        return d.iloc[0] if isinstance(d, pd.DataFrame) and len(d) else pd.Series(dtype=object)
-
-    @render.text
-    def formal_adaptive_bets():
-        rr = _formal_adaptive_row()
-        return f"{int(pd.to_numeric(pd.Series([rr.get('bets',0)]), errors='coerce').fillna(0).iloc[0]):,}" if len(rr) else "—"
-
-    @render.text
-    def formal_adaptive_ats():
-        rr = _formal_adaptive_row(); v = pd.to_numeric(pd.Series([rr.get("ats_pct")]), errors="coerce").iloc[0] if len(rr) else np.nan
-        return f"{100*float(v):.1f}%" if np.isfinite(v) else "—"
-
-    @render.text
-    def formal_adaptive_roi():
-        rr = _formal_adaptive_row(); v = pd.to_numeric(pd.Series([rr.get("roi_flat")]), errors="coerce").iloc[0] if len(rr) else np.nan
-        return f"{100*float(v):+.1f}%" if np.isfinite(v) else "—"
-
-    @render.text
-    def formal_adaptive_drawdown():
-        rr = _formal_adaptive_row(); v = pd.to_numeric(pd.Series([rr.get("max_drawdown_flat")]), errors="coerce").iloc[0] if len(rr) else np.nan
-        return f"{float(v):.1f}u" if np.isfinite(v) else "—"
+                ui.notification_show(f"Ablation backtest error: {exc}", type="error", duration=20)
 
     @render.data_frame
-    def formal_adaptive_path_table():
-        r = formal_result(); d = r.get("adaptive_path", pd.DataFrame()).copy() if r else pd.DataFrame()
+    def ablation_architecture_table():
+        r = formal_result(); d = r.get("architecture_summary", pd.DataFrame()).copy() if r else pd.DataFrame()
         if not isinstance(d, pd.DataFrame) or d.empty:
             return render.DataGrid(pd.DataFrame())
-        for c in ["prior_anchor_wilson_low", "ats_pct", "roi_flat", "roi_win1"]:
+        for c in ["ats_pct","wilson_low","wilson_high","roi_flat","roi_win1"]:
             if c in d.columns:
                 d[c] = 100.0 * pd.to_numeric(d[c], errors="coerce")
-        keep = ["fold","oos_start","oos_end","selected_anchor","anchor_selection_reason","prior_anchor_bets","prior_anchor_wilson_low","bets","wins","losses","ats_pct","units_flat","roi_flat","units_win1","roi_win1","meta_k"]
+        keep = ["architecture","architecture_name","line_reference","blocks","bets","wins","losses","ats_pct","wilson_low","wilson_high","units_flat","roi_flat","units_win1","roi_win1","profitable_blocks","max_drawdown_flat","longest_losing_streak"]
         out = d[[c for c in keep if c in d.columns]].rename(columns={
-            "fold":"Block","oos_start":"OOS start","oos_end":"OOS end","selected_anchor":"Search anchor",
-            "anchor_selection_reason":"Anchor rule","prior_anchor_bets":"Prior OOS bets","prior_anchor_wilson_low":"Prior Wilson LB %",
-            "bets":"Bets","wins":"Wins","losses":"Losses","ats_pct":"ATS %","units_flat":"Flat-risk units","roi_flat":"Flat-risk ROI %",
-            "units_win1":"Win-1u units","roi_win1":"Win-1u ROI %","meta_k":"META k",
+            "architecture":"Arch","architecture_name":"Strategy","line_reference":"Line","blocks":"OOS blocks","bets":"Bets","wins":"Wins","losses":"Losses",
+            "ats_pct":"ATS %","wilson_low":"Wilson LB %","wilson_high":"Wilson UB %","units_flat":"Flat-risk units","roi_flat":"Flat-risk ROI %",
+            "units_win1":"Win-1u units","roi_win1":"Win-1u ROI %","profitable_blocks":"Profitable blocks","max_drawdown_flat":"Flat-risk max DD","longest_losing_streak":"Longest L streak",
         })
-        return render.DataGrid(out, filters=False, height="330px")
-
-    @render.data_frame
-    def formal_anchor_table():
-        r = formal_result(); d = r.get("fixed_anchor_surface", pd.DataFrame()).copy() if r else pd.DataFrame()
-        if not isinstance(d, pd.DataFrame) or d.empty:
-            return render.DataGrid(pd.DataFrame())
-        for c in ["ats_pct","wilson_low","wilson_high","roi_flat","roi_win1","median_block_roi_flat"]:
-            if c in d.columns:
-                d[c] = 100.0 * pd.to_numeric(d[c], errors="coerce")
-        keep = ["search_anchor","blocks","bets","wins","losses","ats_pct","wilson_low","wilson_high","units_flat","roi_flat","units_win1","roi_win1","profitable_blocks_flat","max_drawdown_flat","max_drawdown_win1","longest_losing_streak","mean_meta_k"]
-        out = d[[c for c in keep if c in d.columns]].rename(columns={
-            "search_anchor":"Search anchor","blocks":"OOS blocks","bets":"Bets","wins":"Wins","losses":"Losses","ats_pct":"ATS %",
-            "wilson_low":"Wilson LB %","wilson_high":"Wilson UB %","units_flat":"Flat-risk units","roi_flat":"Flat-risk ROI %",
-            "units_win1":"Win-1u units","roi_win1":"Win-1u ROI %","profitable_blocks_flat":"Profitable blocks",
-            "max_drawdown_flat":"Flat-risk max DD","max_drawdown_win1":"Win-1u max DD","longest_losing_streak":"Longest L streak","mean_meta_k":"Mean META k",
-        })
-        return render.DataGrid(out, filters=False, height="390px")
+        return render.DataGrid(out.sort_values(["Arch","Line"]), filters=False, height="440px")
 
     @render.plot
-    def formal_anchor_plot():
-        r = formal_result(); d = r.get("fixed_anchor_surface", pd.DataFrame()).copy() if r else pd.DataFrame()
+    def ablation_architecture_plot():
+        r = formal_result(); d = r.get("architecture_summary", pd.DataFrame()).copy() if r else pd.DataFrame()
         if not isinstance(d, pd.DataFrame) or d.empty:
             return None
-        x = pd.to_numeric(d["search_anchor"], errors="coerce").to_numpy(float)
-        ats = 100.0 * pd.to_numeric(d["ats_pct"], errors="coerce").to_numpy(float)
-        lo = 100.0 * pd.to_numeric(d["wilson_low"], errors="coerce").to_numpy(float)
-        hi = 100.0 * pd.to_numeric(d["wilson_high"], errors="coerce").to_numpy(float)
-        fig, ax = plt.subplots(figsize=(9.5, 4.0))
-        ax.plot(x, ats, marker="o", label="OOS ATS")
-        ax.plot(x, lo, marker=".", linestyle="--", label="Wilson lower bound")
-        if np.isfinite(lo).any() and np.isfinite(hi).any():
-            ax.fill_between(x, lo, hi, alpha=0.12, label="95% Wilson interval")
+        order = [x[0] for x in ABLATION_ARCHITECTURES]
+        fig, ax = plt.subplots(figsize=(9.5, 4.2))
+        for line in ["Open", "Midweek", "Close (PT Updated/final)"]:
+            q = d[d["line_reference"].astype(str).eq(line)].copy()
+            if q.empty:
+                continue
+            q["_x"] = q["architecture"].astype(str).map({a:i for i,a in enumerate(order)})
+            q = q.sort_values("_x")
+            ax.plot(q["_x"], 100.0 * pd.to_numeric(q["ats_pct"], errors="coerce"), marker="o", label=line.replace("Close (PT Updated/final)", "PT Updated/final"))
         ax.axhline(52.380952, linestyle=":", linewidth=1.2, label="-110 breakeven")
-        ax.set_xlabel("Combination search anchor (SD)")
-        ax.set_ylabel("OOS win rate (%)")
-        ax.set_xticks(x)
+        ax.set_xticks(range(len(order)), [f"{a}\n{dict(ABLATION_ARCHITECTURES)[a]}" for a in order])
+        ax.set_ylabel("Untouched OOS ATS (%)")
         ax.grid(axis="y", alpha=0.2)
         ax.legend(frameon=False, ncol=2)
         fig.tight_layout()
         return fig
 
+    @render.data_frame
+    def ablation_threshold_table():
+        r = formal_result(); d = r.get("threshold_surface", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        arch = str(input.ablation_threshold_arch() or "E")
+        line = str(input.ablation_threshold_line() or "Close (PT Updated/final)")
+        d = d[(d["architecture"].astype(str) == arch) & (d["line_reference"].astype(str) == line)].copy().sort_values("threshold")
+        for c in ["ats_pct","wilson_low","wilson_high","roi_flat","roi_win1"]:
+            if c in d.columns:
+                d[c] = 100.0 * pd.to_numeric(d[c], errors="coerce")
+        keep = ["threshold","bets","wins","losses","ats_pct","wilson_low","wilson_high","units_flat","roi_flat","units_win1","roi_win1","profitable_blocks","max_drawdown_flat","longest_losing_streak"]
+        out = d[[c for c in keep if c in d.columns]].rename(columns={
+            "threshold":"Execution k (SD)","bets":"Bets","wins":"Wins","losses":"Losses","ats_pct":"ATS %","wilson_low":"Wilson LB %","wilson_high":"Wilson UB %",
+            "units_flat":"Flat-risk units","roi_flat":"Flat-risk ROI %","units_win1":"Win-1u units","roi_win1":"Win-1u ROI %","profitable_blocks":"Profitable blocks",
+            "max_drawdown_flat":"Flat-risk max DD","longest_losing_streak":"Longest L streak",
+        })
+        return render.DataGrid(out, filters=False, height="330px")
+
     @render.plot
-    def formal_equity_plot():
-        r = formal_result(); d = r.get("adaptive_bet_rows", pd.DataFrame()).copy() if r else pd.DataFrame()
+    def ablation_threshold_plot():
+        r = formal_result(); d = r.get("threshold_surface", pd.DataFrame()).copy() if r else pd.DataFrame()
         if not isinstance(d, pd.DataFrame) or d.empty:
             return None
-        d = d.sort_values(["season","week","game_key"], kind="mergesort").reset_index(drop=True)
-        flat = pd.to_numeric(d["units_flat"], errors="coerce").fillna(0).cumsum().to_numpy(float)
-        win1 = pd.to_numeric(d["units_win1"], errors="coerce").fillna(0).cumsum().to_numpy(float)
-        x = np.arange(1, len(d) + 1)
-        fig, ax = plt.subplots(figsize=(9.5, 4.0))
-        ax.plot(x, flat, label="Flat 1u risk")
-        ax.plot(x, win1, label="Risk to win 1u")
-        ax.axhline(0, linestyle=":", linewidth=1.0)
-        ax.set_xlabel("Chronological OOS bets")
-        ax.set_ylabel("Cumulative units")
+        arch = str(input.ablation_threshold_arch() or "E")
+        line = str(input.ablation_threshold_line() or "Close (PT Updated/final)")
+        q = d[(d["architecture"].astype(str) == arch) & (d["line_reference"].astype(str) == line)].copy().sort_values("threshold")
+        if q.empty:
+            return None
+        x = pd.to_numeric(q["threshold"], errors="coerce").to_numpy(float)
+        ats = 100.0 * pd.to_numeric(q["ats_pct"], errors="coerce").to_numpy(float)
+        lo = 100.0 * pd.to_numeric(q["wilson_low"], errors="coerce").to_numpy(float)
+        hi = 100.0 * pd.to_numeric(q["wilson_high"], errors="coerce").to_numpy(float)
+        bets = pd.to_numeric(q["bets"], errors="coerce").fillna(0).to_numpy(float)
+        fig, ax = plt.subplots(figsize=(9.5, 4.2))
+        ax.plot(x, ats, marker="o", label="OOS ATS")
+        if np.isfinite(lo).any() and np.isfinite(hi).any():
+            ax.fill_between(x, lo, hi, alpha=0.12, label="95% Wilson interval")
+        ax.axhline(52.380952, linestyle=":", linewidth=1.2, label="-110 breakeven")
+        ax.set_xlabel("Frozen-portfolio execution threshold k (SD)")
+        ax.set_ylabel("OOS ATS (%)")
+        ax.set_xticks(x)
         ax.grid(axis="y", alpha=0.2)
-        ax.legend(frameon=False)
+        ax2 = ax.twinx()
+        ax2.plot(x, bets, marker=".", linestyle="--", label="Bet count")
+        ax2.set_ylabel("OOS bets")
+        lines1, labels1 = ax.get_legend_handles_labels(); lines2, labels2 = ax2.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2, frameon=False, ncol=2)
         fig.tight_layout()
         return fig
 
     @render.data_frame
-    def formal_edge_table():
-        r = formal_result(); d = r.get("edge_calibration", pd.DataFrame()).copy() if r else pd.DataFrame()
+    def ablation_qc_summary_table():
+        r = formal_result(); d = r.get("qc_summary", pd.DataFrame()).copy() if r else pd.DataFrame()
         if not isinstance(d, pd.DataFrame) or d.empty:
             return render.DataGrid(pd.DataFrame())
-        for c in ["ats_pct","wilson_low","wilson_high"]:
+        for c in ["ats_pct","opposite_ats_pct","ats_plus_opposite"]:
             if c in d.columns:
                 d[c] = 100.0 * pd.to_numeric(d[c], errors="coerce")
-        keep = ["edge_bin","games","wins","losses","pushes","ats_pct","wilson_low","wilson_high"]
+        keep = ["architecture","line_reference","threshold","bets","wins","losses","pushes","ats_pct","opposite_wins","opposite_losses","opposite_ats_pct","ats_plus_opposite","orientation_check"]
         return render.DataGrid(d[[c for c in keep if c in d.columns]].rename(columns={
-            "edge_bin":"META |edge| / SD","games":"Games","wins":"Directional wins","losses":"Directional losses","pushes":"Pushes",
-            "ats_pct":"Directional ATS %","wilson_low":"Wilson LB %","wilson_high":"Wilson UB %",
-        }), filters=False, height="250px")
+            "architecture":"Arch","line_reference":"Line","threshold":"Execution k","bets":"Bets","wins":"Wins","losses":"Losses","pushes":"Pushes","ats_pct":"ATS %",
+            "opposite_wins":"Opposite wins","opposite_losses":"Opposite losses","opposite_ats_pct":"Opposite ATS %","ats_plus_opposite":"ATS + opposite %","orientation_check":"Orientation QC",
+        }), filters=False, height="120px")
+
+    @render.data_frame
+    def ablation_qc_sample_table():
+        r = formal_result(); d = r.get("qc_sample", pd.DataFrame()).copy() if r else pd.DataFrame()
+        if not isinstance(d, pd.DataFrame) or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        keep = ["fold","season","week","game","selected_side","forecast_mean","forecast_sd","market_margin","actual_margin","edge","signal","cover_margin","result"]
+        out = d[[c for c in keep if c in d.columns]].rename(columns={
+            "fold":"Block","season":"Season","week":"Week","game":"Game","selected_side":"Selected side","forecast_mean":"Forecast margin","forecast_sd":"Forecast SD",
+            "market_margin":"Market home margin","actual_margin":"Actual home margin","edge":"Edge","signal":"|Edge| / SD","cover_margin":"Selected-side cover margin","result":"Result",
+        })
+        return render.DataGrid(out, filters=True, height="360px")
 
 
     # ------------------------------------------------------------------

@@ -111,7 +111,7 @@ else:
     print("CFB Picker mirror metadata not present; current boards will use PredictionTracker only.")
 PYMIRROR
 
-echo "Preflight: verifying v3.5.43 Patrick preset + formal backtest + CFB Picker API transport..."
+echo "Preflight: verifying v3.6.2 cohort + bundled market shelf + retained research backend..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -147,10 +147,15 @@ missing = [x for x in expected if x not in s]
 if missing:
     raise SystemExit("REFUSING TO PUSH: stale Patrick preset detected:\n  " + "\n  ".join(missing))
 production_ui_required = [
-    '"1 · Model Performance"', '"2 · Current Slate"', '"3 · Strategy"',
-    '"4 · Picks"', '"5 · Validation"', '"6 · Forecast"', 'ui.card_header("Current recommendations")',
+    '"1 · Cohort"', '"2 · Current Slate"', '"3 · Market Shelf"', '"4 · Forecast"',
+    '"Research · Combination Lab"', '"Research · Validation"', '"Legacy · META Picks"',
+    'ui.card_header("Patrick Core · manual cohort")',
+    'ui.card_header("Assisted cohort · quality screen + correlation collapse")',
+    'ui.card_header("Odds API archive browser")',
+    'ui.card_header("Historical sportsbook opportunities")',
 ]
 production_ui_forbidden = [
+    '"1 · Model Performance"', '"3 · Strategy"', '"4 · Picks"', '"5 · Validation"', '"6 · Forecast"',
     'ui.card_header("Raw model projection matrix")',
     'ui.card_header("Season-by-season model performance")',
     'ui.card_header("Absolute spread trust check")',
@@ -160,6 +165,29 @@ ui_missing = [x for x in production_ui_required if x not in s]
 ui_stale = [x for x in production_ui_forbidden if x in s]
 if ui_missing or ui_stale:
     raise SystemExit("REFUSING TO PUSH: production UI cleanup mismatch: " + repr({"missing": ui_missing, "still_visible": ui_stale}))
+
+# v3.6.2: the paid Odds API archive must travel with the website, but GitHub
+# rejects ordinary Git blobs >=100 MB. The builder therefore emits gzip.
+odds_gz = Path("data/odds/ncaaf_rich_quotes.csv.gz")
+odds_csv = Path("data/odds/ncaaf_rich_quotes.csv")
+if not odds_gz.is_file():
+    if odds_csv.is_file() and odds_csv.stat().st_size >= 95 * 1024 * 1024:
+        raise SystemExit(
+            "REFUSING TO PUSH: uncompressed Odds API archive exceeds the safe GitHub file limit. "
+            "Rebuild with v3.6.2 so data/odds/ncaaf_rich_quotes.csv.gz is created."
+        )
+    raise SystemExit("REFUSING TO PUSH: bundled data/odds/ncaaf_rich_quotes.csv.gz is missing.")
+if odds_gz.stat().st_size >= 95 * 1024 * 1024:
+    raise SystemExit(
+        f"REFUSING TO PUSH: compressed Odds API archive is still too large for ordinary GitHub: {odds_gz.stat().st_size / 1048576:.1f} MB"
+    )
+import gzip
+with gzip.open(odds_gz, "rt", encoding="utf-8", errors="replace") as fh:
+    header = fh.readline().strip().split(",")
+required_odds_cols = {"event_id", "home_team", "away_team", "market_key", "price_american"}
+if not required_odds_cols.issubset(set(header)):
+    raise SystemExit("REFUSING TO PUSH: compressed Odds API archive header is invalid or incomplete.")
+print(f"Verified bundled Odds API archive: {odds_gz.stat().st_size / 1048576:.1f} MB gzip")
 refresh_expected = [
     "cached prior-week rows were NOT used",
     "Download prospective snapshots",
@@ -173,7 +201,7 @@ if "save_prospective_current_week_snapshot" not in current_week:
 if "PT_MIRROR_CSV_URL" not in current_week:
     refresh_missing.append("GitHub mirror fallback")
 if refresh_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.43 refresh code detected:\n  " + "\n  ".join(refresh_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.44 refresh code detected:\n  " + "\n  ".join(refresh_missing))
 line_path = Path("strategy_lab/line_movement.py")
 if not line_path.exists():
     raise SystemExit("REFUSING TO PUSH: strategy_lab/line_movement.py is missing")
@@ -192,7 +220,7 @@ for x in ["line_active_strategy_status", '"discovery_periods": tuple(search_peri
     if x not in s:
         line_missing.append(x)
 if line_missing:
-    raise SystemExit("REFUSING TO PUSH: stale v3.5.43 line-movement module detected:\n  " + "\n  ".join(line_missing))
+    raise SystemExit("REFUSING TO PUSH: stale v3.5.44 line-movement module detected:\n  " + "\n  ".join(line_missing))
 fs_start = s.find("async def forward_stability_task(")
 fs_end = s.find("@reactive.effect", fs_start)
 fs_body = s[fs_start:fs_end] if fs_start >= 0 and fs_end > fs_start else ""
@@ -200,7 +228,7 @@ if "input." in fs_body:
     raise SystemExit("REFUSING TO PUSH: forward_stability_task reads Shiny reactive input inside Extended Task")
 for token in ["min_discovery: int, min_games: int", "min_discovery_periods=int(min_discovery)", "min_games_per_period=int(min_games)"]:
     if token not in s:
-        raise SystemExit(f"REFUSING TO PUSH: v3.5.43 Extended Task hotfix marker missing: {token}")
+        raise SystemExit(f"REFUSING TO PUSH: v3.5.44 Extended Task hotfix marker missing: {token}")
 formal_path = Path("strategy_lab/formal_backtest.py")
 if not formal_path.exists():
     raise SystemExit("REFUSING TO PUSH: strategy_lab/formal_backtest.py is missing")
@@ -212,9 +240,23 @@ for token in [
 ]:
     if token not in formal_text:
         raise SystemExit(f"REFUSING TO PUSH: formal backtest marker missing: {token}")
-for token in ["run_formal_backtest", "formal_anchor_plot", "formal_equity_plot", "formal_adaptive_path_table"]:
+ablation_path = Path("strategy_lab/ablation_backtest.py")
+if not ablation_path.exists():
+    raise SystemExit("REFUSING TO PUSH: strategy_lab/ablation_backtest.py is missing")
+ablation_text = ablation_path.read_text(encoding="utf-8")
+for token in [
+    "ABLATION_ARCHITECTURES", "run_ablation_walkforward_backtest",
+    "threshold_monotonicity", "orientation_check",
+]:
+    if token not in ablation_text:
+        raise SystemExit(f"REFUSING TO PUSH: ablation backtest marker missing: {token}")
+for token in [
+    "run_formal_backtest", "ablation_architecture_plot", "ablation_architecture_table",
+    "ablation_threshold_plot", "ablation_threshold_table",
+    "ablation_qc_summary_table", "ablation_qc_sample_table",
+]:
     if token not in s:
-        raise SystemExit(f"REFUSING TO PUSH: formal validation UI marker missing: {token}")
+        raise SystemExit(f"REFUSING TO PUSH: ablation validation UI marker missing: {token}")
 cfb_files = {
     "scripts/scrape_cfbpicker_history_api.py": ["TableauViz", 'activeSheet, "Year "', "picker_items_from_objects"],
     "scripts/cfbpicker_tooltip_legacy.py": ["click_and_read_tooltip_response", "collect_header_rows"],
@@ -255,12 +297,12 @@ for token in ["include_cfbpicker=True", "refresh_cfbpicker=False", "current_cfbp
 cfb_refresh_helper = Path("refresh_cfbpicker_local_and_push.sh").read_text(encoding="utf-8")
 if "refresh_predictiontracker_mirror.py" not in cfb_refresh_helper:
     raise SystemExit("REFUSING TO PUSH: CFB Picker refresh does not refresh PredictionTracker first")
-print("Verified: streamlined production UI + formal anchor/staking validation | Top 35 | Wilson | min 25 | sizes 3-6 | ATS rank | 50 finalists | Jaccard 0.50 | CFB Picker live-slate filter + PT-first de-dup | research backend retained")
+print("Verified: v3.6.2 manual/assisted cohort + bundled ML/spread/team-total market shelf | compressed paid Odds API archive | CFB Picker PT-authoritative live slate | legacy research backend retained")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.5.43"
+  git commit -m "Deploy NCAAF Consensus Lab v3.6.2"
 else
   echo "No new changes to commit."
 fi

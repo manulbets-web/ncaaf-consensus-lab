@@ -1,0 +1,2 @@
+architecture,line_reference,threshold,bets,wins,losses,pushes,ats_pct,opposite_wins,opposite_losses,opposite_ats_pct,ats_plus_opposite,orientation_check
+E,Close (PT Updated/final),0.75,721,349,372,23,0.4840499306518724,372,349,0.5159500693481276,1.0,PASS

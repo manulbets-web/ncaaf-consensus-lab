@@ -1,0 +1,41 @@
+{
+  "version": "v3.5.44-ablation-validation",
+  "oos_blocks_completed": 8,
+  "oos_block_size": 6,
+  "standard_price": -110,
+  "common_line_games": true,
+  "common_line_game_count": 3890,
+  "combo_search_anchor": 0.75,
+  "duplicate_corr_threshold": 0.9,
+  "threshold_grid": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.5,
+    1.75,
+    2.0
+  ],
+  "selection_spec": {
+    "A": "all historically posting models; equal-weight mean",
+    "B": "Top 35 prior Wilson models with >= 25 prior bets; equal-weight mean",
+    "C": "single highest prior Wilson model",
+    "D": "same Top 35 pool; >= 0.90 discovery prediction-correlation components collapsed, then communities equal-weighted",
+    "E": "current exact 3-6 model search at fixed 0.75 SD search anchor -> Top 50 -> overlap communities -> diversified META",
+    "headline_execution": "k=0 directional disagreement only",
+    "pure_threshold_sweep": "architecture frozen inside each OOS block; only execution k changes; bet counts must be non-increasing",
+    "line_policy": "same OOS chronology and common verified Open/Midweek/Updated games"
+  },
+  "outputs": {
+    "architecture_summary": "data/derived/ablation_backtest_architecture_summary.csv",
+    "threshold_surface": "data/derived/ablation_backtest_threshold_surface.csv",
+    "fold_threshold_results": "data/derived/ablation_backtest_fold_threshold_results.csv",
+    "qc_summary": "data/derived/ablation_backtest_qc_summary.csv",
+    "qc_sample": "data/derived/ablation_backtest_qc_sample.csv",
+    "threshold_monotonicity": "data/derived/ablation_backtest_threshold_monotonicity.csv",
+    "chronology": "data/derived/ablation_backtest_chronology.csv",
+    "fold_detail": "data/derived/ablation_backtest_fold_detail.csv"
+  }
+}

@@ -1,0 +1,16 @@
+architecture,line_reference,bet_count_monotone_nonincreasing,bets_k0,bets_k2
+A,Close (PT Updated/final),True,2374,19
+A,Midweek,True,2382,14
+A,Open,True,2390,5
+B,Close (PT Updated/final),True,2374,25
+B,Midweek,True,2382,20
+B,Open,True,2390,7
+C,Close (PT Updated/final),True,1714,1714
+C,Midweek,True,2238,2238
+C,Open,True,2383,2383
+D,Close (PT Updated/final),True,2374,358
+D,Midweek,True,2382,292
+D,Open,True,2390,364
+E,Close (PT Updated/final),True,1780,89
+E,Midweek,True,1584,79
+E,Open,True,2124,95
