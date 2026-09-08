@@ -111,7 +111,7 @@ else:
     print("CFB Picker mirror metadata not present; current boards will use PredictionTracker only.")
 PYMIRROR
 
-echo "Preflight: verifying v3.6.2 cohort + bundled market shelf + retained research backend..."
+echo "Preflight: verifying v3.6.5 cohort + bundled market shelf + retained research backend..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -149,10 +149,14 @@ if missing:
 production_ui_required = [
     '"1 · Cohort"', '"2 · Current Slate"', '"3 · Market Shelf"', '"4 · Forecast"',
     '"Research · Combination Lab"', '"Research · Validation"', '"Legacy · META Picks"',
-    'ui.card_header("Patrick Core · manual cohort")',
+    'ui.card_header("Patrick Core · original hand-curated preset")',
+    'ui.card_header("Custom manual cohort · edit directly")',
     'ui.card_header("Assisted cohort · quality screen + correlation collapse")',
+    'ui.card_header("Historical bets · exact audit for active cohort")',
+    'ui.card_header("Game explorer · model-by-model distribution")',
     'ui.card_header("Odds API archive browser")',
     'ui.card_header("Historical sportsbook opportunities")',
+    'ui.card_header("One decision per game · best expression check")',
 ]
 production_ui_forbidden = [
     '"1 · Model Performance"', '"3 · Strategy"', '"4 · Picks"', '"5 · Validation"', '"6 · Forecast"',
@@ -166,7 +170,7 @@ ui_stale = [x for x in production_ui_forbidden if x in s]
 if ui_missing or ui_stale:
     raise SystemExit("REFUSING TO PUSH: production UI cleanup mismatch: " + repr({"missing": ui_missing, "still_visible": ui_stale}))
 
-# v3.6.2: the paid Odds API archive must travel with the website, but GitHub
+# v3.6.5: the paid Odds API archive must travel with the website, but GitHub
 # rejects ordinary Git blobs >=100 MB. The builder therefore emits gzip.
 odds_gz = Path("data/odds/ncaaf_rich_quotes.csv.gz")
 odds_csv = Path("data/odds/ncaaf_rich_quotes.csv")
@@ -174,7 +178,7 @@ if not odds_gz.is_file():
     if odds_csv.is_file() and odds_csv.stat().st_size >= 95 * 1024 * 1024:
         raise SystemExit(
             "REFUSING TO PUSH: uncompressed Odds API archive exceeds the safe GitHub file limit. "
-            "Rebuild with v3.6.2 so data/odds/ncaaf_rich_quotes.csv.gz is created."
+            "Rebuild with v3.6.5 so data/odds/ncaaf_rich_quotes.csv.gz is created."
         )
     raise SystemExit("REFUSING TO PUSH: bundled data/odds/ncaaf_rich_quotes.csv.gz is missing.")
 if odds_gz.stat().st_size >= 95 * 1024 * 1024:
@@ -202,6 +206,17 @@ if "PT_MIRROR_CSV_URL" not in current_week:
     refresh_missing.append("GitHub mirror fallback")
 if refresh_missing:
     raise SystemExit("REFUSING TO PUSH: stale v3.5.44 refresh code detected:\n  " + "\n  ".join(refresh_missing))
+for token in [
+    "ESPN_CFB_SCOREBOARD_URL", "refresh_current_game_schedule",
+    "load_current_game_schedule", 'board["kickoff_utc"]',
+]:
+    if token not in current_week:
+        raise SystemExit(f"REFUSING TO PUSH: kickoff schedule integration marker missing: {token}")
+schedule_script = Path("scripts/refresh_current_game_schedule.py")
+if not schedule_script.exists():
+    raise SystemExit("REFUSING TO PUSH: scripts/refresh_current_game_schedule.py is missing")
+if 'ui.card_header("Current game board · chronological")' not in s or '"Date", "Kickoff", "Game"' not in s:
+    raise SystemExit("REFUSING TO PUSH: chronological kickoff-date UI is missing")
 line_path = Path("strategy_lab/line_movement.py")
 if not line_path.exists():
     raise SystemExit("REFUSING TO PUSH: strategy_lab/line_movement.py is missing")
@@ -297,12 +312,12 @@ for token in ["include_cfbpicker=True", "refresh_cfbpicker=False", "current_cfbp
 cfb_refresh_helper = Path("refresh_cfbpicker_local_and_push.sh").read_text(encoding="utf-8")
 if "refresh_predictiontracker_mirror.py" not in cfb_refresh_helper:
     raise SystemExit("REFUSING TO PUSH: CFB Picker refresh does not refresh PredictionTracker first")
-print("Verified: v3.6.2 manual/assisted cohort + bundled ML/spread/team-total market shelf | compressed paid Odds API archive | CFB Picker PT-authoritative live slate | legacy research backend retained")
+print("Verified: v3.6.5 exact Patrick Core + manual/assisted cohort + game explorer + bundled ML/spread/team-total market shelf | compressed paid Odds API archive | CFB Picker PT-authoritative live slate | legacy research backend retained")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.6.2"
+  git commit -m "Deploy NCAAF Consensus Lab v3.6.5"
 else
   echo "No new changes to commit."
 fi

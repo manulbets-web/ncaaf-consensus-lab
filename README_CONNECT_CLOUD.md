@@ -1,4 +1,4 @@
-# NCAAF Consensus Lab v3.6.2 — Manual Cohort + Market Shelf
+# NCAAF Consensus Lab v3.6.5 — Manual Cohort + Market Shelf
 
 This directory was generated from:
 
@@ -11,7 +11,7 @@ The deployment is public-session safe: strategy selections and alternate-line ov
 PredictionTracker currently blocks Posit Connect Cloud worker IPs. The deployed app therefore falls back to a strict season/week-tagged GitHub mirror refreshed from the user's Mac.
 Use `./refresh_predictiontracker_local_and_push.sh SEASON WEEK` whenever PredictionTracker changes; the helper also persists unique source snapshots in Git.
 
-The production workflow is now Cohort → Current Slate → Market Shelf → Forecast. A hand-curated Patrick Core cohort is the default; the Assisted Cohort tool provides a constrained alternative that ranks individual models and greedily removes highly correlated near-duplicates without enumerating arbitrary subsets. The paid historical NCAAF Odds API archive is bundled into the deployed repo and is directly browsable on the Market Shelf page. Full-game ML, main/alternate spreads, totals, and team/alternate-team totals are retained. The previous combination/META, market-signal, formal chronological, ablation, and line-movement engines remain available under Research/Legacy tabs as diagnostic evidence rather than the primary production workflow. Andrew Percival's CFB Picker integration is retained with the latest verified PredictionTracker board authoritative for live game membership and PredictionTracker-first same-model/game de-duplication.
+The production workflow is now Cohort → Current Slate → Market Shelf → Forecast. The exact original hand-curated Patrick Core cohort is the default; the page shows every mapped and unmatched original model, and a separate staged editor makes custom manual changes explicit; the Assisted Cohort tool provides a constrained alternative that ranks individual models and greedily removes highly correlated near-duplicates without enumerating arbitrary subsets. The paid historical NCAAF Odds API archive is bundled into the deployed repo and is directly browsable on the Market Shelf page. Full-game ML, main/alternate spreads, totals, and team/alternate-team totals are retained. The previous combination/META, market-signal, formal chronological, ablation, and line-movement engines remain available under Research/Legacy tabs as diagnostic evidence rather than the primary production workflow. Andrew Percival's CFB Picker integration is retained with the latest verified PredictionTracker board authoritative for live game membership and PredictionTracker-first same-model/game de-duplication.
 
 ## CFB Picker historical enrichment
 
@@ -30,7 +30,7 @@ For the live slate, refresh locally with:
 
 ## Paid NCAAF Odds API archive
 
-v3.6.2 intentionally publishes the collected NCAAF historical sportsbook data with the website. The builder stores `ncaaf_rich_quotes.csv.gz` in `data/odds/` so the paid archive stays below GitHub's single-file limit. If the earlier paid harvest has `flat_quotes/` but no consolidated CSV, the builder reconstructs and gzip-compresses the NCAAF CSV locally with no API calls or credits. It refuses to complete a production build only when neither form of the paid archive is available.
+v3.6.5 intentionally publishes the collected NCAAF historical sportsbook data with the website. The builder stores `ncaaf_rich_quotes.csv.gz` in `data/odds/` so the paid archive stays below GitHub's single-file limit. If the earlier paid harvest has `flat_quotes/` but no consolidated CSV, the builder reconstructs and gzip-compresses the NCAAF CSV locally with no API calls or credits. It refuses to complete a production build only when neither form of the paid archive is available.
 
 Automatic discovery checks the harvester's normal locations under the source project and its parent directory. To specify it explicitly:
 

@@ -12,6 +12,14 @@ cd "$HERE"
 
 python scripts/refresh_predictiontracker_mirror.py --root . --season "$SEASON" --week "$WEEK"
 
+# Enrich the PT-authoritative slate with kickoff timestamps. This uses a public
+# ESPN schedule endpoint and never changes game membership or model data.
+if python scripts/refresh_current_game_schedule.py --root . --season "$SEASON" --strict; then
+  echo "Refreshed current-game kickoff schedule."
+else
+  echo "WARNING: kickoff schedule refresh failed; existing cached dates (if any) were left in place." >&2
+fi
+
 # The repository intentionally ignores data/raw/ and data/snapshots/ in normal
 # deployments.  The live mirror files themselves are not ignored, while the
 # prospective mirror snapshots are intentionally force-added so they remain a
@@ -21,6 +29,9 @@ git add \
   data/current/ncaapredictions.csv \
   data/current/predictiontracker_mirror_status.json \
   data/derived/predictiontracker_source_status.json
+
+[[ -f data/current/current_game_schedule.csv ]] && git add data/current/current_game_schedule.csv
+[[ -f data/derived/current_game_schedule_status.json ]] && git add data/derived/current_game_schedule_status.json
 
 git add -f data/snapshots/predictiontracker/mirror
 

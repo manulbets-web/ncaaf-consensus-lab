@@ -13,11 +13,36 @@ FULL_GAME_MARKETS = (
     "h2h", "spreads", "alternate_spreads", "totals", "alternate_totals",
     "team_totals", "alternate_team_totals",
 )
-LEGACY_COHORT_TOKENS = (
-    "big200", "saggm", "sagpred", "talis", "how", "laz", "sag", "sagr", "dwig",
-    "cfbgeek", "cfbprofesor", "sportsratings", "metricsconsensus", "massey", "mcllece",
-    "grissom", "sorenson", "keeper", "sasser", "lineSP",
+LEGACY_COHORT_NAMES = (
+    "Big 200",
+    "Sagarin Golden Mean",
+    "Sagarin Predictor",
+    "Talisman Red",
+    "Howell",
+    "Laz Index",
+    "System Median",
+    "Sagarin Ratings",
+    "DP Dwiggins",
+    "CFB Geek",
+    "CFB Professor",
+    "SP+",
+    "SportsRatings",
+    "Metrics Consensus",
+    "Massey Ratings",
+    "McIllece Sports",
+    "Matt Grissom",
+    "Trent Sorensen",
+    "Keeper",
+    "David Sasser",
 )
+
+# These are display-name aliases only; they do not permit fuzzy substring matching.
+# They exist to survive harmless naming changes across PredictionTracker/CFB Picker.
+LEGACY_COHORT_ALIASES = {
+    "cfb professor": ("cfb professor", "professor sides"),
+    "sportsratings": ("sportsratings", "sports ratings"),
+    "mcllece sports": ("mcllece sports", "mcillece sports"),
+}
 
 
 def _slug(x: object) -> str:
@@ -175,21 +200,324 @@ def assisted_cohort(
     return selected, pd.DataFrame(audit)
 
 
-def resolve_legacy_cohort(models: pd.DataFrame, fallback: Iterable[str] = ()) -> list[str]:
-    if models is None or models.empty:
-        return list(fallback)
-    rows = []
-    for r in models[["canonical_model_id", "model_name"]].drop_duplicates().itertuples(index=False):
-        blob = re.sub(r"[^a-z0-9]+", "", f"{r.canonical_model_id} {r.model_name}".lower())
-        rows.append((str(r.canonical_model_id), blob))
-    out = []
-    for token in LEGACY_COHORT_TOKENS:
-        t = re.sub(r"[^a-z0-9]+", "", token.lower().replace("line", ""))
-        matches = [mid for mid, blob in rows if t and t in blob]
-        if matches:
-            out.append(matches[0])
-    return list(dict.fromkeys(out)) or list(fallback)
+def _norm_model_name(x: object) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(x or "").lower()).strip()
 
+
+def legacy_cohort_mapping(models: pd.DataFrame) -> pd.DataFrame:
+    """Resolve the original hand-curated cohort by exact/aliased display name.
+
+    The historical R list had 20 requested models.  We keep unmatched entries
+    visible rather than guessing a replacement; this is important because the
+    production cohort is intended to be manually interpretable.
+    """
+    cols = ["requested_model", "canonical_model_id", "mapped_model", "mapped"]
+    if models is None or models.empty:
+        return pd.DataFrame([
+            {"requested_model": name, "canonical_model_id": "", "mapped_model": "", "mapped": False}
+            for name in LEGACY_COHORT_NAMES
+        ], columns=cols)
+
+    m = models[["canonical_model_id", "model_name"]].drop_duplicates().copy()
+    m["canonical_model_id"] = m["canonical_model_id"].astype(str)
+    m["model_name"] = m["model_name"].astype(str)
+    m["_norm"] = m["model_name"].map(_norm_model_name)
+    by_norm = {}
+    for mid, display, norm in m[["canonical_model_id", "model_name", "_norm"]].itertuples(index=False, name=None):
+        by_norm.setdefault(str(norm), []).append((str(mid), str(display)))
+
+    rows = []
+    for requested in LEGACY_COHORT_NAMES:
+        key = _norm_model_name(requested)
+        aliases = LEGACY_COHORT_ALIASES.get(key, (key,))
+        candidates = []
+        for alias in aliases:
+            candidates.extend(by_norm.get(_norm_model_name(alias), []))
+        # Exact canonical IDs occasionally mirror the old line labels; accept only
+        # when the normalized ID equals the requested normalized name.
+        if not candidates:
+            id_matches = m[m["canonical_model_id"].map(_norm_model_name).eq(key)]
+            candidates = [(str(r.canonical_model_id), str(r.model_name)) for r in id_matches.itertuples(index=False)]
+        if candidates:
+            mid, display = candidates[0]
+            rows.append({"requested_model": requested, "canonical_model_id": mid, "mapped_model": display, "mapped": True})
+        else:
+            rows.append({"requested_model": requested, "canonical_model_id": "", "mapped_model": "", "mapped": False})
+    return pd.DataFrame(rows, columns=cols)
+
+
+def resolve_legacy_cohort(models: pd.DataFrame, fallback: Iterable[str] = ()) -> list[str]:
+    mapping = legacy_cohort_mapping(models)
+    out = mapping.loc[mapping["mapped"], "canonical_model_id"].astype(str).tolist() if len(mapping) else []
+    return list(dict.fromkeys(out)) if len(out) >= 2 else list(fallback)
+
+
+def correlation_clusters(
+    data: pd.DataFrame, pairwise: pd.DataFrame | None = None, *, threshold: float = 0.90
+) -> pd.DataFrame:
+    """Connected components of model edge correlations at |r| >= threshold."""
+    q = model_quality_table(data)
+    if q.empty:
+        return pd.DataFrame(columns=["canonical_model_id", "model_name", "cluster", "cluster_size"])
+    ids = q["canonical_model_id"].astype(str).tolist()
+    parent = {mid: mid for mid in ids}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    corr = _corr_lookup(data, pairwise)
+    for i, a in enumerate(ids):
+        for b in ids[i + 1:]:
+            v = corr.get((a, b), np.nan)
+            if np.isfinite(v) and abs(float(v)) >= float(threshold):
+                union(a, b)
+
+    roots = {}
+    for mid in ids:
+        roots.setdefault(find(mid), []).append(mid)
+    ordered = sorted(roots.values(), key=lambda xs: (-len(xs), min(xs)))
+    cluster_map = {}
+    size_map = {}
+    for idx, members in enumerate(ordered, start=1):
+        for mid in members:
+            cluster_map[mid] = idx
+            size_map[mid] = len(members)
+    out = q[["canonical_model_id", "model_name"]].copy()
+    out["cluster"] = out["canonical_model_id"].astype(str).map(cluster_map).astype("Int64")
+    out["cluster_size"] = out["canonical_model_id"].astype(str).map(size_map).astype("Int64")
+    return out.sort_values(["cluster_size", "cluster", "model_name"], ascending=[False, True, True]).reset_index(drop=True)
+
+
+def cohort_season_diagnostics(data: pd.DataFrame, model_ids: Iterable[str], *, min_models: int = 2) -> pd.DataFrame:
+    ids = set(map(str, model_ids))
+    if not ids:
+        return pd.DataFrame()
+    d = data[data["canonical_model_id"].astype(str).isin(ids)].drop_duplicates(["game_key", "canonical_model_id"]).copy()
+    if d.empty:
+        return pd.DataFrame()
+    for c in ["prediction_margin", "market_margin", "actual_margin", "season"]:
+        d[c] = pd.to_numeric(d[c], errors="coerce")
+    g = d.groupby(["season", "game_key"], as_index=False).agg(
+        cohort_margin=("prediction_margin", "mean"),
+        market_margin=("market_margin", "median"),
+        actual_margin=("actual_margin", "median"),
+        cohort_n=("canonical_model_id", "nunique"),
+    )
+    g = g[(g["cohort_n"] >= int(min_models)) & g[["cohort_margin", "market_margin", "actual_margin"]].notna().all(axis=1)].copy()
+    rows = []
+    for season, z in g.groupby("season"):
+        edge = z["cohort_margin"].to_numpy(float) - z["market_margin"].to_numpy(float)
+        actual_edge = z["actual_margin"].to_numpy(float) - z["market_margin"].to_numpy(float)
+        graded = np.abs(actual_edge) > 1e-12
+        wins = int(np.sum(graded & (edge * actual_edge > 0)))
+        losses = int(np.sum(graded & (edge * actual_edge < 0)))
+        pushes = int(np.sum(~graded))
+        n = wins + losses
+        corr = np.corrcoef(edge, actual_edge)[0, 1] if len(z) >= 3 and np.std(edge) > 0 and np.std(actual_edge) > 0 else np.nan
+        mae = float(np.mean(np.abs(z["cohort_margin"] - z["actual_margin"])))
+        mmae = float(np.mean(np.abs(z["market_margin"] - z["actual_margin"])))
+        rows.append({
+            "season": int(season), "games": int(len(z)), "mae": mae, "market_mae": mmae,
+            "delta_mae_vs_market": mae - mmae, "residual_corr": corr,
+            "wins": wins, "losses": losses, "pushes": pushes, "ats_pct": wins / n if n else np.nan,
+        })
+    return pd.DataFrame(rows).sort_values("season").reset_index(drop=True) if rows else pd.DataFrame()
+
+
+def cohort_leave_one_out(data: pd.DataFrame, model_ids: Iterable[str], *, min_models: int = 2) -> pd.DataFrame:
+    ids = list(dict.fromkeys(map(str, model_ids)))
+    if len(ids) < 3:
+        return pd.DataFrame()
+    d = data[data["canonical_model_id"].astype(str).isin(ids)].drop_duplicates(["game_key", "canonical_model_id"]).copy()
+    if d.empty:
+        return pd.DataFrame()
+    d["prediction_margin"] = pd.to_numeric(d["prediction_margin"], errors="coerce")
+    d["actual_margin"] = pd.to_numeric(d["actual_margin"], errors="coerce")
+    wide = d.pivot(index="game_key", columns="canonical_model_id", values="prediction_margin").reindex(columns=ids)
+    actual = d.groupby("game_key")["actual_margin"].median().reindex(wide.index)
+    model_name_map = d[["canonical_model_id", "model_name"]].drop_duplicates().set_index("canonical_model_id")["model_name"].astype(str).to_dict()
+    base_n = wide.notna().sum(axis=1)
+    base_pred = wide.mean(axis=1, skipna=True)
+    base_ok = (base_n >= int(min_models)) & actual.notna() & base_pred.notna()
+    rows = []
+    for mid in ids:
+        w = wide.drop(columns=[mid])
+        n = w.notna().sum(axis=1)
+        pred = w.mean(axis=1, skipna=True)
+        ok = base_ok & (n >= int(min_models)) & pred.notna()
+        if not ok.any():
+            continue
+        base_mae = float(np.mean(np.abs(base_pred[ok] - actual[ok])))
+        loo_mae = float(np.mean(np.abs(pred[ok] - actual[ok])))
+        influence = float(np.mean(np.abs(base_pred[ok] - pred[ok])))
+        rows.append({
+            "canonical_model_id": mid, "model_name": model_name_map.get(mid, mid), "common_games": int(ok.sum()),
+            "base_mae": base_mae, "mae_without": loo_mae, "delta_mae_without": loo_mae - base_mae,
+            "mean_prediction_influence": influence,
+        })
+    return pd.DataFrame(rows).sort_values(["delta_mae_without", "mean_prediction_influence"], ascending=[False, False]).reset_index(drop=True) if rows else pd.DataFrame()
+
+
+
+def historical_cohort_bets(
+    data: pd.DataFrame,
+    model_ids: Iterable[str],
+    *,
+    k: float = 0.75,
+    min_models: int = 3,
+    seasons: Iterable[int] | None = None,
+    standard_price: int = -110,
+    scores: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Return the exact historical spread bets generated by a fixed cohort.
+
+    This is deliberately an audit helper, not a model-selection routine.  For
+    each game it takes the mean home-margin forecast across the selected models
+    that actually posted, compares that forecast with the archived market home
+    margin, and includes the game when ``|edge| / cohort_sd >= k``.  All line
+    and side labels are derived in literal home/away orientation so the output
+    can be read as a betting ledger.
+    """
+    ids = set(map(str, model_ids))
+    if not ids or data is None or data.empty:
+        return pd.DataFrame()
+
+    required = {
+        "game_key", "season", "week", "canonical_model_id",
+        "prediction_home_margin", "market_home_margin", "actual_home_margin",
+    }
+    if not required.issubset(data.columns):
+        return pd.DataFrame()
+
+    d = data[data["canonical_model_id"].astype(str).isin(ids)].copy()
+    if seasons is not None:
+        keep_seasons = {int(x) for x in seasons}
+        d = d[pd.to_numeric(d["season"], errors="coerce").isin(keep_seasons)].copy()
+    if d.empty:
+        return pd.DataFrame()
+
+    for c in ["season", "week", "prediction_home_margin", "market_home_margin", "actual_home_margin"]:
+        d[c] = pd.to_numeric(d[c], errors="coerce")
+    d = d.drop_duplicates(["game_key", "canonical_model_id"], keep="first")
+
+    win_return = 100.0 / abs(float(standard_price)) if standard_price < 0 else float(standard_price) / 100.0
+    rows = []
+    for game_key, g in d.groupby("game_key", sort=False):
+        valid = g[np.isfinite(g["prediction_home_margin"])].copy()
+        if valid["canonical_model_id"].nunique() < int(min_models):
+            continue
+        vals = valid["prediction_home_margin"].to_numpy(float)
+        market_vals = pd.to_numeric(g["market_home_margin"], errors="coerce").dropna()
+        actual_vals = pd.to_numeric(g["actual_home_margin"], errors="coerce").dropna()
+        if not len(market_vals) or not len(actual_vals):
+            continue
+
+        mean = float(np.mean(vals))
+        median = float(np.median(vals))
+        sd = float(np.std(vals, ddof=1)) if len(vals) > 1 else np.nan
+        market = float(market_vals.median())
+        actual = float(actual_vals.median())
+        edge_home = mean - market
+        if abs(edge_home) <= 1e-12:
+            continue
+        signal_sd = (
+            abs(edge_home) / sd
+            if np.isfinite(sd) and sd > 1e-12
+            else np.inf
+        )
+        if signal_sd + 1e-12 < float(k):
+            continue
+
+        ref = g.iloc[0]
+        road = str(ref.get("road", "") or "")
+        home = str(ref.get("home", "") or "")
+        bet_home = edge_home > 0
+        bet_team = home if bet_home else road
+        bet_line = -market if bet_home else market
+        fair_line = -mean if bet_home else mean
+        cover_home = actual - market
+        bet_cover_margin = cover_home if bet_home else -cover_home
+        result = "W" if bet_cover_margin > 1e-12 else "L" if bet_cover_margin < -1e-12 else "P"
+        units = win_return if result == "W" else -1.0 if result == "L" else 0.0
+        if abs(bet_line) < 0.05:
+            bet_label = f"{bet_team} PK"
+            bet_type = "Pick'em"
+        else:
+            bet_label = f"{bet_team} {bet_line:+.1f}"
+            bet_type = "Favorite" if bet_line < 0 else "Underdog"
+
+        names = valid.get("model_name", valid["canonical_model_id"]).astype(str).tolist()
+        line_source = str(ref.get("market_snapshot_label", ref.get("market_reference_source", "")) or "")
+        rows.append({
+            "season": int(ref["season"]),
+            "week": int(ref["week"]),
+            "game_key": str(game_key),
+            "road": road,
+            "home": home,
+            "game": f"{road} @ {home}" if road or home else str(game_key),
+            "bet": bet_label,
+            "bet_team": bet_team,
+            "bet_type": bet_type,
+            "bet_line": float(bet_line),
+            "market_home_margin": market,
+            "cohort_home_margin": mean,
+            "cohort_median_home_margin": median,
+            "cohort_fair_line_on_bet_side": float(fair_line),
+            "edge_points": float(abs(edge_home)),
+            "cohort_sd": sd,
+            "edge_over_sd": float(signal_sd),
+            "available_models": int(len(vals)),
+            "models_used": " | ".join(names),
+            "line_source": line_source,
+            "actual_home_margin": actual,
+            "bet_cover_margin": float(bet_cover_margin),
+            "result": result,
+            "unit_result": float(units),
+        })
+
+    out = pd.DataFrame(rows)
+    if out.empty:
+        return out
+
+    # Attach literal final scores when the bundled PredictionTracker history has them.
+    if scores is not None and len(scores):
+        sc = scores.copy()
+        needed = {"season", "week", "road", "home", "vscore", "hscore"}
+        if needed.issubset(sc.columns):
+            sc["season"] = pd.to_numeric(sc["season"], errors="coerce")
+            sc["week"] = pd.to_numeric(sc["week"], errors="coerce")
+            sc["vscore"] = pd.to_numeric(sc["vscore"], errors="coerce")
+            sc["hscore"] = pd.to_numeric(sc["hscore"], errors="coerce")
+            sc["away_slug"] = sc["road"].map(_slug)
+            sc["home_slug"] = sc["home"].map(_slug)
+            sc = sc.drop_duplicates(["season", "week", "away_slug", "home_slug"])
+            out["away_slug"] = out["road"].map(_slug)
+            out["home_slug"] = out["home"].map(_slug)
+            out = out.merge(
+                sc[["season", "week", "away_slug", "home_slug", "vscore", "hscore"]],
+                on=["season", "week", "away_slug", "home_slug"],
+                how="left",
+            )
+            def _score_label(r):
+                if not (np.isfinite(r.get("vscore", np.nan)) and np.isfinite(r.get("hscore", np.nan))):
+                    return ""
+                vs = int(r["vscore"]) if float(r["vscore"]).is_integer() else float(r["vscore"])
+                hs = int(r["hscore"]) if float(r["hscore"]).is_integer() else float(r["hscore"])
+                return f"{r['road']} {vs} – {hs} {r['home']}"
+            out["final_score"] = out.apply(_score_label, axis=1)
+            out = out.drop(columns=["away_slug", "home_slug"], errors="ignore")
+    if "final_score" not in out.columns:
+        out["final_score"] = ""
+
+    return out.sort_values(["season", "week", "game"], ascending=[False, False, True]).reset_index(drop=True)
 
 def current_cohort_summary(board: pd.DataFrame, predictions: pd.DataFrame, model_ids: Iterable[str], *, min_models: int = 3) -> pd.DataFrame:
     ids = set(map(str, model_ids))
@@ -211,6 +539,7 @@ def current_cohort_summary(board: pd.DataFrame, predictions: pd.DataFrame, model
         mean = float(np.mean(vals)); med = float(np.median(vals)); sd = float(np.std(vals, ddof=1)) if len(vals) > 1 else np.nan
         rows.append({
             "game_join_key": key, "away": away, "home": home,
+            "kickoff_utc": br.get("kickoff_utc", pd.NaT) if br is not None else pd.NaT,
             "market_home_margin": market, "cohort_mean": mean, "cohort_median": med,
             "cohort_sd": sd, "cohort_n": int(len(vals)),
             "home_lean": int(np.sum(vals > market)) if np.isfinite(market) else np.nan,
@@ -558,3 +887,58 @@ def shelf_backtest_summary(offers: pd.DataFrame, *, ev_cutoff: float = 0.0) -> p
             "roi_flat_risk": units / n if n else np.nan, "mean_model_ev": float(g["ev"].mean()),
         })
     return pd.DataFrame(rows).sort_values("family").reset_index(drop=True)
+
+
+def select_best_expressions(
+    offers: pd.DataFrame, *, ev_cutoff: float = 0.0, family: str | None = None, one_per_family: bool = False
+) -> pd.DataFrame:
+    """Select the highest modeled-EV executable offer without looking at outcomes.
+
+    By default returns at most one offer per archived event.  With one_per_family
+    True, returns one per event and family, which is useful for comparing ML vs
+    spread vs team-total expression while avoiding the many-rung pseudo-sample.
+    """
+    if offers is None or offers.empty:
+        return pd.DataFrame()
+    d = offers.copy()
+    d["ev"] = pd.to_numeric(d.get("ev"), errors="coerce")
+    d = d[np.isfinite(d["ev"]) & (d["ev"] >= float(ev_cutoff))].copy()
+    d = d[d["family"].isin(["ML", "Spread", "Team Total"])].copy()
+    if family and family != "All":
+        d = d[d["family"].eq(str(family))].copy()
+    if d.empty:
+        return d
+    # Deterministic tie-breaks prefer higher EV, then better price, then a stable
+    # book/market sort.  Grade is deliberately excluded from selection.
+    d["price_american"] = pd.to_numeric(d["price_american"], errors="coerce")
+    d = d.sort_values(["ev", "price_american", "book", "market_key"], ascending=[False, False, True, True])
+    keys = ["event_id", "family"] if one_per_family else ["event_id"]
+    return d.drop_duplicates(keys, keep="first").reset_index(drop=True)
+
+
+def best_expression_summary(offers: pd.DataFrame, *, ev_cutoff: float = 0.0) -> pd.DataFrame:
+    rows = []
+    selections = select_best_expressions(offers, ev_cutoff=ev_cutoff, one_per_family=True)
+    overall = select_best_expressions(offers, ev_cutoff=ev_cutoff, one_per_family=False)
+    groups = []
+    if len(overall):
+        groups.append(("Best across ML / spread / team total", overall))
+    if len(selections):
+        groups.extend((f"Best {fam} per game", g.copy()) for fam, g in selections.groupby("family"))
+    for label, g in groups:
+        z = g[g["grade"].isin(["W", "L", "P"])].copy()
+        wins = int((z["grade"] == "W").sum()); losses = int((z["grade"] == "L").sum()); pushes = int((z["grade"] == "P").sum())
+        units = 0.0
+        for r in z.itertuples(index=False):
+            if r.grade == "P":
+                continue
+            dec = american_to_decimal(r.price_american)
+            units += (dec - 1.0) if r.grade == "W" else -1.0
+        n = wins + losses
+        rows.append({
+            "selection": label, "games_selected": int(g["event_id"].nunique()), "graded": n,
+            "wins": wins, "losses": losses, "pushes": pushes, "win_pct": wins / n if n else np.nan,
+            "units_flat_risk": units, "roi_flat_risk": units / n if n else np.nan,
+            "mean_model_ev": float(pd.to_numeric(g["ev"], errors="coerce").mean()),
+        })
+    return pd.DataFrame(rows)

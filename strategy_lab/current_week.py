@@ -7,7 +7,8 @@ import subprocess
 import sys
 import hashlib
 import io
-from datetime import datetime, timezone
+import unicodedata
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Iterable
 
@@ -72,6 +73,226 @@ def slug_team(value):
 
 def game_key_from_names(away, home):
     return f"{slug_team(away)}__{slug_team(home)}"
+
+
+ESPN_CFB_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard"
+
+
+def _schedule_slug_team(value):
+    """Loose team-name normalization used only for schedule/date matching.
+
+    PredictionTracker remains authoritative for the game universe and spread
+    orientation. Schedule matching is deliberately fail-open: a miss leaves the
+    game on the board with an unknown date rather than altering membership.
+    """
+    raw = unicodedata.normalize("NFKD", str(value or ""))
+    raw = "".join(ch for ch in raw if not unicodedata.combining(ch))
+    s = slug_team(raw)
+    aliases = {
+        "umass": "massachusetts",
+        "san jose st": "san jose state",
+        "oregon st": "oregon state",
+        "colorado st": "colorado state",
+        "boise st": "boise state",
+        "fresno st": "fresno state",
+        "arizona st": "arizona state",
+        "oklahoma st": "oklahoma state",
+        "iowa st": "iowa state",
+        "kansas st": "kansas state",
+        "michigan st": "michigan state",
+        "ball st": "ball state",
+        "kent st": "kent state",
+        "utah st": "utah state",
+        "washington st": "washington state",
+        "northern ill": "northern illinois",
+        "eastern mich": "eastern michigan",
+        "western mich": "western michigan",
+        "central mich": "central michigan",
+        "southern miss": "southern mississippi",
+        "ga southern": "georgia southern",
+        "ga tech": "georgia tech",
+    }
+    s = aliases.get(s, s)
+    parts = s.split()
+    if parts and parts[-1] == "st":
+        parts[-1] = "state"
+        s = " ".join(parts)
+    return s
+
+
+def _schedule_pair_key(away, home):
+    return "__".join(sorted([_schedule_slug_team(away), _schedule_slug_team(home)]))
+
+
+def _espn_event_team_names(competitor: dict) -> list[str]:
+    team = competitor.get("team") or {}
+    values = [
+        team.get("displayName"), team.get("shortDisplayName"), team.get("name"),
+        team.get("location"), team.get("abbreviation"), competitor.get("displayName"),
+    ]
+    out = []
+    for value in values:
+        text = str(value or "").strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def parse_espn_scoreboard_schedule(payload: dict) -> pd.DataFrame:
+    """Normalize ESPN scoreboard JSON into one row per scheduled CFB event."""
+    rows = []
+    for event in (payload or {}).get("events", []) or []:
+        comps = event.get("competitions") or []
+        if not comps:
+            continue
+        comp = comps[0] or {}
+        competitors = comp.get("competitors") or []
+        home = next((c for c in competitors if str(c.get("homeAway", "")).lower() == "home"), None)
+        away = next((c for c in competitors if str(c.get("homeAway", "")).lower() == "away"), None)
+        if home is None or away is None:
+            continue
+        home_names = _espn_event_team_names(home)
+        away_names = _espn_event_team_names(away)
+        if not home_names or not away_names:
+            continue
+        kickoff = event.get("date") or comp.get("date")
+        kickoff_ts = pd.to_datetime(kickoff, errors="coerce", utc=True)
+        broadcasts = []
+        for b in comp.get("broadcasts") or []:
+            broadcasts.extend([str(x) for x in (b.get("names") or []) if str(x).strip()])
+        rows.append({
+            "espn_event_id": str(event.get("id") or ""),
+            "espn_away": away_names[0],
+            "espn_home": home_names[0],
+            "away_aliases": "|".join(away_names),
+            "home_aliases": "|".join(home_names),
+            "kickoff_utc": kickoff_ts,
+            "broadcast": ", ".join(dict.fromkeys(broadcasts)),
+            "event_status": str(((comp.get("status") or {}).get("type") or {}).get("name") or ""),
+        })
+    return pd.DataFrame(rows)
+
+
+def _schedule_alias_pair_keys(row) -> set[str]:
+    away_names = [x for x in str(row.away_aliases or "").split("|") if x]
+    home_names = [x for x in str(row.home_aliases or "").split("|") if x]
+    keys = set()
+    for a in away_names:
+        for h in home_names:
+            keys.add(_schedule_pair_key(a, h))
+    return keys
+
+
+def match_schedule_to_pt_slate(pt_master: pd.DataFrame, schedule: pd.DataFrame) -> pd.DataFrame:
+    """Attach kickoff timestamps to PT games without changing PT membership."""
+    if pt_master is None or pt_master.empty:
+        return pd.DataFrame()
+    sched = schedule.copy() if schedule is not None else pd.DataFrame()
+    alias_lookup = {}
+    if len(sched):
+        for idx, row in enumerate(sched.itertuples(index=False)):
+            for key in _schedule_alias_pair_keys(row):
+                alias_lookup.setdefault(key, []).append(idx)
+    rows = []
+    for pt in pt_master.itertuples(index=False):
+        key = _schedule_pair_key(pt.away, pt.home)
+        candidates = alias_lookup.get(key, [])
+        match_idx = candidates[0] if len(candidates) == 1 else None
+        match_type = "exact_pair" if match_idx is not None else "unmatched"
+        er = sched.iloc[match_idx] if match_idx is not None else None
+        kickoff = er.get("kickoff_utc") if er is not None else pd.NaT
+        rows.append({
+            "season": pd.NA,
+            "away": str(pt.away),
+            "home": str(pt.home),
+            "game_join_key": str(pt.game_join_key),
+            "kickoff_utc": kickoff,
+            "espn_event_id": str(er.get("espn_event_id") or "") if er is not None else "",
+            "espn_away": str(er.get("espn_away") or "") if er is not None else "",
+            "espn_home": str(er.get("espn_home") or "") if er is not None else "",
+            "broadcast": str(er.get("broadcast") or "") if er is not None else "",
+            "schedule_match": match_type,
+        })
+    return pd.DataFrame(rows)
+
+
+def load_current_game_schedule(root: str | Path, *, season: int | None = None) -> pd.DataFrame:
+    path = Path(root) / "data/current/current_game_schedule.csv"
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        x = pd.read_csv(path, low_memory=False)
+    except Exception:
+        return pd.DataFrame()
+    if x.empty:
+        return x
+    if season is not None and "season" in x.columns:
+        sy = pd.to_numeric(x["season"], errors="coerce")
+        if sy.notna().any():
+            x = x[sy.eq(int(season))].copy()
+    if "kickoff_utc" in x.columns:
+        x["kickoff_utc"] = pd.to_datetime(x["kickoff_utc"], errors="coerce", utc=True)
+    return x.drop_duplicates("game_join_key", keep="last") if "game_join_key" in x.columns else x
+
+
+def refresh_current_game_schedule(
+    root: str | Path,
+    *,
+    season: int,
+    pt_master: pd.DataFrame | None = None,
+    now: datetime | None = None,
+    timeout_seconds: int = 35,
+) -> dict:
+    """Fetch a date window from ESPN and cache kickoff times for the PT slate.
+
+    The query is date-window based rather than ESPN-week based because the app's
+    week numbering intentionally follows its existing PT/CFB workflow and can
+    differ from another provider's week labels.
+    """
+    root = Path(root)
+    pt_master = predictiontracker_master_slate(root) if pt_master is None else pt_master.copy()
+    current_dir = root / "data/current"
+    derived_dir = root / "data/derived"
+    current_dir.mkdir(parents=True, exist_ok=True)
+    derived_dir.mkdir(parents=True, exist_ok=True)
+    out_path = current_dir / "current_game_schedule.csv"
+    status_path = derived_dir / "current_game_schedule_status.json"
+    moment = now or datetime.now(timezone.utc)
+    start = (moment - timedelta(days=3)).date()
+    end = (moment + timedelta(days=10)).date()
+    params = {"dates": f"{start:%Y%m%d}-{end:%Y%m%d}", "limit": "1000"}
+    status = {
+        "refreshed_at_utc": utc_now(), "season": int(season),
+        "source": "ESPN public college-football scoreboard",
+        "date_window": params["dates"], "pt_games": int(len(pt_master)),
+    }
+    try:
+        response = requests.get(
+            ESPN_CFB_SCOREBOARD_URL, params=params, timeout=timeout_seconds,
+            headers={"User-Agent": "Mozilla/5.0 NCAAF-Consensus-Lab/1.0", "Accept": "application/json"},
+        )
+        response.raise_for_status()
+        raw = parse_espn_scoreboard_schedule(response.json())
+        matched = match_schedule_to_pt_slate(pt_master, raw)
+        if len(matched):
+            matched["season"] = int(season)
+            matched["kickoff_utc"] = pd.to_datetime(matched["kickoff_utc"], errors="coerce", utc=True)
+            matched.to_csv(out_path, index=False)
+        matched_n = int(pd.to_datetime(matched.get("kickoff_utc"), errors="coerce", utc=True).notna().sum()) if len(matched) else 0
+        status.update({
+            "status": "ok", "source_events": int(len(raw)), "matched_games": matched_n,
+            "unmatched_games": int(max(0, len(pt_master) - matched_n)),
+            "output": str(out_path.relative_to(root)),
+        })
+    except Exception as exc:
+        cached = load_current_game_schedule(root, season=int(season))
+        status.update({
+            "status": "cached" if len(cached) else "error",
+            "message": str(exc), "matched_games": int(pd.to_datetime(cached.get("kickoff_utc"), errors="coerce", utc=True).notna().sum()) if len(cached) else 0,
+            "unmatched_games": int(max(0, len(pt_master) - len(cached))),
+        })
+    status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
+    return status
 
 
 def _source_column(history):
@@ -485,6 +706,15 @@ def build_current_board_from_cached_sources(
     pt, pt_map = load_predictiontracker_current(root, mapping)
     cfb = load_cfbpicker_current(root, season=int(season), week=int(week)) if include_cfbpicker else pd.DataFrame()
     pt_master = predictiontracker_master_slate(root)
+    pt_schedule = load_current_game_schedule(root, season=int(season))
+    if len(pt_master) and len(pt_schedule) and "game_join_key" in pt_schedule.columns:
+        schedule_cols = [c for c in [
+            "game_join_key", "kickoff_utc", "espn_event_id", "broadcast", "schedule_match"
+        ] if c in pt_schedule.columns]
+        pt_master = pt_master.merge(
+            pt_schedule[schedule_cols].drop_duplicates("game_join_key", keep="last"),
+            on="game_join_key", how="left",
+        )
     pt_live = predictiontracker_live_model_columns(root)
 
     completed_keys = completed_game_keys_from_history(
@@ -737,6 +967,9 @@ def build_current_board_from_cached_sources(
                     pd.Series([getattr(mr, "line_move_from_open", np.nan)]), errors="coerce"
                 ).iloc[0],
                 "market_source": market_source,
+                "kickoff_utc": getattr(mr, "kickoff_utc", pd.NaT),
+                "broadcast": getattr(mr, "broadcast", ""),
+                "schedule_match": getattr(mr, "schedule_match", ""),
                 "consensus_home_margin": consensus,
                 "model_sd": sd,
                 "edge_home": edge,
@@ -782,6 +1015,7 @@ def build_current_board_from_cached_sources(
                     "line_move_from_open": pd.to_numeric(
                         pd.Series([getattr(mr, "line_move_from_open", np.nan)]), errors="coerce"
                     ).iloc[0],
+                    "kickoff_utc": getattr(mr, "kickoff_utc", pd.NaT),
                     "canonical_model_id": row.canonical_model_id,
                     "model_name": row.model_name,
                     "prediction_home_margin": row.prediction_home_margin,
@@ -791,11 +1025,12 @@ def build_current_board_from_cached_sources(
 
     board = pd.DataFrame(board_rows)
     if len(board):
+        board["kickoff_utc"] = pd.to_datetime(board.get("kickoff_utc"), errors="coerce", utc=True)
         board = board.sort_values(
-            ["qualifies", "available_models", "signal_sd"],
-            ascending=[False, False, False],
+            ["kickoff_utc", "away", "home"],
+            ascending=[True, True, True],
             na_position="last",
-        )
+        ).reset_index(drop=True)
     predictions = pd.DataFrame(pred_rows)
     qualifying = (
         board[board["qualifies"]].copy()
@@ -1170,6 +1405,12 @@ def refresh_current_sources(
             status["predictiontracker_source_record"] = direct_record
             status["predictiontracker_transport"] = "failed"
             status["predictiontracker_source_manifest_status"] = "error"
+
+    # Kickoff dates are enrichment only. PredictionTracker still defines which
+    # games are live; a schedule lookup failure never removes or adds a game.
+    status["schedule"] = refresh_current_game_schedule(
+        root, season=int(season), pt_master=predictiontracker_master_slate(root)
+    )
 
     cfb_script = root / "scripts/scrape_cfbpicker_current.py"
     if not include_cfbpicker:

@@ -42,9 +42,11 @@ from market_signal import (
     load_live_bets_reference, match_live_spread_bets, live_forensics_summary,
 )
 from cohort_market import (
-    model_quality_table, assisted_cohort, resolve_legacy_cohort,
-    current_cohort_summary, load_odds_archive, odds_archive_coverage,
+    model_quality_table, assisted_cohort, resolve_legacy_cohort, legacy_cohort_mapping,
+    correlation_clusters, cohort_season_diagnostics, cohort_leave_one_out,
+    historical_cohort_bets, load_pt_scores, current_cohort_summary, load_odds_archive, odds_archive_coverage,
     price_historical_market_shelf, shelf_backtest_summary,
+    select_best_expressions, best_expression_summary,
 )
 from streamlined_engine import (
     StreamlinedBacktestConfig,
@@ -64,6 +66,8 @@ from streamlined_engine import (
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CLOUD_MODE = os.environ.get("NCAAF_CLOUD_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
 DATA, REGISTRY, PAIRWISE = load_strategy_data(PROJECT_ROOT)
+
+HISTORICAL_SCORES = load_pt_scores(PROJECT_ROOT)
 
 if REGISTRY.empty:
     MODELS = (
@@ -164,13 +168,15 @@ else:
 
 DEFAULT_MANUAL_IDS = DEFAULT_AUTO_IDS[: min(10, len(DEFAULT_AUTO_IDS))]
 
-# v3.6.2: the production workflow is centered on a fixed, user-controlled
+# v3.6.5: the production workflow is centered on a fixed, user-controlled
 # cohort.  The legacy 2025 hand-curated model list is resolved onto the current
 # canonical registry when possible; otherwise a small quality-ranked fallback is
 # used. Automatic selection is deliberately constrained to a quality screen plus
 # correlation collapse -- never an exhaustive combination search.
 COHORT_QUALITY = model_quality_table(DATA)
+PATRICK_CORE_MAPPING = legacy_cohort_mapping(MODELS)
 DEFAULT_COHORT_IDS = resolve_legacy_cohort(MODELS, DEFAULT_AUTO_IDS[: min(12, len(DEFAULT_AUTO_IDS))])
+MODEL_CLUSTERS_90 = correlation_clusters(DATA, PAIRWISE, threshold=0.90)
 ODDS_QUOTES = load_odds_archive(PROJECT_ROOT)
 ODDS_COVERAGE = odds_archive_coverage(ODDS_QUOTES)
 
@@ -279,6 +285,23 @@ def _spread_label(away: str, home: str, home_margin) -> str:
     return f"{away} -{abs(float(m)):.1f}"
 
 
+def _kickoff_parts(value):
+    ts = pd.to_datetime(value, errors="coerce", utc=True)
+    if pd.isna(ts):
+        return ("Date TBD", "TBD", "")
+    et = ts.tz_convert("America/New_York")
+    day = et.strftime("%a %m/%d").replace(" 0", " ")
+    time = et.strftime("%I:%M %p").lstrip("0") + " ET"
+    full = et.strftime("%A, %b %d").replace(" 0", " ") + " · " + time
+    return day, time, full
+
+
+def _kickoff_sort_frame(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    out["_kickoff_sort"] = pd.to_datetime(out.get("kickoff_utc"), errors="coerce", utc=True)
+    return out.sort_values(["_kickoff_sort", "away", "home"], na_position="last").drop(columns="_kickoff_sort")
+
+
 def _style_css():
     return ui.tags.style(
         """
@@ -306,6 +329,7 @@ app_ui = ui.page_fluid(
         "PredictionTracker defines the live game slate; CFB Picker expands model coverage, while the bundled Odds API archive supplies historical prices and alternate markets.",
         class_="app-subtitle",
     ),
+    ui.output_ui("global_cohort_banner"),
     ui.navset_card_tab(
         ui.nav_panel(
             "How to Use",
@@ -335,21 +359,43 @@ app_ui = ui.page_fluid(
         ui.nav_panel(
             "1 · Cohort",
             ui.p(
-                "The production model is a fixed cohort, not an automatically rediscovered combination. Choose it directly, or use the constrained assisted selector to screen for quality and collapse highly correlated near-duplicates.",
+                "Patrick Core is the default production cohort. Use it as-is, edit a custom cohort directly, or preview a constrained assisted cohort that removes highly correlated near-duplicates.",
                 class_="muted",
             ),
             ui.card(
-                ui.card_header("Patrick Core · manual cohort"),
+                ui.card_header("Patrick Core · original hand-curated preset"),
+                ui.p(
+                    "This is the manual cohort from the original workflow. The app resolves the original model names exactly and leaves unavailable models visibly unmatched rather than guessing replacements.",
+                    class_="muted",
+                ),
+                ui.div(
+                    ui.input_action_button("use_patrick_core", "Use Patrick Core", class_="btn-primary"),
+                    ui.input_action_button("load_active_into_editor", "Load active cohort into editor", class_="btn-outline-secondary btn-sm"),
+                    style="display:flex; gap:.5rem; flex-wrap:wrap; margin:.4rem 0;",
+                ),
+                ui.output_text("patrick_core_mapping_status"),
+                ui.output_data_frame("patrick_core_mapping_table"),
+            ),
+            ui.card(
+                ui.card_header("Custom manual cohort · edit directly"),
+                ui.p(
+                    "Remove a model with × or type to add another model. This is a staged editor: the live production cohort changes only when you click Apply custom cohort.",
+                    class_="muted",
+                ),
                 ui.input_selectize(
-                    "cohort_manual_models", "Models in cohort",
+                    "cohort_manual_models", "Models staged in editor",
                     choices=ALL_MODEL_CHOICES, selected=DEFAULT_COHORT_IDS, multiple=True,
                     options={"plugins": ["remove_button"], "placeholder": "Choose the models you trust…"},
                 ),
                 ui.div(
-                    ui.input_action_button("apply_manual_cohort", "Use manual cohort", class_="btn-primary"),
-                    ui.input_action_button("reset_legacy_cohort", "Reset to Patrick Core", class_="btn-sm"),
+                    ui.input_action_button("apply_manual_cohort", "Apply custom cohort", class_="btn-primary"),
+                    ui.input_action_button("stage_patrick_core", "Stage Patrick Core", class_="btn-sm"),
                     style="display:flex; gap:.5rem; flex-wrap:wrap; margin:.4rem 0;",
                 ),
+                ui.output_text("cohort_editor_status"),
+            ),
+            ui.card(
+                ui.card_header("Active production cohort"),
                 ui.output_text("cohort_status"),
                 ui.layout_columns(
                     ui.value_box("Models", ui.output_text("cohort_model_n")),
@@ -359,6 +405,40 @@ app_ui = ui.page_fluid(
                     col_widths=(3,3,3,3),
                 ),
                 ui.output_data_frame("cohort_selected_table"),
+            ),
+            ui.card(
+                ui.card_header("Historical bets · exact audit for active cohort"),
+                ui.p(
+                    "Every row below is an actual historical game generated by the active cohort. The audit uses the fixed mean-consensus rule |cohort edge| / cohort SD ≥ k, grades the archived main spread, and assumes -110 with 1u risk for the ROI shown here. No model selection or threshold optimization occurs in this table.",
+                    class_="muted",
+                ),
+                ui.layout_columns(
+                    ui.input_checkbox_group(
+                        "cohort_audit_seasons", "Seasons",
+                        choices=SEASON_CHOICES,
+                        selected=[str(y) for y in HISTORICAL_SEASONS],
+                        inline=True,
+                    ),
+                    ui.input_numeric("cohort_audit_k", "Execution threshold k (SD)", DEFAULT_K, min=0.0, max=3.0, step=0.05),
+                    ui.input_numeric("cohort_audit_min_models", "Minimum cohort models posted", 3, min=2, max=30, step=1),
+                    ui.input_select(
+                        "cohort_audit_result_filter", "Rows shown",
+                        choices={"All":"All results", "W":"Wins only", "L":"Losses only", "P":"Pushes only"},
+                        selected="All",
+                    ),
+                    col_widths=(5,2,3,2),
+                ),
+                ui.output_text("cohort_audit_status"),
+                ui.layout_columns(
+                    ui.value_box("Bets", ui.output_text("cohort_audit_bets")),
+                    ui.value_box("W-L-P", ui.output_text("cohort_audit_record")),
+                    ui.value_box("ATS", ui.output_text("cohort_audit_ats")),
+                    ui.value_box("Units", ui.output_text("cohort_audit_units")),
+                    ui.value_box("ROI", ui.output_text("cohort_audit_roi")),
+                    col_widths=(2,3,2,2,3),
+                ),
+                ui.download_button("download_cohort_audit", "Download exact bets CSV", class_="btn-outline-secondary mb-2"),
+                ui.output_data_frame("cohort_audit_table"),
             ),
             ui.card(
                 ui.card_header("Assisted cohort · quality screen + correlation collapse"),
@@ -380,6 +460,24 @@ app_ui = ui.page_fluid(
                 ),
                 ui.output_text("cohort_assist_status"),
                 ui.output_data_frame("cohort_assist_table"),
+            ),
+            ui.card(
+                ui.card_header("Active cohort · stability by season"),
+                ui.p("Forecast quality comes first here; ATS is shown as descriptive context rather than as the cohort-selection objective.", class_="muted"),
+                ui.output_data_frame("cohort_season_table"),
+            ),
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Leave-one-out contribution"),
+                    ui.p("Positive ΔMAE without means the cohort got worse when that model was removed; negative values flag models worth reviewing.", class_="muted"),
+                    ui.output_data_frame("cohort_loo_table"),
+                ),
+                ui.card(
+                    ui.card_header("Correlation families · |r| ≥ 0.90"),
+                    ui.p("Models in the same connected correlation family are potential near-duplicates. This is a diagnostic, not an automatic exclusion rule.", class_="muted"),
+                    ui.output_data_frame("cohort_cluster_table"),
+                ),
+                col_widths=(6,6),
             ),
             ui.p("Full individual-model history remains below as supporting evidence.", class_="muted"),
             ui.layout_columns(
@@ -427,16 +525,28 @@ app_ui = ui.page_fluid(
                 class_="btn-outline-secondary mb-3",
             ),
             ui.card(
-                ui.card_header("Current game board"),
+                ui.card_header("Current game board · chronological"),
+                ui.p("Kickoff dates/times are schedule enrichment; PredictionTracker still controls which games belong on the live slate.", class_="muted"),
                 ui.output_data_frame("upcoming_board_table"),
             ),
             ui.card(
-                ui.card_header("Patrick Core · current cohort forecasts"),
+                ui.card_header("Active cohort · current forecasts"),
                 ui.p(
-                    "These are direct cohort summaries: mean/median predicted home margin, dispersion, number of cohort models posting, and raw disagreement with the current PredictionTracker line.",
+                    "These are direct cohort summaries: mean/median predicted home margin, dispersion, number of cohort models posting, model agreement, and disagreement with the current PredictionTracker line.",
                     class_="muted",
                 ),
                 ui.output_data_frame("current_cohort_table"),
+            ),
+            ui.card(
+                ui.card_header("Game explorer · model-by-model distribution"),
+                ui.p(
+                    "This restores the useful part of the original workflow: inspect every posted model for one game, with the active cohort highlighted against the market and the cohort mean/median.",
+                    class_="muted",
+                ),
+                ui.input_select("cohort_game", "Game to inspect", choices={"": "Refresh the current slate first"}, selected=""),
+                ui.output_text("current_game_summary"),
+                ui.output_plot("current_game_model_plot", height="1100px"),
+                ui.output_data_frame("current_game_model_table"),
             ),
         ),
 
@@ -616,9 +726,24 @@ app_ui = ui.page_fluid(
                 ui.output_data_frame("market_shelf_table"),
             ),
             ui.card(
+                ui.card_header("One decision per game · best expression check"),
+                ui.p(
+                    "To avoid pretending every book/rung is an independent bet, this selects the highest modeled-EV offer without looking at the outcome: once across ML/spread/team-total together, and once within each market family.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("market_shelf_best_summary"),
+                ui.output_data_frame("market_shelf_best_table"),
+            ),
+            ui.card(
+                ui.card_header("Historical game ladder explorer"),
+                ui.input_select("shelf_game", "Archived game", choices={"": "Price the archive first"}, selected=""),
+                ui.output_text("shelf_game_status"),
+                ui.output_data_frame("shelf_game_table"),
+            ),
+            ui.card(
                 ui.card_header("Offer-level historical check"),
                 ui.p(
-                    "This is descriptive offer-level grading across books/rungs, not an independent-bet portfolio: multiple offers from the same game are correlated. It is useful for asking whether the model-price relationship behaves sensibly across ML, spreads, and team totals.",
+                    "This is descriptive offer-level grading across books/rungs, not an independent-bet portfolio: multiple offers from the same game are correlated. The one-decision-per-game section above is the cleaner betting-process check.",
                     class_="muted",
                 ),
                 ui.output_data_frame("market_shelf_backtest_table"),
@@ -842,6 +967,7 @@ app_ui = ui.page_fluid(
 def server(input, output, session):
     strategy = reactive.Value(dict(SAVED_STRATEGY))
     cohort = reactive.Value(list(DEFAULT_COHORT_IDS))
+    cohort_mode = reactive.Value("Patrick Core")
     assisted_preview = reactive.Value({"ids": list(DEFAULT_COHORT_IDS), "audit": pd.DataFrame()})
     # Session-only sportsbook line overrides. Values use the app's internal
     # market_home_margin convention (positive = home favored). They never
@@ -1006,10 +1132,14 @@ def server(input, output, session):
         return render.DataGrid(d, filters=True, height="650px")
 
     # ------------------------------------------------------------------
-    # v3.6.2 production cohort
+    # v3.6.5 production cohort
     # ------------------------------------------------------------------
     def _active_cohort_ids() -> list[str]:
         return [str(x) for x in (cohort.get() or []) if str(x) in MODEL_NAME_MAP]
+
+    def _active_cohort_label() -> str:
+        ids = _active_cohort_ids()
+        return f"{cohort_mode.get()} · {len(ids)} models"
 
     def _cohort_hist_metrics(ids: list[str]) -> dict:
         if not ids:
@@ -1032,23 +1162,79 @@ def server(input, output, session):
             "mean_corr": float(diag.get("mean_edge_correlation", np.nan)),
         }
 
+    @render.ui
+    def global_cohort_banner():
+        ids = _active_cohort_ids()
+        names = [MODEL_NAME_MAP.get(x, x) for x in ids]
+        preview = ", ".join(names[:8]) + (f" … +{len(names)-8} more" if len(names) > 8 else "")
+        return ui.div(
+            ui.strong("Active production cohort: "),
+            f"{_active_cohort_label()} — {preview}" if preview else "none",
+            class_="strategy-banner",
+        )
+
+    @reactive.effect
+    @reactive.event(input.use_patrick_core)
+    def use_patrick_core():
+        ids = list(DEFAULT_COHORT_IDS)
+        cohort.set(ids)
+        cohort_mode.set("Patrick Core")
+        ui.update_selectize("cohort_manual_models", selected=ids)
+        ui.notification_show(f"Patrick Core is active with {len(ids)} mapped models.", type="message", duration=6)
+
+    @reactive.effect
+    @reactive.event(input.stage_patrick_core)
+    def stage_patrick_core():
+        ui.update_selectize("cohort_manual_models", selected=list(DEFAULT_COHORT_IDS))
+        ui.notification_show("Patrick Core loaded into the custom editor. Click Apply custom cohort to activate any edits.", type="message", duration=6)
+
+    @reactive.effect
+    @reactive.event(input.load_active_into_editor)
+    def load_active_into_editor():
+        ui.update_selectize("cohort_manual_models", selected=_active_cohort_ids())
+        ui.notification_show("Active cohort loaded into the custom editor.", type="message", duration=5)
+
     @reactive.effect
     @reactive.event(input.apply_manual_cohort)
     def apply_manual_cohort():
         ids = [str(x) for x in (input.cohort_manual_models() or []) if str(x) in MODEL_NAME_MAP]
+        ids = list(dict.fromkeys(ids))
         if len(ids) < 2:
             ui.notification_show("Choose at least two models for the production cohort.", type="warning", duration=6)
             return
-        cohort.set(list(dict.fromkeys(ids)))
+        cohort.set(ids)
+        if ids == list(DEFAULT_COHORT_IDS):
+            cohort_mode.set("Patrick Core")
+        else:
+            cohort_mode.set("Custom manual")
         ui.notification_show(f"Production cohort set to {len(ids)} models.", type="message", duration=5)
 
-    @reactive.effect
-    @reactive.event(input.reset_legacy_cohort)
-    def reset_legacy_cohort():
-        ids = list(DEFAULT_COHORT_IDS)
-        cohort.set(ids)
-        ui.update_selectize("cohort_manual_models", selected=ids)
-        ui.notification_show("Restored Patrick Core from the original hand-curated cohort where mappings were available.", type="message", duration=6)
+    @render.text
+    def patrick_core_mapping_status():
+        mapped = int(PATRICK_CORE_MAPPING["mapped"].sum()) if len(PATRICK_CORE_MAPPING) else 0
+        missing = PATRICK_CORE_MAPPING.loc[~PATRICK_CORE_MAPPING["mapped"], "requested_model"].astype(str).tolist() if len(PATRICK_CORE_MAPPING) else []
+        msg = f"Original preset: {mapped}/{len(PATRICK_CORE_MAPPING)} models mapped."
+        if missing:
+            msg += " Unavailable and not guessed: " + ", ".join(missing) + "."
+        return msg
+
+    @render.data_frame
+    def patrick_core_mapping_table():
+        d = PATRICK_CORE_MAPPING.copy()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d["Status"] = np.where(d["mapped"], "Included", "Unavailable")
+        d = d.rename(columns={"requested_model":"Original model", "mapped_model":"Current mapped model"})
+        return render.DataGrid(d[["Original model", "Current mapped model", "Status"]], filters=False, height="460px")
+
+    @render.text
+    def cohort_editor_status():
+        staged = [str(x) for x in (input.cohort_manual_models() or []) if str(x) in MODEL_NAME_MAP]
+        active = _active_cohort_ids()
+        if staged == active:
+            return f"Editor matches the active cohort ({len(active)} models)."
+        add = len(set(staged) - set(active)); rem = len(set(active) - set(staged))
+        return f"Staged: {len(staged)} models; active: {len(active)}. Pending changes: +{add} / -{rem}. Click Apply custom cohort to activate them."
 
     def _compute_assisted() -> tuple[list[str], pd.DataFrame]:
         return assisted_cohort(
@@ -1077,6 +1263,7 @@ def server(input, output, session):
             ui.notification_show("The assisted screen did not return a usable cohort.", type="warning", duration=6)
             return
         cohort.set(ids)
+        cohort_mode.set(f"Assisted · {str(input.cohort_assist_method()).title()}")
         ui.update_selectize("cohort_manual_models", selected=ids)
         ui.notification_show(f"Applied assisted cohort with {len(ids)} diversified models.", type="message", duration=6)
 
@@ -1113,15 +1300,132 @@ def server(input, output, session):
         order = {mid: i for i, mid in enumerate(ids)}
         d["_order"] = d["canonical_model_id"].map(order)
         d = d.sort_values("_order")
+        if len(MODEL_CLUSTERS_90):
+            d = d.merge(MODEL_CLUSTERS_90[["canonical_model_id", "cluster", "cluster_size"]], on="canonical_model_id", how="left")
         for c in ["ats_pct", "wilson_low"]:
             d[c] = 100 * pd.to_numeric(d[c], errors="coerce")
-        keep = ["model_name", "games", "bets", "ats_pct", "wilson_low", "mae", "delta_mae_vs_market", "mean_abs_edge"]
-        d = d[keep].rename(columns={
-            "model_name":"Model", "games":"Games", "bets":"Bets", "ats_pct":"ATS %",
+        keep = ["model_name", "cluster", "cluster_size", "games", "bets", "ats_pct", "wilson_low", "mae", "delta_mae_vs_market", "mean_abs_edge"]
+        d = d[[c for c in keep if c in d.columns]].rename(columns={
+            "model_name":"Model", "cluster":"Corr family", "cluster_size":"Family size",
+            "games":"Games", "bets":"Bets", "ats_pct":"ATS %",
             "wilson_low":"Wilson LB %", "mae":"MAE", "delta_mae_vs_market":"ΔMAE vs market",
             "mean_abs_edge":"Mean |model-market|",
         })
         return render.DataGrid(d, filters=False, height="420px")
+
+    @reactive.calc
+    def _cohort_audit_data():
+        seasons = tuple(sorted(int(x) for x in (input.cohort_audit_seasons() or [])))
+        if not seasons:
+            return pd.DataFrame()
+        return historical_cohort_bets(
+            DATA,
+            _active_cohort_ids(),
+            k=float(input.cohort_audit_k()),
+            min_models=int(input.cohort_audit_min_models()),
+            seasons=seasons,
+            standard_price=-110,
+            scores=HISTORICAL_SCORES,
+        )
+
+    def _cohort_audit_summary() -> dict:
+        d = _cohort_audit_data()
+        if d.empty:
+            return {"bets": 0, "wins": 0, "losses": 0, "pushes": 0, "ats": np.nan, "units": 0.0, "roi": np.nan}
+        wins = int((d["result"] == "W").sum())
+        losses = int((d["result"] == "L").sum())
+        pushes = int((d["result"] == "P").sum())
+        bets = wins + losses
+        units = float(pd.to_numeric(d["unit_result"], errors="coerce").fillna(0).sum())
+        return {
+            "bets": bets, "wins": wins, "losses": losses, "pushes": pushes,
+            "ats": wins / bets if bets else np.nan,
+            "units": units,
+            "roi": units / bets if bets else np.nan,
+        }
+
+    @render.text
+    def cohort_audit_status():
+        ids = _active_cohort_ids()
+        seasons = tuple(sorted(int(x) for x in (input.cohort_audit_seasons() or [])))
+        if not ids:
+            return "Choose an active cohort first."
+        if not seasons:
+            return "Choose at least one historical season."
+        d = _cohort_audit_data()
+        return (
+            f"{_active_cohort_label()} | seasons {', '.join(map(str, seasons))} | "
+            f"k = {float(input.cohort_audit_k()):.2f} SD | minimum {int(input.cohort_audit_min_models())} posted models | "
+            f"{len(d):,} qualifying game rows. Summary ROI uses -110 and 1u risk; pushes do not count as bets."
+        )
+
+    @render.text
+    def cohort_audit_bets():
+        return f"{_cohort_audit_summary()['bets']:,}"
+
+    @render.text
+    def cohort_audit_record():
+        s = _cohort_audit_summary()
+        return f"{s['wins']}-{s['losses']}-{s['pushes']}"
+
+    @render.text
+    def cohort_audit_ats():
+        v = _cohort_audit_summary()["ats"]
+        return "—" if not np.isfinite(v) else f"{100*v:.1f}%"
+
+    @render.text
+    def cohort_audit_units():
+        return f"{_cohort_audit_summary()['units']:+.2f}u"
+
+    @render.text
+    def cohort_audit_roi():
+        v = _cohort_audit_summary()["roi"]
+        return "—" if not np.isfinite(v) else f"{100*v:+.1f}%"
+
+    def _cohort_audit_display_frame(*, apply_result_filter: bool = True) -> pd.DataFrame:
+        d = _cohort_audit_data().copy()
+        if d.empty:
+            return pd.DataFrame()
+        if apply_result_filter:
+            rf = str(input.cohort_audit_result_filter() or "All")
+            if rf in {"W", "L", "P"}:
+                d = d[d["result"].eq(rf)].copy()
+        if d.empty:
+            return d
+        d["Market"] = [
+            _spread_label(a, h, m)
+            for a, h, m in zip(d["road"], d["home"], d["market_home_margin"])
+        ]
+        d["Cohort fair"] = [
+            _spread_label(a, h, m)
+            for a, h, m in zip(d["road"], d["home"], d["cohort_home_margin"])
+        ]
+        d["Edge (pts)"] = pd.to_numeric(d["edge_points"], errors="coerce").round(2)
+        d["Cohort SD"] = pd.to_numeric(d["cohort_sd"], errors="coerce").round(2)
+        d["Edge / SD"] = pd.to_numeric(d["edge_over_sd"], errors="coerce").replace([np.inf, -np.inf], np.nan).round(2)
+        d["Outcome vs line"] = pd.to_numeric(d["bet_cover_margin"], errors="coerce").round(1)
+        d["Units"] = pd.to_numeric(d["unit_result"], errors="coerce").round(3)
+        d = d.rename(columns={
+            "season":"Season", "week":"Week", "game":"Game", "bet":"Bet",
+            "bet_type":"Side type", "available_models":"Models posted", "final_score":"Final score",
+            "result":"Result", "models_used":"Models used", "line_source":"Line source",
+        })
+        keep = [
+            "Season", "Week", "Game", "Bet", "Side type", "Market", "Cohort fair",
+            "Edge (pts)", "Cohort SD", "Edge / SD", "Models posted", "Final score",
+            "Outcome vs line", "Result", "Units", "Models used", "Line source",
+        ]
+        return d[[c for c in keep if c in d.columns]]
+
+    @render.data_frame
+    def cohort_audit_table():
+        d = _cohort_audit_display_frame(apply_result_filter=True)
+        return render.DataGrid(d, filters=True, height="700px")
+
+    @render.download(filename="active_cohort_historical_bets.csv")
+    def download_cohort_audit():
+        d = _cohort_audit_display_frame(apply_result_filter=False)
+        yield d.to_csv(index=False)
 
     @render.text
     def cohort_assist_status():
@@ -1149,6 +1453,46 @@ def server(input, output, session):
         })
         keep = ["Model", "Keep", "Correlated with", "Correlation", "Bets", "ATS %", "Wilson LB %", "MAE", "ΔMAE vs market", "Balanced score"]
         return render.DataGrid(d[[c for c in keep if c in d.columns]], filters=False, height="460px")
+
+    @render.data_frame
+    def cohort_season_table():
+        d = cohort_season_diagnostics(DATA, _active_cohort_ids(), min_models=2)
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = d.copy()
+        d["ats_pct"] = 100 * pd.to_numeric(d["ats_pct"], errors="coerce")
+        d["residual_corr"] = pd.to_numeric(d["residual_corr"], errors="coerce").round(3)
+        for c in ["mae", "market_mae", "delta_mae_vs_market"]:
+            d[c] = pd.to_numeric(d[c], errors="coerce").round(3)
+        d = d.rename(columns={
+            "season":"Season", "games":"Games", "mae":"Cohort MAE", "market_mae":"Market MAE",
+            "delta_mae_vs_market":"ΔMAE vs market", "residual_corr":"Residual corr",
+            "wins":"ATS W", "losses":"ATS L", "pushes":"Push", "ats_pct":"ATS %",
+        })
+        return render.DataGrid(d, filters=False, height="320px")
+
+    @render.data_frame
+    def cohort_loo_table():
+        d = cohort_leave_one_out(DATA, _active_cohort_ids(), min_models=2)
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        for c in ["base_mae", "mae_without", "delta_mae_without", "mean_prediction_influence"]:
+            d[c] = pd.to_numeric(d[c], errors="coerce").round(3)
+        d = d.rename(columns={
+            "model_name":"Model", "common_games":"Common games", "base_mae":"Base MAE",
+            "mae_without":"MAE without", "delta_mae_without":"ΔMAE without",
+            "mean_prediction_influence":"Mean influence (pts)",
+        })
+        return render.DataGrid(d[["Model", "Common games", "Base MAE", "MAE without", "ΔMAE without", "Mean influence (pts)"]], filters=False, height="460px")
+
+    @render.data_frame
+    def cohort_cluster_table():
+        ids = set(_active_cohort_ids())
+        d = MODEL_CLUSTERS_90[MODEL_CLUSTERS_90["canonical_model_id"].astype(str).isin(ids)].copy()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = d.rename(columns={"model_name":"Model", "cluster":"Family", "cluster_size":"Family size"})
+        return render.DataGrid(d[["Family", "Family size", "Model"]], filters=False, height="460px")
 
     # ------------------------------------------------------------------
     # Page 2: verified PredictionTracker + CFB Picker upcoming board
@@ -1279,10 +1623,13 @@ def server(input, output, session):
         raw_pt_games = int(r.get("raw_pt_master_games", live_games))
         off_slate_games = int(r.get("cfbpicker_games_excluded_off_slate", 0))
         completed_games = int(r.get("history_completed_games_excluded", 0))
+        schedule = rs.get("schedule") or {}
+        schedule_audit = f" · kickoff dates: {schedule.get('matched_games', 0)}/{live_games} ({schedule.get('status', 'unknown')})"
         slate_audit = (
             f" · live games: {live_games}/{raw_pt_games} PT games"
             f" · CFB off-slate games excluded: {off_slate_games}"
             f" · graded/completed PT games excluded: {completed_games}"
+            f"{schedule_audit}"
         )
         return (
             f"PT published: {published} · app fetched: {fetched}{source_txt} · transport: {transport} · "
@@ -1365,7 +1712,11 @@ def server(input, output, session):
         d = r.get("board", pd.DataFrame()).copy()
         if d.empty:
             return render.DataGrid(d)
+        d = _kickoff_sort_frame(d)
         d["Game"] = d["away"].astype(str) + " @ " + d["home"].astype(str)
+        kickoff_parts = [_kickoff_parts(v) for v in d.get("kickoff_utc", pd.Series(pd.NaT, index=d.index))]
+        d["Date"] = [x[0] for x in kickoff_parts]
+        d["Kickoff"] = [x[1] for x in kickoff_parts]
         d["Opening spread"] = [
             _spread_label(a, h, m)
             for a, h, m in zip(d["away"], d["home"], d.get("opening_home_margin", np.nan))
@@ -1380,7 +1731,7 @@ def server(input, output, session):
         ]
         d["Move from open"] = pd.to_numeric(d.get("line_move_from_open"), errors="coerce").round(2)
         d = d[[
-            "Game", "Opening spread", "Current spread", "Midweek spread",
+            "Date", "Kickoff", "Game", "Opening spread", "Current spread", "Midweek spread",
             "Move from open", "available_models", "market_source"
         ]].rename(
             columns={"available_models": "Models posting", "market_source": "Line source"}
@@ -1398,17 +1749,131 @@ def server(input, output, session):
         )
         if d.empty:
             return render.DataGrid(pd.DataFrame([{"Status": "No active cohort game currently has at least two posted models."}]))
+        d = _kickoff_sort_frame(d)
         d["Game"] = d["away"].astype(str) + " @ " + d["home"].astype(str)
+        kickoff_parts = [_kickoff_parts(v) for v in d.get("kickoff_utc", pd.Series(pd.NaT, index=d.index))]
+        d["Date"] = [x[0] for x in kickoff_parts]
+        d["Kickoff"] = [x[1] for x in kickoff_parts]
         d["Market"] = [_spread_label(a, h, m) for a, h, m in zip(d["away"], d["home"], d["market_home_margin"])]
         d["Cohort mean"] = [_spread_label(a, h, m) for a, h, m in zip(d["away"], d["home"], d["cohort_mean"])]
         d["Cohort median"] = [_spread_label(a, h, m) for a, h, m in zip(d["away"], d["home"], d["cohort_median"])]
         d["SD"] = pd.to_numeric(d["cohort_sd"], errors="coerce").round(2)
         d["N"] = pd.to_numeric(d["cohort_n"], errors="coerce").astype("Int64")
-        d["Raw edge home"] = pd.to_numeric(d["raw_edge_home"], errors="coerce").round(2)
-        d["Home lean"] = pd.to_numeric(d["home_lean"], errors="coerce").astype("Int64")
-        d["Away lean"] = pd.to_numeric(d["away_lean"], errors="coerce").astype("Int64")
-        keep = ["Game", "Market", "Cohort mean", "Cohort median", "SD", "N", "Raw edge home", "Home lean", "Away lean"]
+        edge = pd.to_numeric(d["raw_edge_home"], errors="coerce")
+        d["Lean"] = np.where(edge > 0, d["home"], np.where(edge < 0, d["away"], "Pass"))
+        d["Edge (pts)"] = edge.abs().round(2)
+        home_lean = pd.to_numeric(d["home_lean"], errors="coerce")
+        away_lean = pd.to_numeric(d["away_lean"], errors="coerce")
+        n = pd.to_numeric(d["cohort_n"], errors="coerce")
+        d["Agreement %"] = 100 * pd.concat([home_lean, away_lean], axis=1).max(axis=1) / n.replace(0, np.nan)
+        d["Agreement %"] = d["Agreement %"].round(1)
+        keep = ["Date", "Kickoff", "Game", "Market", "Cohort mean", "Cohort median", "SD", "N", "Lean", "Edge (pts)", "Agreement %"]
         return render.DataGrid(d[keep], filters=True, height="520px")
+
+    @reactive.effect
+    def update_cohort_game_choices():
+        r = upcoming_result()
+        if r is None:
+            ui.update_select("cohort_game", choices={"": "Refresh the current slate first"}, selected="")
+            return
+        b = r.get("board", pd.DataFrame()).copy()
+        if b.empty or "game_join_key" not in b.columns:
+            ui.update_select("cohort_game", choices={"": "No games available"}, selected="")
+            return
+        b = _kickoff_sort_frame(b.drop_duplicates("game_join_key"))
+        choices = {}
+        for row in b.itertuples(index=False):
+            day, time, _ = _kickoff_parts(getattr(row, "kickoff_utc", pd.NaT))
+            choices[str(row.game_join_key)] = f"{day} · {time} — {row.away} @ {row.home}"
+        current = str(input.cohort_game() or "")
+        selected = current if current in choices else (next(iter(choices)) if choices else "")
+        ui.update_select("cohort_game", choices=choices, selected=selected)
+
+    def _current_game_detail():
+        r = upcoming_result()
+        key = str(input.cohort_game() or "")
+        if r is None or not key:
+            return None
+        b = r.get("board", pd.DataFrame()).copy()
+        p = r.get("predictions", pd.DataFrame()).copy()
+        if b.empty or p.empty:
+            return None
+        br = b[b["game_join_key"].astype(str).eq(key)]
+        pg = p[p["game_join_key"].astype(str).eq(key)].copy()
+        if br.empty or pg.empty:
+            return None
+        pg["prediction_home_margin"] = pd.to_numeric(pg["prediction_home_margin"], errors="coerce")
+        pg = pg[np.isfinite(pg["prediction_home_margin"])].drop_duplicates("canonical_model_id")
+        pg["In active cohort"] = pg["canonical_model_id"].astype(str).isin(set(_active_cohort_ids()))
+        return br.iloc[0], pg
+
+    @render.text
+    def current_game_summary():
+        z = _current_game_detail()
+        if z is None:
+            return "Refresh the current slate and choose a game."
+        br, pg = z
+        core = pg[pg["In active cohort"]]
+        market = float(pd.to_numeric(pd.Series([br.get("market_home_margin", np.nan)]), errors="coerce").iloc[0])
+        _, _, kickoff_full = _kickoff_parts(br.get("kickoff_utc", pd.NaT))
+        kickoff_prefix = f"{kickoff_full} | " if kickoff_full else ""
+        if core.empty:
+            return f"{kickoff_prefix}{br['away']} @ {br['home']}: no active-cohort models posted."
+        mean = float(core["prediction_home_margin"].mean()); med = float(core["prediction_home_margin"].median())
+        edge = mean - market if np.isfinite(market) else np.nan
+        lean = str(br["home"]) if edge > 0 else str(br["away"]) if edge < 0 else "none"
+        return f"{kickoff_prefix}{br['away']} @ {br['home']} | {_active_cohort_label()} | {len(core)} core models posted | mean {mean:+.2f} home margin | median {med:+.2f} | market {market:+.2f} | lean {lean} by {abs(edge):.2f} pts"
+
+    @render.plot
+    def current_game_model_plot():
+        z = _current_game_detail()
+        if z is None:
+            return None
+        br, pg = z
+        if pg.empty:
+            return None
+        core_ids = set(_active_cohort_ids())
+        pg = pg.sort_values(["In active cohort", "prediction_home_margin", "model_name"], ascending=[False, False, True]).reset_index(drop=True)
+        n = len(pg)
+        fig_h = max(6.0, min(18.0, 0.32 * n + 3.0))
+        fig, ax = plt.subplots(figsize=(11, fig_h))
+        y = np.arange(n)
+        non = ~pg["In active cohort"].astype(bool)
+        ax.scatter(pg.loc[non, "prediction_home_margin"], y[non], marker="x", alpha=0.45, label="Other posted models")
+        ax.scatter(pg.loc[~non, "prediction_home_margin"], y[~non], s=55, label="Active cohort")
+        market = float(pd.to_numeric(pd.Series([br.get("market_home_margin", np.nan)]), errors="coerce").iloc[0])
+        core = pg[pg["canonical_model_id"].astype(str).isin(core_ids)]
+        if np.isfinite(market):
+            ax.axvline(market, linestyle="--", linewidth=2, label="Market")
+        if len(core):
+            ax.axvline(float(core["prediction_home_margin"].mean()), linestyle="-", linewidth=2, label="Cohort mean")
+            ax.axvline(float(core["prediction_home_margin"].median()), linestyle=":", linewidth=2, label="Cohort median")
+        labels = [f"{'★ ' if bool(c) else ''}{m}" for m, c in zip(pg["model_name"].astype(str), pg["In active cohort"])]
+        ax.set_yticks(y); ax.set_yticklabels(labels, fontsize=8)
+        ax.invert_yaxis()
+        ax.set_xlabel("Predicted home margin (positive = home favored)")
+        _, _, kickoff_full = _kickoff_parts(br.get("kickoff_utc", pd.NaT))
+        title_prefix = f"{kickoff_full} — " if kickoff_full else ""
+        ax.set_title(f"{title_prefix}{br['away']} @ {br['home']} — posted model distribution")
+        ax.grid(axis="x", alpha=0.2)
+        ax.legend(loc="best")
+        fig.tight_layout()
+        return fig
+
+    @render.data_frame
+    def current_game_model_table():
+        z = _current_game_detail()
+        if z is None:
+            return render.DataGrid(pd.DataFrame())
+        br, pg = z
+        market = float(pd.to_numeric(pd.Series([br.get("market_home_margin", np.nan)]), errors="coerce").iloc[0])
+        pg["Prediction"] = pd.to_numeric(pg["prediction_home_margin"], errors="coerce").round(2)
+        pg["Vs market"] = (pg["Prediction"] - market).round(2) if np.isfinite(market) else np.nan
+        pg["Core"] = np.where(pg["In active cohort"], "Yes", "")
+        pg["Source"] = pg.get("source", pd.Series("", index=pg.index)).astype(str)
+        pg = pg.sort_values(["In active cohort", "Prediction"], ascending=[False, False])
+        out = pg.rename(columns={"model_name":"Model"})[["Core", "Model", "Prediction", "Vs market", "Source"]]
+        return render.DataGrid(out, filters=True, height="620px")
 
     @render.data_frame
     def upcoming_matrix_table():
@@ -1436,7 +1901,7 @@ def server(input, output, session):
         return render.DataGrid(matrix, filters=True, height="650px")
 
     # ------------------------------------------------------------------
-    # v3.6.2 bundled historical sportsbook market shelf
+    # v3.6.5 bundled historical sportsbook market shelf
     # ------------------------------------------------------------------
     @ui.bind_task_button(button_id="price_market_shelf")
     @reactive.extended_task
@@ -1454,7 +1919,7 @@ def server(input, output, session):
     def start_shelf_task():
         if ODDS_QUOTES.empty:
             ui.notification_show(
-                "The bundled Odds API archive is missing. Rebuild v3.6.2 from the Mac source project so data/odds/ncaaf_rich_quotes.csv.gz is included.",
+                "The bundled Odds API archive is missing. Rebuild v3.6.5 from the Mac source project so data/odds/ncaaf_rich_quotes.csv.gz is included.",
                 type="error", duration=10,
             )
             return
@@ -1497,7 +1962,7 @@ def server(input, output, session):
     @render.text
     def market_shelf_status():
         if ODDS_QUOTES.empty:
-            return "Odds API archive not present in this deployment. v3.6.2 production builds are expected to bundle it under data/odds/."
+            return "Odds API archive not present in this deployment. v3.6.5 production builds are expected to bundle it under data/odds/."
         st = shelf_task.status()
         if st == "initial":
             return "Archive loaded. Click ‘Price archive for active cohort’ to evaluate the historical shelf using the currently selected cohort."
@@ -1597,6 +2062,98 @@ def server(input, output, session):
         keep = ["season", "week", "game", "book", "family", "Bet", "Price", "Model P %", "Book implied %", "EV %", "Cohort margin", "Cohort SD", "Derived team mean", "grade"]
         d = d[[c for c in keep if c in d.columns]].rename(columns={"season":"Season", "week":"Week", "game":"Game", "book":"Book", "family":"Market", "grade":"Grade"})
         return render.DataGrid(d, filters=True, height="720px")
+
+    @render.data_frame
+    def market_shelf_best_summary():
+        d = _shelf_result().copy()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        fam = str(input.shelf_family())
+        if fam != "All":
+            d = d[d["family"].eq(fam)].copy()
+        out = best_expression_summary(d, ev_cutoff=float(input.shelf_min_ev()))
+        if out.empty:
+            return render.DataGrid(pd.DataFrame([{"Status":"No one-per-game selections meet the current EV filter."}]))
+        out["win_pct"] = 100 * pd.to_numeric(out["win_pct"], errors="coerce")
+        out["roi_flat_risk"] = 100 * pd.to_numeric(out["roi_flat_risk"], errors="coerce")
+        out["mean_model_ev"] = 100 * pd.to_numeric(out["mean_model_ev"], errors="coerce")
+        out = out.rename(columns={
+            "selection":"Selection rule", "games_selected":"Games selected", "graded":"Graded",
+            "wins":"Wins", "losses":"Losses", "pushes":"Pushes", "win_pct":"Win %",
+            "units_flat_risk":"Units (1u risk)", "roi_flat_risk":"ROI %", "mean_model_ev":"Mean modeled EV %",
+        })
+        return render.DataGrid(out, filters=False, height="300px")
+
+    @render.data_frame
+    def market_shelf_best_table():
+        d = _shelf_result().copy()
+        if d.empty:
+            return render.DataGrid(pd.DataFrame())
+        fam = str(input.shelf_family())
+        family = None if fam == "All" else fam
+        z = select_best_expressions(d, ev_cutoff=float(input.shelf_min_ev()), family=family, one_per_family=False)
+        if z.empty:
+            return render.DataGrid(pd.DataFrame())
+        z = z.sort_values(["season", "week", "commence_time", "ev"], ascending=[False, False, False, False]).head(300).copy()
+        def bet_label(r):
+            if r.family == "ML":
+                return f"{r.outcome_name} ML"
+            if r.family == "Spread":
+                return f"{r.outcome_name} {r.point:+g}" if pd.notna(r.point) else str(r.outcome_name)
+            return f"{r.outcome_description} {r.outcome_name} {r.point:g}" if pd.notna(r.point) else f"{r.outcome_description} {r.outcome_name}"
+        z["Bet"] = [bet_label(r) for r in z.itertuples(index=False)]
+        z["Price"] = pd.to_numeric(z["price_american"], errors="coerce").round().astype("Int64")
+        z["Model P %"] = (100 * pd.to_numeric(z["model_prob"], errors="coerce")).round(1)
+        z["EV %"] = (100 * pd.to_numeric(z["ev"], errors="coerce")).round(1)
+        out = z.rename(columns={"season":"Season", "week":"Week", "game":"Game", "family":"Market", "book":"Book", "grade":"Grade"})
+        return render.DataGrid(out[["Season", "Week", "Game", "Market", "Bet", "Book", "Price", "Model P %", "EV %", "Grade"]], filters=True, height="540px")
+
+    @reactive.effect
+    def update_shelf_game_choices():
+        d = _shelf_result()
+        if d.empty:
+            ui.update_select("shelf_game", choices={"":"Price the archive first"}, selected="")
+            return
+        g = d[["event_id", "season", "week", "game"]].drop_duplicates("event_id").sort_values(["season", "week", "game"], ascending=[False, False, True])
+        choices = {str(r.event_id): f"{int(r.season)} W{int(r.week)} · {r.game}" for r in g.itertuples(index=False)}
+        current = str(input.shelf_game() or "")
+        selected = current if current in choices else (next(iter(choices)) if choices else "")
+        ui.update_select("shelf_game", choices=choices, selected=selected)
+
+    @render.text
+    def shelf_game_status():
+        d = _shelf_result()
+        key = str(input.shelf_game() or "")
+        if d.empty or not key:
+            return "Price the archive, then choose a historical game."
+        z = d[d["event_id"].astype(str).eq(key)]
+        if z.empty:
+            return "No offers found for this game."
+        r = z.iloc[0]
+        priceable = int(pd.to_numeric(z["model_prob"], errors="coerce").notna().sum())
+        return f"{r['game']} | cohort home margin {float(r['cohort_home_margin']):+.2f} | market home margin {float(r['market_home_margin']):+.2f} | {priceable} priced ML/spread/team-total offers"
+
+    @render.data_frame
+    def shelf_game_table():
+        d = _shelf_result().copy()
+        key = str(input.shelf_game() or "")
+        if d.empty or not key:
+            return render.DataGrid(pd.DataFrame())
+        z = d[d["event_id"].astype(str).eq(key) & d["family"].isin(["ML", "Spread", "Team Total"])].copy()
+        if z.empty:
+            return render.DataGrid(pd.DataFrame())
+        def bet_label(r):
+            if r.family == "ML": return f"{r.outcome_name} ML"
+            if r.family == "Spread": return f"{r.outcome_name} {r.point:+g}" if pd.notna(r.point) else str(r.outcome_name)
+            return f"{r.outcome_description} {r.outcome_name} {r.point:g}" if pd.notna(r.point) else f"{r.outcome_description} {r.outcome_name}"
+        z["Bet"] = [bet_label(r) for r in z.itertuples(index=False)]
+        z["Model P %"] = (100 * pd.to_numeric(z["model_prob"], errors="coerce")).round(1)
+        z["Book implied %"] = (100 * pd.to_numeric(z["implied_prob"], errors="coerce")).round(1)
+        z["EV %"] = (100 * pd.to_numeric(z["ev"], errors="coerce")).round(1)
+        z["Price"] = pd.to_numeric(z["price_american"], errors="coerce").round().astype("Int64")
+        z = z.sort_values(["family", "EV %"], ascending=[True, False], na_position="last")
+        out = z.rename(columns={"family":"Market", "book":"Book", "grade":"Grade"})
+        return render.DataGrid(out[["Market", "Bet", "Book", "Price", "Model P %", "Book implied %", "EV %", "Grade"]], filters=True, height="620px")
 
     @render.data_frame
     def market_shelf_backtest_table():
