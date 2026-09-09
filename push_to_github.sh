@@ -111,7 +111,7 @@ else:
     print("CFB Picker mirror metadata not present; current boards will use PredictionTracker only.")
 PYMIRROR
 
-echo "Preflight: verifying v3.6.5 cohort + bundled market shelf + retained research backend..."
+echo "Preflight: verifying v3.6.6 cohort + bundled market shelf + retained research backend..."
 python - <<'PYVERIFY'
 from pathlib import Path
 p = Path("strategy_lab/app.py")
@@ -153,6 +153,7 @@ production_ui_required = [
     'ui.card_header("Custom manual cohort · edit directly")',
     'ui.card_header("Assisted cohort · quality screen + correlation collapse")',
     'ui.card_header("Historical bets · exact audit for active cohort")',
+    'ui.card_header("Historical performance · exact META bets")',
     'ui.card_header("Game explorer · model-by-model distribution")',
     'ui.card_header("Odds API archive browser")',
     'ui.card_header("Historical sportsbook opportunities")',
@@ -170,7 +171,7 @@ ui_stale = [x for x in production_ui_forbidden if x in s]
 if ui_missing or ui_stale:
     raise SystemExit("REFUSING TO PUSH: production UI cleanup mismatch: " + repr({"missing": ui_missing, "still_visible": ui_stale}))
 
-# v3.6.5: the paid Odds API archive must travel with the website, but GitHub
+# v3.6.6: the paid Odds API archive must travel with the website, but GitHub
 # rejects ordinary Git blobs >=100 MB. The builder therefore emits gzip.
 odds_gz = Path("data/odds/ncaaf_rich_quotes.csv.gz")
 odds_csv = Path("data/odds/ncaaf_rich_quotes.csv")
@@ -178,7 +179,7 @@ if not odds_gz.is_file():
     if odds_csv.is_file() and odds_csv.stat().st_size >= 95 * 1024 * 1024:
         raise SystemExit(
             "REFUSING TO PUSH: uncompressed Odds API archive exceeds the safe GitHub file limit. "
-            "Rebuild with v3.6.5 so data/odds/ncaaf_rich_quotes.csv.gz is created."
+            "Rebuild with v3.6.6 so data/odds/ncaaf_rich_quotes.csv.gz is created."
         )
     raise SystemExit("REFUSING TO PUSH: bundled data/odds/ncaaf_rich_quotes.csv.gz is missing.")
 if odds_gz.stat().st_size >= 95 * 1024 * 1024:
@@ -312,12 +313,12 @@ for token in ["include_cfbpicker=True", "refresh_cfbpicker=False", "current_cfbp
 cfb_refresh_helper = Path("refresh_cfbpicker_local_and_push.sh").read_text(encoding="utf-8")
 if "refresh_predictiontracker_mirror.py" not in cfb_refresh_helper:
     raise SystemExit("REFUSING TO PUSH: CFB Picker refresh does not refresh PredictionTracker first")
-print("Verified: v3.6.5 exact Patrick Core + manual/assisted cohort + game explorer + bundled ML/spread/team-total market shelf | compressed paid Odds API archive | CFB Picker PT-authoritative live slate | legacy research backend retained")
+print("Verified: v3.6.6 exact Patrick Core + manual/assisted cohort + game explorer + bundled ML/spread/team-total market shelf | compressed paid Odds API archive | CFB Picker PT-authoritative live slate | legacy research backend retained")
 PYVERIFY
 
 git add .
 if ! git diff --cached --quiet; then
-  git commit -m "Deploy NCAAF Consensus Lab v3.6.5"
+  git commit -m "Deploy NCAAF Consensus Lab v3.6.6"
 else
   echo "No new changes to commit."
 fi
