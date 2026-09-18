@@ -138,10 +138,10 @@ PATRICK_FINALISTS = 60
 # so multi-million subset spaces can be explored deliberately.
 EXACT_SEARCH_DEFAULT_MAX = 10_000_000
 EXACT_SEARCH_HARD_MAX = 50_000_000
-# Patrick v3.6.7 recipe: use a broad ATS-ranked, high-volume discovery screen,
-# then collapse near-duplicate model edges before searching combinations. This
-# keeps the candidate set interpretable and prevents the exact search from
-# rewarding multiple versions of effectively the same signal.
+# Patrick v3.6.8 recipe: use a broad ATS-ranked, high-volume discovery screen
+# for the first exact search. Only after that broad search do we identify a
+# smaller compatibility core from top-combination participation and discovery-
+# only edge correlation; the untouched holdout is revealed afterward.
 PATRICK_POOL_N = 43
 PATRICK_POOL_METRIC = "ats"
 PATRICK_POOL_MIN_BETS = 60
@@ -174,7 +174,7 @@ else:
 
 DEFAULT_MANUAL_IDS = DEFAULT_AUTO_IDS[: min(10, len(DEFAULT_AUTO_IDS))]
 
-# v3.6.7: the production workflow is centered on a fixed, user-controlled
+# v3.6.8: the production workflow is centered on a fixed, user-controlled
 # cohort.  The legacy 2025 hand-curated model list is resolved onto the current
 # canonical registry when possible; otherwise a small quality-ranked fallback is
 # used. Automatic selection is deliberately constrained to a quality screen plus
@@ -561,7 +561,7 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Recommended weekly strategy"),
                 ui.p(
-                    "Broad ATS screen → diverse core → exact combinations. Rank up to 43 currently posting models by discovery ATS (minimum 60 discovery bets/model), greedily retain about 15 non-redundant models using discovery-only |model-minus-market edge correlation| < 0.90, hold out the latest 15 usable completed weeks, search 3–6 model sets at a 0.75-SD anchor with at least 250 discovery bets, rank combinations by discovery ATS, freeze the top 60, then collapse near-duplicate finalist combinations at Jaccard ≥ 0.50 for the diversified META.",
+                    "Broad ATS screen → exhaustive discovery search → post-search model core → confirmation search → untouched holdout. Rank up to 43 currently posting models by discovery ATS (minimum 60 discovery bets/model), search every 3–6 model set in that broad eligible pool, use the best discovery combinations to identify about 15 models that repeatedly work well together while removing obvious discovery-only edge-correlation redundancy, rerun the exact 3–6 search inside that smaller core, freeze the top 60 confirmation finalists, and only then evaluate them on the latest 15 usable completed weeks. The holdout never chooses the core or the finalists.",
                     class_="muted",
                 ),
                 ui.input_action_button(
@@ -620,7 +620,7 @@ app_ui = ui.page_fluid(
                 ),
                 ui.layout_columns(
                     ui.input_numeric(
-                        "auto_diverse_n", "Diverse candidates retained", PATRICK_DIVERSE_N,
+                        "auto_diverse_n", "Post-search core target", PATRICK_DIVERSE_N,
                         min=4, max=30, step=1,
                     ),
                     ui.input_select(
@@ -645,7 +645,7 @@ app_ui = ui.page_fluid(
                     ui.input_numeric("auto_top_n", "Finalists retained", PATRICK_FINALISTS, min=5, max=100, step=5),
                     ui.div(
                         ui.p(
-                            "The diversity screen uses discovery data only. Holdout performance never chooses which individual models survive.",
+                            "The broad exact search runs first. The ~15-model core is then learned from discovery-only combination participation plus discovery-only edge-correlation redundancy. Holdout performance never chooses the core.",
                             class_="muted mt-4",
                         )
                     ),
@@ -663,12 +663,21 @@ app_ui = ui.page_fluid(
                 ui.output_text("auto_status"),
             ),
             ui.card(
-                ui.card_header("Candidate screen · ATS + diversity"),
+                ui.card_header("Broad candidate screen · ATS + volume"),
                 ui.p(
-                    "The initial pool is ranked on discovery ATS after the minimum-bet gate. The checkmark marks the smaller diverse core that actually enters the exact combination search; blocked models are retained in the table so you can see which higher-ranked signal they duplicated and the discovery edge correlation that triggered the block.",
+                    "This is the full pool that enters the first exact search. Models are ranked by discovery ATS after the minimum-bet gate; no correlation pruning happens before the broad combination search.",
                     class_="muted",
                 ),
                 ui.output_data_frame("auto_candidate_table"),
+            ),
+            ui.card(
+                ui.card_header("Post-search core · models that work together"),
+                ui.p(
+                    "After the broad exact search, models are ranked by how often they appear in the strongest discovery combinations. A discovery-only edge-correlation screen then removes obvious redundancy before the smaller confirmation search. Holdout results are not used here.",
+                    class_="muted",
+                ),
+                ui.output_text("auto_two_stage_summary"),
+                ui.output_data_frame("auto_post_core_table"),
             ),
             ui.card(
                 ui.card_header("Promising combinations"),
@@ -1225,7 +1234,7 @@ def server(input, output, session):
         return render.DataGrid(d, filters=True, height="650px")
 
     # ------------------------------------------------------------------
-    # v3.6.7 production cohort
+    # v3.6.8 production cohort
     # ------------------------------------------------------------------
     def _active_cohort_ids() -> list[str]:
         return [str(x) for x in (cohort.get() or []) if str(x) in MODEL_NAME_MAP]
@@ -1994,7 +2003,7 @@ def server(input, output, session):
         return render.DataGrid(matrix, filters=True, height="650px")
 
     # ------------------------------------------------------------------
-    # v3.6.7 bundled historical sportsbook market shelf
+    # v3.6.8 bundled historical sportsbook market shelf
     # ------------------------------------------------------------------
     @ui.bind_task_button(button_id="price_market_shelf")
     @reactive.extended_task
@@ -2012,7 +2021,7 @@ def server(input, output, session):
     def start_shelf_task():
         if ODDS_QUOTES.empty:
             ui.notification_show(
-                "The bundled Odds API archive is missing. Rebuild v3.6.7 from the Mac source project so data/odds/ncaaf_rich_quotes.csv.gz is included.",
+                "The bundled Odds API archive is missing. Rebuild v3.6.8 from the Mac source project so data/odds/ncaaf_rich_quotes.csv.gz is included.",
                 type="error", duration=10,
             )
             return
@@ -2055,7 +2064,7 @@ def server(input, output, session):
     @render.text
     def market_shelf_status():
         if ODDS_QUOTES.empty:
-            return "Odds API archive not present in this deployment. v3.6.7 production builds are expected to bundle it under data/odds/."
+            return "Odds API archive not present in this deployment. v3.6.8 production builds are expected to bundle it under data/odds/."
         st = shelf_task.status()
         if st == "initial":
             return "Archive loaded. Click ‘Price archive for active cohort’ to evaluate the historical shelf using the currently selected cohort."
@@ -2564,8 +2573,8 @@ def server(input, output, session):
             pool_n=int(input.auto_pool_n()),
             pool_metric=str(input.auto_pool_metric()),
             pool_min_bets=int(input.auto_pool_min_bets()),
-            diverse_n=int(input.auto_diverse_n()),
-            corr_ceiling=float(input.auto_corr_ceiling()),
+            diverse_n=None,
+            corr_ceiling=None,
         )
         return ids, hist, {
             "live_ready": True, "live_count": len(live_ids), "message": live_message,
@@ -2590,7 +2599,7 @@ def server(input, output, session):
         holdout = "none" if not val_periods else f"{fmt_period(val_periods[0])}–{fmt_period(val_periods[-1])}"
         if not availability_meta.get("live_ready", False):
             return availability_meta.get("message", "Refresh Page 2 before screening.")
-        source = (f"automatic top-{int(input.auto_pool_n())} → diverse {int(input.auto_diverse_n())}" if str(input.auto_pool_mode()) == "top" else "manual")
+        source = (f"automatic top-{int(input.auto_pool_n())} broad search" if str(input.auto_pool_mode()) == "top" else "manual broad search")
         extra = ""
         if str(input.auto_pool_mode()) == "manual" and availability_meta.get("excluded", 0):
             extra = f" · {availability_meta['excluded']} manually requested models excluded because they are not posting this week"
@@ -2617,10 +2626,8 @@ def server(input, output, session):
             d["Pool rank"] = pd.to_numeric(d["pool_rank"], errors="coerce").astype("Int64")
         else:
             d["Pool rank"] = np.arange(1, len(d) + 1)
-        if "diversity_selected" in d.columns:
-            d["Diverse core"] = np.where(d["diversity_selected"].fillna(False), "✓", "")
-            d["Blocking model"] = d.get("blocked_by", "").astype(str).map(lambda x: MODEL_NAME_MAP.get(x, x) if x else "")
-            d["Blocking |r|"] = pd.to_numeric(d.get("blocking_corr"), errors="coerce").abs().round(3)
+        # v3.6.8: no pre-search diversity pruning. Every displayed model enters
+        # the broad exact search; the smaller compatibility core is learned afterward.
         rename = {
             "model_name": "Model", "bets": "Discovery bets",
             "ats_pct": "ATS %", "roi": "ROI %",
@@ -2628,7 +2635,7 @@ def server(input, output, session):
             "seasons": "Seasons represented",
         }
         cols = [
-            c for c in ["Pool rank", "Diverse core", "model_name", "bets", "ats_pct", "roi", "wilson_low", "mae", "Blocking model", "Blocking |r|", "seasons"]
+            c for c in ["Pool rank", "model_name", "bets", "ats_pct", "roi", "wilson_low", "mae", "seasons"]
             if c in d.columns
         ]
         return render.DataGrid(d[cols].rename(columns=rename), filters=False, height="360px")
@@ -2645,14 +2652,85 @@ def server(input, output, session):
         total = combination_count(len(ids), lo, hi)
         cap = max(1_000_000, min(EXACT_SEARCH_HARD_MAX, int(float(input.auto_max_combinations_m()) * 1_000_000)))
         status = "within cap" if total <= cap else f"ABOVE {cap:,} cap"
+        core_n = min(max(1, int(input.auto_diverse_n())), len(ids))
+        core_total = combination_count(core_n, lo, min(hi, core_n)) if core_n >= lo else 0
         return (
-            f"{total:,} exact combinations from {len(ids)} resolved candidates · "
-            f"safety cap {cap:,} ({status})"
+            f"Stage 1: {total:,} broad exact combinations from {len(ids)} resolved candidates · "
+            f"Stage 2: up to {core_total:,} confirmation combinations from a post-search core target of {core_n} · "
+            f"broad-search safety cap {cap:,} ({status})"
         )
+
+    def post_search_core_from_broad_result(
+        broad_result: dict,
+        search_periods: tuple[tuple[int, int], ...],
+        *,
+        target_n: int,
+        corr_ceiling: float,
+    ) -> tuple[list[str], pd.DataFrame]:
+        """Learn a small model core from broad discovery-combination behavior only."""
+        cand = list(map(str, broad_result.get("candidate_ids", [])))
+        rows = broad_result.get("results", pd.DataFrame())
+        if not cand or rows is None or rows.empty:
+            return cand[: max(0, int(target_n))], pd.DataFrame()
+        q = rows.head(min(500, len(rows))).copy()
+        model_rows = []
+        for pos, r in q.reset_index(drop=True).iterrows():
+            combo = r.get("_combo_tuple", ())
+            rank = int(r.get("search_rank", pos + 1) or (pos + 1))
+            ats = pd.to_numeric(pd.Series([r.get("ats_pct")]), errors="coerce").iloc[0]
+            roi = pd.to_numeric(pd.Series([r.get("roi")]), errors="coerce").iloc[0]
+            for j in combo:
+                if 0 <= int(j) < len(cand):
+                    model_rows.append({
+                        "canonical_model_id": cand[int(j)],
+                        "combo_rank": rank,
+                        "combo_ats": ats,
+                        "combo_roi": roi,
+                    })
+        md = pd.DataFrame(model_rows)
+        if md.empty:
+            return cand[: max(0, int(target_n))], pd.DataFrame()
+        freq = (
+            md.groupby("canonical_model_id", as_index=False)
+            .agg(
+                top500_combinations=("combo_rank", "size"),
+                best_combo_rank=("combo_rank", "min"),
+                mean_combo_rank=("combo_rank", "mean"),
+                mean_combo_ats=("combo_ats", "mean"),
+                mean_combo_roi=("combo_roi", "mean"),
+            )
+        )
+        freq["top500_frequency"] = freq["top500_combinations"] / float(len(q))
+        freq["model_name"] = freq["canonical_model_id"].map(lambda x: MODEL_NAME_MAP.get(str(x), str(x)))
+        freq = freq.sort_values(
+            ["top500_combinations", "best_combo_rank", "mean_combo_ats"],
+            ascending=[False, True, False],
+            na_position="last",
+        ).reset_index(drop=True)
+        freq.insert(0, "pool_rank", np.arange(1, len(freq) + 1))
+
+        discovery_data = period_subset(search_periods)
+        core_ids, audit = diversify_ranked_pool(
+            discovery_data,
+            freq[["pool_rank", "canonical_model_id", "model_name"]],
+            max_models=max(1, int(target_n)),
+            correlation_ceiling=float(corr_ceiling),
+        )
+        if audit is None or audit.empty:
+            return core_ids, freq
+        audit = audit.merge(
+            freq.drop(columns=["pool_rank", "model_name"]),
+            on="canonical_model_id", how="left",
+        )
+        return core_ids, audit
 
     @ui.bind_task_button(button_id="run_auto")
     @reactive.extended_task
-    async def auto_task(ids: list[str], config_values: dict, robustness_periods: tuple[tuple[int, int], ...]):
+    async def auto_task(
+        ids: list[str], config_values: dict,
+        robustness_periods: tuple[tuple[int, int], ...],
+        post_core_n: int, post_core_corr: float,
+    ):
         cfg = CombinationSearchConfig(**config_values)
 
         def compute():
@@ -2669,13 +2747,54 @@ def server(input, output, session):
                     print(f"[Strategy Lab] {done:,}/{total:,} ({pct:.1f}%) · {label}", flush=True)
                     last_console[0] = now
 
-            result = brute_force_combination_search(
-                DATA, ids, MODEL_NAME_MAP, cfg, progress_callback=progress
+            # Stage 1: broad discovery-only exact search.  Validation is intentionally
+            # disabled here so the holdout cannot affect post-search core selection.
+            broad_values = dict(config_values)
+            broad_values["validation_seasons"] = ()
+            broad_values["validation_periods"] = ()
+            broad_cfg = CombinationSearchConfig(**broad_values)
+            broad = brute_force_combination_search(
+                DATA, ids, MODEL_NAME_MAP, broad_cfg, progress_callback=progress
             )
+
+            core_ids, core_audit = post_search_core_from_broad_result(
+                broad, tuple(config_values.get("search_periods", ())),
+                target_n=int(post_core_n), corr_ceiling=float(post_core_corr),
+            )
+            if len(core_ids) < int(config_values["min_size"]):
+                raise ValueError(
+                    f"Post-search core retained only {len(core_ids)} models; "
+                    f"at least {int(config_values['min_size'])} are required."
+                )
+
+            core_hi = min(int(config_values["max_size"]), len(core_ids))
+            core_total = combination_count(len(core_ids), int(config_values["min_size"]), core_hi)
+            set_auto_progress(
+                done=0, total=core_total,
+                label=f"Broad search complete ({int(broad.get('evaluated_combinations', 0)):,} subsets); confirming {len(core_ids)}-model post-search core…",
+                phase="Post-search core confirmation", updated=time.monotonic(),
+            )
+
+            core_values = dict(config_values)
+            core_values["max_size"] = core_hi
+            core_cfg = CombinationSearchConfig(**core_values)
+            result = brute_force_combination_search(
+                DATA, core_ids, MODEL_NAME_MAP, core_cfg, progress_callback=progress
+            )
+            result["broad_candidate_ids"] = list(ids)
+            result["broad_total_combinations"] = int(broad.get("total_combinations", 0))
+            result["broad_evaluated_combinations"] = int(broad.get("evaluated_combinations", 0))
+            result["broad_eligible_combinations"] = int(broad.get("eligible_combinations", 0))
+            result["post_search_core_ids"] = list(core_ids)
+            result["post_search_core_audit"] = core_audit
+            result["core_total_combinations"] = int(result.get("total_combinations", 0))
+            result["core_evaluated_combinations"] = int(result.get("evaluated_combinations", 0))
+            result["total_exact_evaluated"] = int(broad.get("evaluated_combinations", 0)) + int(result.get("evaluated_combinations", 0))
+
             set_auto_progress(
                 done=int(result.get("evaluated_combinations", 0)),
                 total=int(result.get("total_combinations", 0)),
-                label="Exact search complete; stress-testing frozen finalists across k values…",
+                label="Core confirmation complete; stress-testing frozen finalists across k values…",
                 phase="Finalist holdout robustness",
                 updated=time.monotonic(),
             )
@@ -2772,7 +2891,7 @@ def server(input, output, session):
                 f"Launching an exact {total:,}-combination search. Keep this session open; progress and ETA will update below.",
                 type="message", duration=10,
             )
-        auto_task(ids, values, val_periods if val_periods else search_periods)
+        auto_task(ids, values, val_periods if val_periods else search_periods, int(input.auto_diverse_n()), float(input.auto_corr_ceiling()))
 
     def auto_result():
         if auto_task.status() != "success":
@@ -2819,10 +2938,17 @@ def server(input, output, session):
             )
         if s == "success":
             r = auto_result()
+            broad_n = int(r.get("broad_evaluated_combinations", 0))
+            broad_ok = int(r.get("broad_eligible_combinations", 0))
+            core_n = len(r.get("post_search_core_ids", []) or [])
+            core_eval = int(r.get("core_evaluated_combinations", r.get("evaluated_combinations", 0)))
+            core_ok = int(r.get("eligible_combinations", 0))
+            total_eval = int(r.get("total_exact_evaluated", broad_n + core_eval))
             return (
-                f"Search complete: {int(r.get('evaluated_combinations', 0)):,} evaluated; "
-                f"{int(r.get('eligible_combinations', 0)):,} met the discovery confidence gates. "
-                "Finalists were then evaluated on the held-out recent weeks."
+                f"Broad search: {broad_n:,} evaluated; {broad_ok:,} met discovery confidence gates. "
+                f"Discovery-only post-search core: {core_n} models. "
+                f"Core confirmation: {core_eval:,} evaluated; {core_ok:,} eligible. "
+                f"Total exact subsets evaluated: {total_eval:,}. Finalists were then evaluated on the untouched holdout."
             )
         if s == "error":
             return "Automatic combination search failed."
@@ -2866,8 +2992,8 @@ def server(input, output, session):
             pool_n=PATRICK_POOL_N,
             pool_metric=PATRICK_POOL_METRIC,
             pool_min_bets=PATRICK_POOL_MIN_BETS,
-            diverse_n=PATRICK_DIVERSE_N,
-            corr_ceiling=PATRICK_MODEL_CORR_CEILING,
+            diverse_n=None,
+            corr_ceiling=None,
         )
         search_periods = provisional_search
         val_periods = periods[-PATRICK_HOLDOUT_WEEKS:]
@@ -2894,8 +3020,8 @@ def server(input, output, session):
                 pool_n=PATRICK_POOL_N,
                 pool_metric=PATRICK_POOL_METRIC,
                 pool_min_bets=PATRICK_POOL_MIN_BETS,
-                diverse_n=PATRICK_DIVERSE_N,
-                corr_ceiling=PATRICK_MODEL_CORR_CEILING,
+                diverse_n=None,
+                corr_ceiling=None,
             )
         if len(ids) < PATRICK_MIN_SIZE:
             ui.notification_show(
@@ -2951,13 +3077,13 @@ def server(input, output, session):
         now = time.monotonic()
         set_auto_progress(
             done=0, total=total,
-            label=f"Patrick recipe: {len(ids)} diverse live candidates; preparing discovery matrix…",
+            label=f"Patrick recipe: {len(ids)} broad live candidates; preparing exhaustive discovery search…",
             phase="Preparing Patrick's recommended search", started=now, updated=now,
         )
         holdout_label = f"{val_periods[0][0]} W{val_periods[0][1]}–{val_periods[-1][0]} W{val_periods[-1][1]}" if val_periods else "none"
         patrick_state.set({
             "phase": "searching",
-            "message": f"Searching {total:,} exact combinations from {len(ids)} diverse current-week candidates · holdout {holdout_label}…",
+            "message": f"Stage 1: searching {total:,} exact combinations from {len(ids)} broad current-week candidates · post-search core target {PATRICK_DIVERSE_N} · untouched holdout {holdout_label}…",
             # Persist the *usable* chronology chosen above. v3.5.23 accidentally
             # recomputed the last fifteen raw weeks after the search finished, which
             # could replace the actual held-out weeks with sparse/no-data periods.
@@ -2965,11 +3091,11 @@ def server(input, output, session):
             "holdout_periods": tuple(val_periods),
         })
         print(
-            f"[Patrick recipe] starting exact search: {len(ids)} diverse candidates, sizes "
+            f"[Patrick recipe] starting broad exact search: {len(ids)} candidates, sizes "
             f"{PATRICK_MIN_SIZE}–{hi}, {total:,} combinations, k={PATRICK_K:.2f}",
             flush=True,
         )
-        auto_task(ids, values, val_periods)
+        auto_task(ids, values, val_periods, PATRICK_DIVERSE_N, PATRICK_MODEL_CORR_CEILING)
 
     @render.ui
     def patrick_progress_bar():
@@ -3019,6 +3145,40 @@ def server(input, output, session):
             ]
             d = d.merge(robust[keep], on="search_rank", how="left")
         return d
+
+    @render.text
+    def auto_two_stage_summary():
+        r = auto_result()
+        if not r:
+            return "Run a search to learn the post-search core from the broad discovery combinations."
+        broad = int(r.get("broad_evaluated_combinations", 0))
+        core = int(r.get("core_evaluated_combinations", r.get("evaluated_combinations", 0)))
+        ids = list(r.get("post_search_core_ids", []) or [])
+        return (
+            f"{broad:,} broad discovery combinations were evaluated before selecting this {len(ids)}-model core. "
+            f"The core then received a separate {core:,}-combination confirmation search before holdout evaluation."
+        )
+
+    @render.data_frame
+    def auto_post_core_table():
+        r = auto_result()
+        if not r:
+            return render.DataGrid(pd.DataFrame())
+        d = r.get("post_search_core_audit", pd.DataFrame())
+        if d is None or d.empty:
+            return render.DataGrid(pd.DataFrame())
+        d = d.copy()
+        d["Core"] = np.where(d.get("selected", False), "✓", "")
+        d["Model"] = d.get("model_name", d.get("canonical_model_id", "")).astype(str)
+        d["Top-500 combos"] = pd.to_numeric(d.get("top500_combinations"), errors="coerce").astype("Int64")
+        d["Top-500 frequency"] = (100 * pd.to_numeric(d.get("top500_frequency"), errors="coerce")).round(1)
+        d["Best combo rank"] = pd.to_numeric(d.get("best_combo_rank"), errors="coerce").astype("Int64")
+        d["Mean combo ATS %"] = (100 * pd.to_numeric(d.get("mean_combo_ats"), errors="coerce")).round(1)
+        d["Blocked by"] = d.get("blocked_by", "").astype(str).map(lambda x: MODEL_NAME_MAP.get(x, x) if x else "")
+        d["Blocking |r|"] = pd.to_numeric(d.get("blocking_corr"), errors="coerce").abs().round(3)
+        cols = ["Core", "Model", "Top-500 combos", "Top-500 frequency", "Best combo rank", "Mean combo ATS %", "Blocked by", "Blocking |r|", "reason"]
+        cols = [c for c in cols if c in d.columns]
+        return render.DataGrid(d[cols].rename(columns={"reason": "Reason"}), filters=False, height="420px")
 
     @render.data_frame
     def auto_top_table():
