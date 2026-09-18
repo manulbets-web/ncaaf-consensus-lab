@@ -15,7 +15,7 @@ from shiny import App, reactive, render, ui
 from engine import load_strategy_data, selection_diagnostics
 from forecast_plots import build_forecast_plot
 from committee import (
-    analyze_finalist_portfolio, meta_spread_bucket_label, historical_meta_bets,
+    analyze_finalist_portfolio, meta_spread_bucket_label, META_SPREAD_BUCKETS, historical_meta_bets,
     load_predictiontracker_line_history, individual_model_line_reference_performance,
     consortium_line_reference_performance,
 )
@@ -43,7 +43,7 @@ from market_signal import (
 )
 from cohort_market import (
     model_quality_table, assisted_cohort, resolve_legacy_cohort, legacy_cohort_mapping,
-    correlation_clusters, cohort_season_diagnostics, cohort_leave_one_out,
+    correlation_clusters, cohort_season_diagnostics, cohort_leave_one_out, diversify_ranked_pool,
     historical_cohort_bets, load_pt_scores, current_cohort_summary, load_odds_archive, odds_archive_coverage,
     price_historical_market_shelf, shelf_backtest_summary,
     select_best_expressions, best_expression_summary,
@@ -127,22 +127,28 @@ DEFAULT_K = 0.75
 # One-click Page 4 recipe. Other screening gates intentionally use the
 # established automatic-search defaults so the recommendation changes only
 # the settings Patrick explicitly standardized.
-PATRICK_HOLDOUT_WEEKS = 6
+PATRICK_HOLDOUT_WEEKS = 15
 PATRICK_MIN_SIZE = 3
 PATRICK_MAX_SIZE = 6
 PATRICK_K = 0.75
-PATRICK_FINALISTS = 50
+PATRICK_FINALISTS = 60
 
 # Exact streaming search remains memory-bounded because only each batch and a
 # bounded leaderboard are retained. The UI exposes a user-controlled safety cap
 # so multi-million subset spaces can be explored deliberately.
 EXACT_SEARCH_DEFAULT_MAX = 10_000_000
 EXACT_SEARCH_HARD_MAX = 50_000_000
-PATRICK_POOL_N = 35
-PATRICK_POOL_METRIC = "wilson"
-PATRICK_POOL_MIN_BETS = 25
+# Patrick v3.6.7 recipe: use a broad ATS-ranked, high-volume discovery screen,
+# then collapse near-duplicate model edges before searching combinations. This
+# keeps the candidate set interpretable and prevents the exact search from
+# rewarding multiple versions of effectively the same signal.
+PATRICK_POOL_N = 43
+PATRICK_POOL_METRIC = "ats"
+PATRICK_POOL_MIN_BETS = 60
+PATRICK_DIVERSE_N = 15
+PATRICK_MODEL_CORR_CEILING = 0.90
 PATRICK_MIN_AVAILABLE = 3
-PATRICK_MIN_SEARCH_BETS = 50
+PATRICK_MIN_SEARCH_BETS = 250
 PATRICK_RANK_METRIC = "ats"
 PATRICK_OVERLAP_THRESHOLD = 0.50
 PATRICK_META_MIN_COMMUNITIES = 2
@@ -168,7 +174,7 @@ else:
 
 DEFAULT_MANUAL_IDS = DEFAULT_AUTO_IDS[: min(10, len(DEFAULT_AUTO_IDS))]
 
-# v3.6.6: the production workflow is centered on a fixed, user-controlled
+# v3.6.7: the production workflow is centered on a fixed, user-controlled
 # cohort.  The legacy 2025 hand-curated model list is resolved onto the current
 # canonical registry when possible; otherwise a small quality-ranked fallback is
 # used. Automatic selection is deliberately constrained to a quality screen plus
@@ -555,7 +561,7 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Recommended weekly strategy"),
                 ui.p(
-                    "Top 35 currently posting models by discovery Wilson lower bound (minimum 25 bets/model); latest 6 usable completed weeks held out; set sizes 3–6; 0.75-SD search anchor; combinations ranked by discovery ATS; top 50 frozen; finalist k tuned on discovery only; near-duplicates collapsed at Jaccard ≥ 0.50 for the diversified META.",
+                    "Broad ATS screen → diverse core → exact combinations. Rank up to 43 currently posting models by discovery ATS (minimum 60 discovery bets/model), greedily retain about 15 non-redundant models using discovery-only |model-minus-market edge correlation| < 0.90, hold out the latest 15 usable completed weeks, search 3–6 model sets at a 0.75-SD anchor with at least 250 discovery bets, rank combinations by discovery ATS, freeze the top 60, then collapse near-duplicate finalist combinations at Jaccard ≥ 0.50 for the diversified META.",
                     class_="muted",
                 ),
                 ui.input_action_button(
@@ -577,13 +583,13 @@ app_ui = ui.page_fluid(
                     inline=True,
                 ),
                 ui.layout_columns(
-                    ui.input_numeric("auto_pool_n", "Top N", 20, min=4, max=50, step=1),
+                    ui.input_numeric("auto_pool_n", "Initial Top N", PATRICK_POOL_N, min=4, max=60, step=1),
                     ui.input_select(
                         "auto_pool_metric", "Rank individual models by",
                         choices={"wilson": "Wilson lower bound", "ats": "ATS %", "roi": "ROI", "mae": "Forecast MAE (lower is better)"},
-                        selected="wilson",
+                        selected=PATRICK_POOL_METRIC,
                     ),
-                    ui.input_numeric("auto_pool_min_bets", "Min discovery bets/model", 25, min=0, max=500, step=5),
+                    ui.input_numeric("auto_pool_min_bets", "Min discovery bets/model", PATRICK_POOL_MIN_BETS, min=0, max=500, step=5),
                     col_widths=(3, 5, 4),
                 ),
                 ui.input_selectize(
@@ -601,29 +607,47 @@ app_ui = ui.page_fluid(
                     inline=True,
                 ),
                 ui.layout_columns(
-                    ui.input_numeric("auto_holdout_weeks", "Holdout weeks", 6, min=0, max=20, step=1),
-                    ui.input_numeric("auto_min_size", "Min set size", 4, min=2, max=20, step=1),
-                    ui.input_numeric("auto_max_size", "Max set size", 10, min=2, max=20, step=1),
+                    ui.input_numeric("auto_holdout_weeks", "Holdout weeks", PATRICK_HOLDOUT_WEEKS, min=0, max=30, step=1),
+                    ui.input_numeric("auto_min_size", "Min set size", PATRICK_MIN_SIZE, min=2, max=20, step=1),
+                    ui.input_numeric("auto_max_size", "Max set size", PATRICK_MAX_SIZE, min=2, max=20, step=1),
                     col_widths=(4, 4, 4),
                 ),
                 ui.layout_columns(
-                    ui.input_select("auto_k", "Search threshold", choices=K_CHOICES, selected=f"{DEFAULT_K:.2f}"),
-                    ui.input_numeric("auto_min_available", "Min available", 4, min=2, max=20, step=1),
-                    ui.input_numeric("auto_min_bets", "Minimum discovery bets", 50, min=10, max=1000, step=10),
+                    ui.input_select("auto_k", "Search threshold", choices=K_CHOICES, selected=f"{PATRICK_K:.2f}"),
+                    ui.input_numeric("auto_min_available", "Min available", PATRICK_MIN_AVAILABLE, min=2, max=20, step=1),
+                    ui.input_numeric("auto_min_bets", "Minimum discovery bets", PATRICK_MIN_SEARCH_BETS, min=10, max=1000, step=10),
+                    col_widths=(4, 4, 4),
+                ),
+                ui.layout_columns(
+                    ui.input_numeric(
+                        "auto_diverse_n", "Diverse candidates retained", PATRICK_DIVERSE_N,
+                        min=4, max=30, step=1,
+                    ),
+                    ui.input_select(
+                        "auto_corr_ceiling", "Max |discovery edge correlation|",
+                        choices={"0.80":"0.80", "0.85":"0.85", "0.90":"0.90", "0.95":"0.95", "0.99":"0.99"},
+                        selected=f"{PATRICK_MODEL_CORR_CEILING:.2f}",
+                    ),
+                    ui.input_numeric(
+                        "auto_max_combinations_m",
+                        "Exact-search cap (millions)",
+                        EXACT_SEARCH_DEFAULT_MAX // 1_000_000,
+                        min=1, max=EXACT_SEARCH_HARD_MAX // 1_000_000, step=1,
+                    ),
                     col_widths=(4, 4, 4),
                 ),
                 ui.layout_columns(
                     ui.input_select(
                         "auto_rank_metric", "Rank combinations by",
                         choices={"ats": "ATS %", "wilson": "Wilson lower bound", "roi": "ROI"},
-                        selected="wilson",
+                        selected=PATRICK_RANK_METRIC,
                     ),
-                    ui.input_numeric("auto_top_n", "Finalists retained", 25, min=5, max=100, step=5),
-                    ui.input_numeric(
-                        "auto_max_combinations_m",
-                        "Exact-search cap (millions)",
-                        EXACT_SEARCH_DEFAULT_MAX // 1_000_000,
-                        min=1, max=EXACT_SEARCH_HARD_MAX // 1_000_000, step=1,
+                    ui.input_numeric("auto_top_n", "Finalists retained", PATRICK_FINALISTS, min=5, max=100, step=5),
+                    ui.div(
+                        ui.p(
+                            "The diversity screen uses discovery data only. Holdout performance never chooses which individual models survive.",
+                            class_="muted mt-4",
+                        )
                     ),
                     col_widths=(4, 4, 4),
                 ),
@@ -637,6 +661,14 @@ app_ui = ui.page_fluid(
                 ),
                 ui.output_ui("auto_progress_bar"),
                 ui.output_text("auto_status"),
+            ),
+            ui.card(
+                ui.card_header("Candidate screen · ATS + diversity"),
+                ui.p(
+                    "The initial pool is ranked on discovery ATS after the minimum-bet gate. The checkmark marks the smaller diverse core that actually enters the exact combination search; blocked models are retained in the table so you can see which higher-ranked signal they duplicated and the discovery edge correlation that triggered the block.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("auto_candidate_table"),
             ),
             ui.card(
                 ui.card_header("Promising combinations"),
@@ -809,7 +841,16 @@ app_ui = ui.page_fluid(
                         choices={"All":"Favorites + underdogs", "Favorite":"Favorites only", "Underdog":"Underdogs only", "Pick'em":"Pick'em only"},
                         selected="All",
                     ),
-                    col_widths=(4,4,4),
+                    ui.input_select(
+                        "meta_hist_spread_filter", "Market spread regime",
+                        choices={
+                            "All":"All spreads", "0–3.5":"0–3.5", "4–7.5":"4–7.5",
+                            "8–14.5":"8–14.5", "15–21.5":"15–21.5", "22–27.5":"22–27.5",
+                            "28–34.5":"28–34.5", "35+":"35+",
+                        },
+                        selected="All",
+                    ),
+                    col_widths=(3,3,3,3),
                 ),
                 ui.output_text("meta_hist_status"),
                 ui.layout_columns(
@@ -824,6 +865,20 @@ app_ui = ui.page_fluid(
                 ui.output_data_frame("meta_hist_summary_table"),
                 ui.download_button("download_meta_hist", "Download exact META bets CSV", class_="btn-outline-secondary mb-2"),
                 ui.output_data_frame("meta_hist_bets_table"),
+            ),
+            ui.card(
+                ui.card_header("Spread-regime diagnostics · blowout check"),
+                ui.p(
+                    "This is a diagnostic of the frozen META setup, not another optimization gate. Discovery and holdout are reported separately across absolute market-spread bins, with extra resolution above three touchdowns. Use it to see whether apparent edge degrades on blowout-like lines before deciding whether a future prospective restriction is justified.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("committee_meta_spread_table"),
+                ui.p(ui.strong("Current slate in historical spread context"), class_="mt-3 mb-1"),
+                ui.p(
+                    "Games are sorted from largest to smallest market spread. A 22+ flag is descriptive only; it does not suppress a recommendation.",
+                    class_="muted",
+                ),
+                ui.output_data_frame("committee_current_spread_context_table"),
             ),
             ui.card(
                 ui.card_header("Line shopping"),
@@ -1170,7 +1225,7 @@ def server(input, output, session):
         return render.DataGrid(d, filters=True, height="650px")
 
     # ------------------------------------------------------------------
-    # v3.6.6 production cohort
+    # v3.6.7 production cohort
     # ------------------------------------------------------------------
     def _active_cohort_ids() -> list[str]:
         return [str(x) for x in (cohort.get() or []) if str(x) in MODEL_NAME_MAP]
@@ -1939,7 +1994,7 @@ def server(input, output, session):
         return render.DataGrid(matrix, filters=True, height="650px")
 
     # ------------------------------------------------------------------
-    # v3.6.6 bundled historical sportsbook market shelf
+    # v3.6.7 bundled historical sportsbook market shelf
     # ------------------------------------------------------------------
     @ui.bind_task_button(button_id="price_market_shelf")
     @reactive.extended_task
@@ -1957,7 +2012,7 @@ def server(input, output, session):
     def start_shelf_task():
         if ODDS_QUOTES.empty:
             ui.notification_show(
-                "The bundled Odds API archive is missing. Rebuild v3.6.6 from the Mac source project so data/odds/ncaaf_rich_quotes.csv.gz is included.",
+                "The bundled Odds API archive is missing. Rebuild v3.6.7 from the Mac source project so data/odds/ncaaf_rich_quotes.csv.gz is included.",
                 type="error", duration=10,
             )
             return
@@ -2000,7 +2055,7 @@ def server(input, output, session):
     @render.text
     def market_shelf_status():
         if ODDS_QUOTES.empty:
-            return "Odds API archive not present in this deployment. v3.6.6 production builds are expected to bundle it under data/odds/."
+            return "Odds API archive not present in this deployment. v3.6.7 production builds are expected to bundle it under data/odds/."
         st = shelf_task.status()
         if st == "initial":
             return "Archive loaded. Click ‘Price archive for active cohort’ to evaluate the historical shelf using the currently selected cohort."
@@ -2444,8 +2499,14 @@ def server(input, output, session):
         pool_n: int,
         pool_metric: str,
         pool_min_bets: int,
+        diverse_n: int | None = None,
+        corr_ceiling: float | None = None,
     ):
-        """Rank only current-week posting models using discovery history."""
+        """Rank current-week posting models on discovery only, then optionally diversify.
+
+        Ranking, minimum-bet screening, and model-edge correlation are all computed
+        strictly inside ``search_periods``.  The recent holdout is never consulted.
+        """
         discovery_data = period_subset(search_periods)
         hist = individual_model_performance(discovery_data, standard_price=-110).get("overall", pd.DataFrame()).copy()
         if hist.empty:
@@ -2460,7 +2521,26 @@ def server(input, output, session):
             col = {"ats": "ats_pct", "roi": "roi", "wilson": "wilson_low"}.get(str(pool_metric), "wilson_low")
             hist = hist.sort_values([col, "bets", "wilson_low"], ascending=[False, False, False], na_position="last")
         hist = hist.head(max(1, int(pool_n))).reset_index(drop=True)
-        ids = hist["canonical_model_id"].astype(str).tolist()
+        hist.insert(0, "pool_rank", np.arange(1, len(hist) + 1))
+
+        if diverse_n is None or int(diverse_n) <= 0:
+            hist["diversity_selected"] = True
+            hist["diverse_rank"] = hist["pool_rank"]
+            hist["blocked_by"] = ""
+            hist["blocking_corr"] = np.nan
+            ids = hist["canonical_model_id"].astype(str).tolist()
+            return ids, hist
+
+        ceiling = float(corr_ceiling if corr_ceiling is not None else 0.90)
+        ids, audit = diversify_ranked_pool(
+            discovery_data, hist, max_models=int(diverse_n), correlation_ceiling=ceiling,
+        )
+        audit = audit.rename(columns={"selected": "diversity_selected"})
+        merge_cols = [
+            "canonical_model_id", "diversity_selected", "diverse_rank",
+            "blocked_by", "blocking_corr", "reason",
+        ]
+        hist = hist.merge(audit[merge_cols], on="canonical_model_id", how="left")
         return ids, hist
 
     def resolve_auto_candidates(search_periods: tuple[tuple[int, int], ...]):
@@ -2484,6 +2564,8 @@ def server(input, output, session):
             pool_n=int(input.auto_pool_n()),
             pool_metric=str(input.auto_pool_metric()),
             pool_min_bets=int(input.auto_pool_min_bets()),
+            diverse_n=int(input.auto_diverse_n()),
+            corr_ceiling=float(input.auto_corr_ceiling()),
         )
         return ids, hist, {
             "live_ready": True, "live_count": len(live_ids), "message": live_message,
@@ -2508,7 +2590,7 @@ def server(input, output, session):
         holdout = "none" if not val_periods else f"{fmt_period(val_periods[0])}–{fmt_period(val_periods[-1])}"
         if not availability_meta.get("live_ready", False):
             return availability_meta.get("message", "Refresh Page 2 before screening.")
-        source = "automatic top-N" if str(input.auto_pool_mode()) == "top" else "manual"
+        source = (f"automatic top-{int(input.auto_pool_n())} → diverse {int(input.auto_diverse_n())}" if str(input.auto_pool_mode()) == "top" else "manual")
         extra = ""
         if str(input.auto_pool_mode()) == "manual" and availability_meta.get("excluded", 0):
             extra = f" · {availability_meta['excluded']} manually requested models excluded because they are not posting this week"
@@ -2531,7 +2613,14 @@ def server(input, output, session):
             return render.DataGrid(d, filters=False, height="220px")
         d = ranked.copy()
         d = _pct_frame(d, ["ats_pct", "roi", "wilson_low"])
-        d.insert(0, "Pool rank", np.arange(1, len(d) + 1))
+        if "pool_rank" in d.columns:
+            d["Pool rank"] = pd.to_numeric(d["pool_rank"], errors="coerce").astype("Int64")
+        else:
+            d["Pool rank"] = np.arange(1, len(d) + 1)
+        if "diversity_selected" in d.columns:
+            d["Diverse core"] = np.where(d["diversity_selected"].fillna(False), "✓", "")
+            d["Blocking model"] = d.get("blocked_by", "").astype(str).map(lambda x: MODEL_NAME_MAP.get(x, x) if x else "")
+            d["Blocking |r|"] = pd.to_numeric(d.get("blocking_corr"), errors="coerce").abs().round(3)
         rename = {
             "model_name": "Model", "bets": "Discovery bets",
             "ats_pct": "ATS %", "roi": "ROI %",
@@ -2539,13 +2628,10 @@ def server(input, output, session):
             "seasons": "Seasons represented",
         }
         cols = [
-            c for c in ["Pool rank", "model_name", "bets", "ats_pct", "roi", "wilson_low", "mae", "seasons"]
+            c for c in ["Pool rank", "Diverse core", "model_name", "bets", "ats_pct", "roi", "wilson_low", "mae", "Blocking model", "Blocking |r|", "seasons"]
             if c in d.columns
         ]
-        # Pool rank was inserted with its display name already.
-        if "Pool rank" not in cols:
-            cols.insert(0, "Pool rank")
-        return render.DataGrid(d[cols].rename(columns=rename), filters=False, height="250px")
+        return render.DataGrid(d[cols].rename(columns=rename), filters=False, height="360px")
 
     @render.text
     def auto_combo_count():
@@ -2767,10 +2853,10 @@ def server(input, output, session):
         seasons = tuple(HISTORICAL_SEASONS)
         periods = tuple((y, w) for y, w in HISTORICAL_PERIODS if y in set(seasons))
         if len(periods) <= PATRICK_HOLDOUT_WEEKS:
-            ui.notification_show("Not enough historical weeks for the 6-week holdout.", type="error")
+            ui.notification_show("Not enough historical weeks for the 15-week holdout.", type="error")
             return
         # First pass uses the ordinary chronological split only to obtain a
-        # provisional candidate pool. Then choose the latest six *usable*
+        # provisional candidate pool. Then choose the latest fifteen *usable*
         # completed weeks for that pool and rerank candidates on discovery
         # data strictly before the holdout. Sparse later periods are excluded
         # rather than leaking back into discovery.
@@ -2780,6 +2866,8 @@ def server(input, output, session):
             pool_n=PATRICK_POOL_N,
             pool_metric=PATRICK_POOL_METRIC,
             pool_min_bets=PATRICK_POOL_MIN_BETS,
+            diverse_n=PATRICK_DIVERSE_N,
+            corr_ceiling=PATRICK_MODEL_CORR_CEILING,
         )
         search_periods = provisional_search
         val_periods = periods[-PATRICK_HOLDOUT_WEEKS:]
@@ -2806,6 +2894,8 @@ def server(input, output, session):
                 pool_n=PATRICK_POOL_N,
                 pool_metric=PATRICK_POOL_METRIC,
                 pool_min_bets=PATRICK_POOL_MIN_BETS,
+                diverse_n=PATRICK_DIVERSE_N,
+                corr_ceiling=PATRICK_MODEL_CORR_CEILING,
             )
         if len(ids) < PATRICK_MIN_SIZE:
             ui.notification_show(
@@ -2829,6 +2919,8 @@ def server(input, output, session):
         ui.update_numeric("auto_pool_n", value=PATRICK_POOL_N)
         ui.update_select("auto_pool_metric", selected=PATRICK_POOL_METRIC)
         ui.update_numeric("auto_pool_min_bets", value=PATRICK_POOL_MIN_BETS)
+        ui.update_numeric("auto_diverse_n", value=PATRICK_DIVERSE_N)
+        ui.update_select("auto_corr_ceiling", selected=f"{PATRICK_MODEL_CORR_CEILING:.2f}")
         ui.update_numeric("auto_holdout_weeks", value=PATRICK_HOLDOUT_WEEKS)
         ui.update_numeric("auto_min_size", value=PATRICK_MIN_SIZE)
         ui.update_numeric("auto_max_size", value=PATRICK_MAX_SIZE)
@@ -2859,21 +2951,21 @@ def server(input, output, session):
         now = time.monotonic()
         set_auto_progress(
             done=0, total=total,
-            label=f"Patrick recipe: {len(ids)} live candidates; preparing discovery matrix…",
+            label=f"Patrick recipe: {len(ids)} diverse live candidates; preparing discovery matrix…",
             phase="Preparing Patrick's recommended search", started=now, updated=now,
         )
         holdout_label = f"{val_periods[0][0]} W{val_periods[0][1]}–{val_periods[-1][0]} W{val_periods[-1][1]}" if val_periods else "none"
         patrick_state.set({
             "phase": "searching",
-            "message": f"Searching {total:,} exact combinations from {len(ids)} current-week candidates · holdout {holdout_label}…",
+            "message": f"Searching {total:,} exact combinations from {len(ids)} diverse current-week candidates · holdout {holdout_label}…",
             # Persist the *usable* chronology chosen above. v3.5.23 accidentally
-            # recomputed the last six raw weeks after the search finished, which
+            # recomputed the last fifteen raw weeks after the search finished, which
             # could replace the actual held-out weeks with sparse/no-data periods.
             "discovery_periods": tuple(search_periods),
             "holdout_periods": tuple(val_periods),
         })
         print(
-            f"[Patrick recipe] starting exact search: {len(ids)} candidates, sizes "
+            f"[Patrick recipe] starting exact search: {len(ids)} diverse candidates, sizes "
             f"{PATRICK_MIN_SIZE}–{hi}, {total:,} combinations, k={PATRICK_K:.2f}",
             flush=True,
         )
@@ -3858,6 +3950,11 @@ def server(input, output, session):
             side = str(input.meta_hist_side_filter() or "All")
             if side in {"Favorite", "Underdog", "Pick'em"}:
                 d = d[d["bet_type"].astype(str).eq(side)].copy()
+        if "market_home_margin" in d.columns:
+            d["spread_regime"] = pd.to_numeric(d["market_home_margin"], errors="coerce").map(meta_spread_bucket_label)
+            spread_regime = str(input.meta_hist_spread_filter() or "All")
+            if spread_regime != "All":
+                d = d[d["spread_regime"].astype(str).eq(spread_regime)].copy()
         return d
 
     def _meta_hist_summary(d: pd.DataFrame | None = None) -> dict:
@@ -3940,6 +4037,9 @@ def server(input, output, session):
             return d
         d["Market"] = [_spread_label(a, h, m) for a, h, m in zip(d["road"], d["home"], d["market_home_margin"])]
         d["META fair"] = [_spread_label(a, h, m) for a, h, m in zip(d["road"], d["home"], d["meta_home_margin"])]
+        d["|Market spread|"] = pd.to_numeric(d["market_home_margin"], errors="coerce").abs().round(1)
+        d["Regime"] = pd.to_numeric(d["market_home_margin"], errors="coerce").map(meta_spread_bucket_label)
+        d["Blowout-like"] = np.where(pd.to_numeric(d["market_home_margin"], errors="coerce").abs() > 21.5, "⚠ 22+", "")
         d["Edge (pts)"] = pd.to_numeric(d["edge_points"], errors="coerce").round(2)
         d["META SD"] = pd.to_numeric(d["meta_sd"], errors="coerce").round(2)
         d["Edge / SD"] = pd.to_numeric(d["edge_over_sd"], errors="coerce").replace([np.inf,-np.inf], np.nan).round(2)
@@ -3952,7 +4052,7 @@ def server(input, output, session):
             "result":"Result", "line_source":"Line source",
         })
         keep = [
-            "Period", "Season", "Week", "Game", "Bet", "Side type", "Market", "META fair",
+            "Period", "Season", "Week", "Game", "Bet", "Side type", "Market", "|Market spread|", "Regime", "Blowout-like", "META fair",
             "Edge (pts)", "META SD", "Edge / SD", "Communities", "Active combos",
             "Final score", "Outcome vs line", "Result", "Units", "Community IDs", "Active combo IDs", "Line source",
         ]
@@ -4040,6 +4140,7 @@ def server(input, output, session):
                 "Line used": _spread_label(away, home, float(market)),
                 "|Spread|": round(abs(float(market)), 1),
                 "Regime": bucket,
+                "Blowout-like": "⚠ 22+" if abs(float(market)) > 21.5 else "",
                 "META estimate": _spread_label(away, home, float(meta_mean)) if np.isfinite(meta_mean) else "—",
                 "Raw edge (pts)": round(abs(float(edge)), 2) if np.isfinite(edge) else np.nan,
                 "META SD (pts)": round(float(meta_sd), 2) if np.isfinite(meta_sd) else np.nan,

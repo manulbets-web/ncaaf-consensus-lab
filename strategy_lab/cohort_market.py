@@ -200,6 +200,88 @@ def assisted_cohort(
     return selected, pd.DataFrame(audit)
 
 
+def diversify_ranked_pool(
+    data: pd.DataFrame,
+    ranked: pd.DataFrame,
+    *,
+    max_models: int = 15,
+    correlation_ceiling: float = 0.90,
+    min_common_games: int = 30,
+) -> tuple[list[str], pd.DataFrame]:
+    """Greedily retain a diverse subset from an already-ranked model pool.
+
+    The input ``ranked`` order is treated as fixed (for Patrick's recipe this is
+    discovery ATS rank).  Diversity is measured using model-minus-market edge
+    correlation on *the supplied data only*, so callers can pass discovery data
+    and keep the chronological holdout completely untouched.  A lower-ranked
+    model is skipped only when its absolute edge correlation with an already
+    retained model meets/exceeds ``correlation_ceiling``.
+    """
+    cols = [
+        "pool_rank", "canonical_model_id", "model_name", "selected",
+        "diverse_rank", "blocked_by", "blocking_corr", "reason",
+    ]
+    if ranked is None or ranked.empty or int(max_models) <= 0:
+        return [], pd.DataFrame(columns=cols)
+
+    q = ranked.copy().reset_index(drop=True)
+    q["canonical_model_id"] = q["canonical_model_id"].astype(str)
+    ids = q["canonical_model_id"].tolist()
+
+    z = data.copy() if data is not None else pd.DataFrame()
+    corr = pd.DataFrame()
+    required = {"game_key", "canonical_model_id", "prediction_margin", "market_margin"}
+    if not z.empty and required.issubset(z.columns):
+        z = z[z["canonical_model_id"].astype(str).isin(set(ids))].copy()
+        z["prediction_margin"] = pd.to_numeric(z["prediction_margin"], errors="coerce")
+        z["market_margin"] = pd.to_numeric(z["market_margin"], errors="coerce")
+        z = z.dropna(subset=["prediction_margin", "market_margin"])
+        if not z.empty:
+            z["edge"] = z["prediction_margin"] - z["market_margin"]
+            z = z.drop_duplicates(["game_key", "canonical_model_id"], keep="last")
+            wide = z.pivot(index="game_key", columns="canonical_model_id", values="edge")
+            corr = wide.corr(min_periods=max(1, int(min_common_games)))
+
+    selected: list[str] = []
+    audit: list[dict] = []
+    for idx, r in q.iterrows():
+        mid = str(r["canonical_model_id"])
+        name = str(r.get("model_name", mid))
+        blocker = ""
+        blocker_corr = np.nan
+        reason = "selected"
+        accepted = False
+
+        if len(selected) >= int(max_models):
+            reason = "diverse-cap reached"
+        else:
+            for keep in selected:
+                c = np.nan
+                if not corr.empty and mid in corr.index and keep in corr.columns:
+                    c = pd.to_numeric(pd.Series([corr.loc[mid, keep]]), errors="coerce").iloc[0]
+                if np.isfinite(c) and abs(float(c)) >= float(correlation_ceiling):
+                    blocker = keep
+                    blocker_corr = float(c)
+                    reason = f"blocked by |edge corr| >= {float(correlation_ceiling):.2f}"
+                    break
+            if not blocker:
+                accepted = True
+                selected.append(mid)
+
+        audit.append({
+            "pool_rank": int(idx) + 1,
+            "canonical_model_id": mid,
+            "model_name": name,
+            "selected": bool(accepted),
+            "diverse_rank": (selected.index(mid) + 1) if accepted else np.nan,
+            "blocked_by": blocker,
+            "blocking_corr": blocker_corr,
+            "reason": reason,
+        })
+
+    return selected, pd.DataFrame(audit, columns=cols)
+
+
 def _norm_model_name(x: object) -> str:
     return re.sub(r"[^a-z0-9]+", " ", str(x or "").lower()).strip()
 
