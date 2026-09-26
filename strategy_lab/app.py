@@ -48,6 +48,7 @@ from cohort_market import (
     price_historical_market_shelf, shelf_backtest_summary,
     select_best_expressions, best_expression_summary,
 )
+from finalist_ranking import rerank_confirmation_finalists
 from streamlined_engine import (
     StreamlinedBacktestConfig,
     CombinationSearchConfig,
@@ -132,16 +133,19 @@ PATRICK_MIN_SIZE = 3
 PATRICK_MAX_SIZE = 6
 PATRICK_K = 0.75
 PATRICK_FINALISTS = 60
+PATRICK_FINAL_RANK_MODE = "balanced_ats"
+COMBINED_RANK_MAX_CANDIDATES = 25_000
+PATRICK_MIN_HOLDOUT_BETS = 25
 
 # Exact streaming search remains memory-bounded because only each batch and a
 # bounded leaderboard are retained. The UI exposes a user-controlled safety cap
 # so multi-million subset spaces can be explored deliberately.
 EXACT_SEARCH_DEFAULT_MAX = 10_000_000
 EXACT_SEARCH_HARD_MAX = 50_000_000
-# Patrick v3.6.8 recipe: use a broad ATS-ranked, high-volume discovery screen
+# Patrick v3.6.9 recipe: use a broad ATS-ranked, high-volume discovery screen
 # for the first exact search. Only after that broad search do we identify a
 # smaller compatibility core from top-combination participation and discovery-
-# only edge correlation; the untouched holdout is revealed afterward.
+# only edge correlation; the holdout is revealed only after the core is frozen.
 PATRICK_POOL_N = 43
 PATRICK_POOL_METRIC = "ats"
 PATRICK_POOL_MIN_BETS = 60
@@ -174,7 +178,7 @@ else:
 
 DEFAULT_MANUAL_IDS = DEFAULT_AUTO_IDS[: min(10, len(DEFAULT_AUTO_IDS))]
 
-# v3.6.8: the production workflow is centered on a fixed, user-controlled
+# v3.6.9: the production workflow is centered on a fixed, user-controlled
 # cohort.  The legacy 2025 hand-curated model list is resolved onto the current
 # canonical registry when possible; otherwise a small quality-ranked fallback is
 # used. Automatic selection is deliberately constrained to a quality screen plus
@@ -561,7 +565,7 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Recommended weekly strategy"),
                 ui.p(
-                    "Broad ATS screen → exhaustive discovery search → post-search model core → confirmation search → untouched holdout. Rank up to 43 currently posting models by discovery ATS (minimum 60 discovery bets/model), search every 3–6 model set in that broad eligible pool, use the best discovery combinations to identify about 15 models that repeatedly work well together while removing obvious discovery-only edge-correlation redundancy, rerun the exact 3–6 search inside that smaller core, freeze the top 60 confirmation finalists, and only then evaluate them on the latest 15 usable completed weeks. The holdout never chooses the core or the finalists.",
+                    "Broad ATS screen → exhaustive discovery search → post-search model core → confirmation search → discovery+validation finalist rank. Rank up to 43 currently posting models by discovery ATS (minimum 60 discovery bets/model), search every 3–6 model set in that broad eligible pool, use discovery-only results to identify about 15 models that repeatedly work well together while removing obvious discovery-only edge-correlation redundancy, rerun the exact 3–6 search inside that smaller core, then evaluate the top discovery confirmation candidates on the latest 15 usable completed weeks. Patrick's preferred final rank is the 50/50 average of discovery ATS and holdout ATS, with at least 25 holdout bets. Because holdout is used for this final rank, it is validation/tuning data rather than a final untouched test; rolling validation and future weeks remain the clean OOS check.",
                     class_="muted",
                 ),
                 ui.input_action_button(
@@ -638,18 +642,34 @@ app_ui = ui.page_fluid(
                 ),
                 ui.layout_columns(
                     ui.input_select(
-                        "auto_rank_metric", "Rank combinations by",
+                        "auto_rank_metric", "Discovery search rank",
                         choices={"ats": "ATS %", "wilson": "Wilson lower bound", "roi": "ROI"},
                         selected=PATRICK_RANK_METRIC,
                     ),
+                    ui.input_select(
+                        "auto_final_rank_mode", "Finalist ranking",
+                        choices={
+                            "balanced_ats": "50/50 discovery + holdout ATS",
+                            "balanced_wilson": "50/50 discovery + holdout Wilson LB",
+                            "discovery_only": "Discovery only (holdout untouched)",
+                        },
+                        selected=PATRICK_FINAL_RANK_MODE,
+                    ),
                     ui.input_numeric("auto_top_n", "Finalists retained", PATRICK_FINALISTS, min=5, max=100, step=5),
+                    col_widths=(4, 4, 4),
+                ),
+                ui.layout_columns(
+                    ui.input_numeric(
+                        "auto_min_holdout_bets", "Minimum holdout bets for combined rank",
+                        PATRICK_MIN_HOLDOUT_BETS, min=0, max=250, step=5,
+                    ),
                     ui.div(
                         ui.p(
-                            "The broad exact search runs first. The ~15-model core is then learned from discovery-only combination participation plus discovery-only edge-correlation redundancy. Holdout performance never chooses the core.",
+                            "The broad search and the ~15-model core remain discovery-only. If a combined finalist rank is chosen, all discovery-eligible core combinations are evaluated when the core search has ≤25,000 candidates; otherwise the top 25,000 discovery leaders are evaluated on the 15-week holdout and reranked using both periods. At that point the holdout is validation/tuning data, not an untouched final test.",
                             class_="muted mt-4",
                         )
                     ),
-                    col_widths=(4, 4, 4),
+                    col_widths=(4, 8),
                 ),
                 ui.output_text("auto_pool_status"),
                 ui.output_text("auto_combo_count"),
@@ -681,7 +701,7 @@ app_ui = ui.page_fluid(
             ),
             ui.card(
                 ui.card_header("Promising combinations"),
-                ui.p("Discovery ranks the search; the recent chronological holdout is shown only as validation and never determines search rank.", class_="muted"),
+                ui.p("Stage 1 and the post-search core are always discovery-only. The final confirmation leaderboard can either remain discovery-only or be reranked using both discovery and the 15-week holdout. Combined ranking converts the holdout into validation/tuning data, so use Research · Validation / future weeks for a clean OOS check.", class_="muted"),
                 ui.output_data_frame("auto_top_table"),
             ),
             ui.card(
@@ -815,7 +835,7 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Portfolio snapshot"),
                 ui.p(
-                    "Recent holdout performance is shown here only as a compact portfolio sanity check. Use Research · Validation for the formal repeated chronological backtest.",
+                    "Recent holdout performance is shown here as a compact portfolio check. If the finalist ranking used discovery + holdout, this period is validation/tuning data rather than a clean OOS test. Use Research · Validation for the formal repeated chronological backtest.",
                     class_="muted",
                 ),
                 ui.layout_columns(
@@ -831,7 +851,7 @@ app_ui = ui.page_fluid(
             ui.card(
                 ui.card_header("Historical performance · exact META bets"),
                 ui.p(
-                    "Audit the exact spread bets generated by the currently selected META portfolio and its frozen discovery-selected k. Discovery is the setup/tuning period; Holdout is the frozen out-of-sample sanity check. The combined view is descriptive and is not labeled as fully OOS.",
+                    "Audit the exact spread bets generated by the currently selected META portfolio and its frozen discovery-selected k. Discovery and Holdout are shown separately. When finalist ranking uses both periods, Holdout is validation/tuning data rather than a clean OOS test; the combined view is always descriptive.",
                     class_="muted",
                 ),
                 ui.layout_columns(
@@ -1234,7 +1254,7 @@ def server(input, output, session):
         return render.DataGrid(d, filters=True, height="650px")
 
     # ------------------------------------------------------------------
-    # v3.6.8 production cohort
+    # v3.6.9 production cohort
     # ------------------------------------------------------------------
     def _active_cohort_ids() -> list[str]:
         return [str(x) for x in (cohort.get() or []) if str(x) in MODEL_NAME_MAP]
@@ -2003,7 +2023,7 @@ def server(input, output, session):
         return render.DataGrid(matrix, filters=True, height="650px")
 
     # ------------------------------------------------------------------
-    # v3.6.8 bundled historical sportsbook market shelf
+    # v3.6.9 bundled historical sportsbook market shelf
     # ------------------------------------------------------------------
     @ui.bind_task_button(button_id="price_market_shelf")
     @reactive.extended_task
@@ -2021,7 +2041,7 @@ def server(input, output, session):
     def start_shelf_task():
         if ODDS_QUOTES.empty:
             ui.notification_show(
-                "The bundled Odds API archive is missing. Rebuild v3.6.8 from the Mac source project so data/odds/ncaaf_rich_quotes.csv.gz is included.",
+                "The bundled Odds API archive is missing. Rebuild v3.6.9 from the Mac source project so data/odds/ncaaf_rich_quotes.csv.gz is included.",
                 type="error", duration=10,
             )
             return
@@ -2064,7 +2084,7 @@ def server(input, output, session):
     @render.text
     def market_shelf_status():
         if ODDS_QUOTES.empty:
-            return "Odds API archive not present in this deployment. v3.6.8 production builds are expected to bundle it under data/odds/."
+            return "Odds API archive not present in this deployment. v3.6.9 production builds are expected to bundle it under data/odds/."
         st = shelf_task.status()
         if st == "initial":
             return "Archive loaded. Click ‘Price archive for active cohort’ to evaluate the historical shelf using the currently selected cohort."
@@ -2626,7 +2646,7 @@ def server(input, output, session):
             d["Pool rank"] = pd.to_numeric(d["pool_rank"], errors="coerce").astype("Int64")
         else:
             d["Pool rank"] = np.arange(1, len(d) + 1)
-        # v3.6.8: no pre-search diversity pruning. Every displayed model enters
+        # v3.6.9: no pre-search diversity pruning. Every displayed model enters
         # the broad exact search; the smaller compatibility core is learned afterward.
         rename = {
             "model_name": "Model", "bets": "Discovery bets",
@@ -2730,6 +2750,7 @@ def server(input, output, session):
         ids: list[str], config_values: dict,
         robustness_periods: tuple[tuple[int, int], ...],
         post_core_n: int, post_core_corr: float,
+        final_rank_mode: str, min_holdout_bets: int,
     ):
         cfg = CombinationSearchConfig(**config_values)
 
@@ -2777,9 +2798,22 @@ def server(input, output, session):
 
             core_values = dict(config_values)
             core_values["max_size"] = core_hi
+            final_n = int(config_values.get("top_n", PATRICK_FINALISTS))
+            rank_mode = str(final_rank_mode or "discovery_only")
+            # Combined discovery+holdout ranking needs a wider discovery shortlist
+            # to score on validation before trimming to the requested finalist count.
+            # The shortlist is still chosen entirely from discovery rank.
+            if rank_mode != "discovery_only" and tuple(config_values.get("validation_periods", ())):
+                core_values["top_n"] = max(final_n, min(core_total, COMBINED_RANK_MAX_CANDIDATES))
             core_cfg = CombinationSearchConfig(**core_values)
             result = brute_force_combination_search(
                 DATA, core_ids, MODEL_NAME_MAP, core_cfg, progress_callback=progress
+            )
+            result = rerank_confirmation_finalists(
+                result,
+                mode=rank_mode,
+                finalists=final_n,
+                min_holdout_bets=int(min_holdout_bets),
             )
             result["broad_candidate_ids"] = list(ids)
             result["broad_total_combinations"] = int(broad.get("total_combinations", 0))
@@ -2891,7 +2925,12 @@ def server(input, output, session):
                 f"Launching an exact {total:,}-combination search. Keep this session open; progress and ETA will update below.",
                 type="message", duration=10,
             )
-        auto_task(ids, values, val_periods if val_periods else search_periods, int(input.auto_diverse_n()), float(input.auto_corr_ceiling()))
+        rank_mode = str(input.auto_final_rank_mode()) if val_periods else "discovery_only"
+        auto_task(
+            ids, values, val_periods if val_periods else search_periods,
+            int(input.auto_diverse_n()), float(input.auto_corr_ceiling()),
+            rank_mode, int(input.auto_min_holdout_bets()),
+        )
 
     def auto_result():
         if auto_task.status() != "success":
@@ -2944,11 +2983,20 @@ def server(input, output, session):
             core_eval = int(r.get("core_evaluated_combinations", r.get("evaluated_combinations", 0)))
             core_ok = int(r.get("eligible_combinations", 0))
             total_eval = int(r.get("total_exact_evaluated", broad_n + core_eval))
+            rank_label = str(r.get("finalist_ranking_label", "Discovery only"))
+            val_n = int(r.get("validation_candidates_scored", 0))
+            if str(r.get("finalist_ranking_mode", "discovery_only")) == "discovery_only":
+                final_txt = "Finalists remain discovery-ranked; holdout is shown only as validation."
+            else:
+                final_txt = (
+                    f"{val_n} discovery leaders were scored on holdout and finalists were reranked by {rank_label}; "
+                    "the holdout is therefore validation/tuning data, not a final untouched test."
+                )
             return (
                 f"Broad search: {broad_n:,} evaluated; {broad_ok:,} met discovery confidence gates. "
                 f"Discovery-only post-search core: {core_n} models. "
                 f"Core confirmation: {core_eval:,} evaluated; {core_ok:,} eligible. "
-                f"Total exact subsets evaluated: {total_eval:,}. Finalists were then evaluated on the untouched holdout."
+                f"Total exact subsets evaluated: {total_eval:,}. {final_txt}"
             )
         if s == "error":
             return "Automatic combination search failed."
@@ -3054,6 +3102,8 @@ def server(input, output, session):
         ui.update_numeric("auto_min_available", value=PATRICK_MIN_AVAILABLE)
         ui.update_numeric("auto_min_bets", value=PATRICK_MIN_SEARCH_BETS)
         ui.update_select("auto_rank_metric", selected=PATRICK_RANK_METRIC)
+        ui.update_select("auto_final_rank_mode", selected=PATRICK_FINAL_RANK_MODE)
+        ui.update_numeric("auto_min_holdout_bets", value=PATRICK_MIN_HOLDOUT_BETS)
         ui.update_numeric("auto_top_n", value=PATRICK_FINALISTS)
 
         values = {
@@ -3083,7 +3133,7 @@ def server(input, output, session):
         holdout_label = f"{val_periods[0][0]} W{val_periods[0][1]}–{val_periods[-1][0]} W{val_periods[-1][1]}" if val_periods else "none"
         patrick_state.set({
             "phase": "searching",
-            "message": f"Stage 1: searching {total:,} exact combinations from {len(ids)} broad current-week candidates · post-search core target {PATRICK_DIVERSE_N} · untouched holdout {holdout_label}…",
+            "message": f"Stage 1: searching {total:,} exact combinations from {len(ids)} broad current-week candidates · post-search core target {PATRICK_DIVERSE_N} · 15-week validation {holdout_label} used only for final combined ranking…",
             # Persist the *usable* chronology chosen above. v3.5.23 accidentally
             # recomputed the last fifteen raw weeks after the search finished, which
             # could replace the actual held-out weeks with sparse/no-data periods.
@@ -3095,7 +3145,10 @@ def server(input, output, session):
             f"{PATRICK_MIN_SIZE}–{hi}, {total:,} combinations, k={PATRICK_K:.2f}",
             flush=True,
         )
-        auto_task(ids, values, val_periods, PATRICK_DIVERSE_N, PATRICK_MODEL_CORR_CEILING)
+        auto_task(
+            ids, values, val_periods, PATRICK_DIVERSE_N, PATRICK_MODEL_CORR_CEILING,
+            PATRICK_FINAL_RANK_MODE, PATRICK_MIN_HOLDOUT_BETS,
+        )
 
     @render.ui
     def patrick_progress_bar():
@@ -3154,9 +3207,11 @@ def server(input, output, session):
         broad = int(r.get("broad_evaluated_combinations", 0))
         core = int(r.get("core_evaluated_combinations", r.get("evaluated_combinations", 0)))
         ids = list(r.get("post_search_core_ids", []) or [])
+        rank_label = str(r.get("finalist_ranking_label", "Discovery only"))
         return (
             f"{broad:,} broad discovery combinations were evaluated before selecting this {len(ids)}-model core. "
-            f"The core then received a separate {core:,}-combination confirmation search before holdout evaluation."
+            f"The core then received a separate {core:,}-combination confirmation search. "
+            f"Finalist rank: {rank_label}."
         )
 
     @render.data_frame
@@ -3188,22 +3243,28 @@ def server(input, output, session):
         d = _pct_frame(d, [
             "ats_pct", "roi", "wilson_low", "worst_season_ats",
             "validation_ats_pct", "validation_roi", "validation_wilson_low",
+            "final_rank_score", "combined_pooled_ats",
             "mean_ats", "min_ats", "mean_roi", "min_roi",
         ])
         rename = {
-            "search_rank": "Rank", "combo_size": "N", "model_names": "Models",
+            "search_rank": "Final rank", "discovery_rank": "Discovery rank",
+            "combo_size": "N", "model_names": "Models",
             "bets": "Discovery bets", "ats_pct": "Discovery ATS %", "roi": "Discovery ROI %",
-            "wilson_low": "Discovery Wilson LB %", "validation_bets": "Validation bets",
-            "validation_ats_pct": "Validation ATS %", "validation_roi": "Validation ROI %",
-            "validation_wilson_low": "Validation Wilson LB %",
+            "wilson_low": "Discovery Wilson LB %", "validation_bets": "Holdout bets",
+            "validation_ats_pct": "Holdout ATS %", "validation_roi": "Holdout ROI %",
+            "validation_wilson_low": "Holdout Wilson LB %",
+            "final_rank_score": "Final rank score %", "combined_pooled_ats": "Pooled ATS %",
+            "final_rank_mode": "Final rank method",
             "thresholds_tested": "k values tested", "min_bets": "Min bets across k",
             "max_bets": "Max bets across k", "mean_ats": "Mean ATS across k %",
             "min_ats": "Worst ATS across k %", "mean_roi": "Mean ROI across k %",
             "min_roi": "Worst ROI across k %", "profitable_thresholds": "Profitable k values",
         }
         preferred = [
-            "search_rank", "combo_size", "model_names", "bets", "ats_pct", "roi", "wilson_low",
-            "validation_bets", "validation_ats_pct", "validation_roi", "validation_wilson_low",
+            "search_rank", "discovery_rank", "combo_size", "model_names",
+            "bets", "ats_pct", "validation_bets", "validation_ats_pct",
+            "final_rank_score", "combined_pooled_ats", "roi", "validation_roi",
+            "wilson_low", "validation_wilson_low", "final_rank_mode",
             "profitable_thresholds", "mean_ats", "min_ats", "min_bets", "max_bets", "model_ids",
         ]
         cols = [c for c in preferred if c in d.columns]
@@ -3230,12 +3291,20 @@ def server(input, output, session):
         row = selected_auto_row()
         if row is None:
             return "Run the search, then enter a finalist rank."
+        hold_bets = int(row.get('validation_bets', 0) or 0)
+        hold_ats = float(row.get('validation_ats_pct', np.nan))
+        score = float(row.get('final_rank_score', np.nan))
         return (
-            f"Rank {int(row.get('search_rank', input.auto_pick_rank()))}\n"
+            f"Final rank {int(row.get('search_rank', input.auto_pick_rank()))} "
+            f"(discovery rank {row.get('discovery_rank', '—')})\n"
             f"{row.get('model_names', '')}\n\n"
             f"Discovery: {int(row.get('bets', 0))} bets | "
             f"{100*float(row.get('ats_pct', np.nan)):.1f}% ATS | "
-            f"{100*float(row.get('roi', np.nan)):+.1f}% ROI"
+            f"{100*float(row.get('roi', np.nan)):+.1f}% ROI\n"
+            f"Holdout: {hold_bets} bets | "
+            f"{100*hold_ats:.1f}% ATS\n"
+            f"Final rank method: {row.get('final_rank_mode', 'Discovery only')}"
+            + (f" | score {100*score:.1f}%" if np.isfinite(score) else "")
         )
 
     @render.data_frame

@@ -1,4 +1,4 @@
-# NCAAF Consensus Lab v3.6.8 — Manual Cohort + Market Shelf
+# NCAAF Consensus Lab v3.6.9 — Manual Cohort + Market Shelf
 
 This directory was generated from:
 
@@ -30,7 +30,7 @@ For the live slate, refresh locally with:
 
 ## Paid NCAAF Odds API archive
 
-v3.6.8 intentionally publishes the collected NCAAF historical sportsbook data with the website. The builder stores `ncaaf_rich_quotes.csv.gz` in `data/odds/` so the paid archive stays below GitHub's single-file limit. If the earlier paid harvest has `flat_quotes/` but no consolidated CSV, the builder reconstructs and gzip-compresses the NCAAF CSV locally with no API calls or credits. It refuses to complete a production build only when neither form of the paid archive is available.
+v3.6.9 intentionally publishes the collected NCAAF historical sportsbook data with the website. The builder stores `ncaaf_rich_quotes.csv.gz` in `data/odds/` so the paid archive stays below GitHub's single-file limit. If the earlier paid harvest has `flat_quotes/` but no consolidated CSV, the builder reconstructs and gzip-compresses the NCAAF CSV locally with no API calls or credits. It refuses to complete a production build only when neither form of the paid archive is available.
 
 Automatic discovery checks the harvester's normal locations under the source project and its parent directory. To specify it explicitly:
 
