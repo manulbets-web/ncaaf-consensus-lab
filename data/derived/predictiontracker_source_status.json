@@ -1,6 +1,6 @@
 {
-  "run_started_at_utc": "2026-10-02T16:43:07.486639Z",
-  "run_finished_at_utc": "2026-10-02T16:43:10.805138Z",
+  "run_started_at_utc": "2026-10-06T17:26:08.209137Z",
+  "run_finished_at_utc": "2026-10-06T17:26:10.561719Z",
   "overall_status": "ok",
   "requested_archive_seasons": [
     2025
@@ -10,18 +10,18 @@
       "name": "current_predictions",
       "url": "https://www.thepredictiontracker.com/ncaapredictions.csv",
       "status": "ok",
-      "fetched_at_utc": "2026-10-02T16:43:07.486639Z",
+      "fetched_at_utc": "2026-10-06T17:26:08.209137Z",
       "http_status": 200,
-      "bytes": 19701,
-      "sha256": "56ec28afbdd7e9140433ad3279315fd7acc25cf18eaafa62bed0683b4b448cf6",
-      "canonical_sha256": "45e21c3d6e5f5d5c2bf6922d7cf5f7d4b41ad31fda351cbce9d18739b70b1bd5",
-      "rows": 56,
+      "bytes": 19424,
+      "sha256": "aa0c90c12524847fa81c85f2934f5efe0747a72a66cfb074efb5976fc20c5fd4",
+      "canonical_sha256": "f5d4f1aab9da3034c1872684089dc61039d56090ebe960b4193ad6d35d929f81",
+      "rows": 58,
       "columns": 61,
       "changed": true,
       "production_path": "data/current/ncaapredictions.csv",
-      "snapshot_path": "data/snapshots/predictiontracker/current/20261002T164307Z_ncaapredictions.csv",
-      "published_update": "Friday, October 2, 2026 11:13 AM",
-      "message": "{\"canonical_sha256\": \"45e21c3d6e5f5d5c2bf6922d7cf5f7d4b41ad31fda351cbce9d18739b70b1bd5\", \"columns\": 61, \"exact_duplicates_removed\": 0, \"incomplete_rows_removed\": 0, \"maximum_models_per_game\": 46, \"median_models_per_game\": 45.0, \"minimum_models_per_game\": 45, \"model_columns\": 55, \"page_validation\": {\"csv_games\": 56, \"line_match_rate\": null, \"match_rate\": null, \"matched_games\": null, \"message\": \"Could not parse the visible PredictionTracker summary table; CSV was validated structurally only.\", \"page_games\": null, \"status\": \"validation_unavailable\"}, \"rows\": 56}"
+      "snapshot_path": "data/snapshots/predictiontracker/current/20261006T172608Z_ncaapredictions.csv",
+      "published_update": "Tuesday, October 6, 2026 10:51 AM",
+      "message": "{\"canonical_sha256\": \"f5d4f1aab9da3034c1872684089dc61039d56090ebe960b4193ad6d35d929f81\", \"columns\": 61, \"exact_duplicates_removed\": 0, \"incomplete_rows_removed\": 0, \"maximum_models_per_game\": 44, \"median_models_per_game\": 43.0, \"minimum_models_per_game\": 42, \"model_columns\": 55, \"page_validation\": {\"csv_games\": 58, \"line_match_rate\": null, \"match_rate\": null, \"matched_games\": null, \"message\": \"Could not parse the visible PredictionTracker summary table; CSV was validated structurally only.\", \"page_games\": null, \"status\": \"validation_unavailable\"}, \"rows\": 58}"
     }
   ]
 }
