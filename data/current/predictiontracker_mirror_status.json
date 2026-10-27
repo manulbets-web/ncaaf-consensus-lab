@@ -1,13 +1,13 @@
 {
   "mirror_schema": 1,
   "season": 2026,
-  "week": 8,
-  "fetched_at_utc": "2026-10-21T16:50:12.366573Z",
-  "published_update": "Wednesday, October 21, 2026 11:13 AM",
-  "canonical_sha256": "d9de00ebcbbe49da1875d28e3b2e089efb7426d05362a4d324cddd71c6b57ff7",
+  "week": 9,
+  "fetched_at_utc": "2026-10-27T19:23:46.481329Z",
+  "published_update": "Tuesday, October 27, 2026 11:35 AM",
+  "canonical_sha256": "08e9171b5d9f515832a0316198881323711b809f79e1faea4574399b5db7357c",
   "rows": 56,
   "columns": 63,
-  "snapshot_path": "data/snapshots/predictiontracker/mirror/season_2026/week_08/20261021T165015Z_d9de00ebcbbe_ncaapredictions.csv",
+  "snapshot_path": "data/snapshots/predictiontracker/mirror/season_2026/week_09/20261027T192349Z_08e9171b5d9f_ncaapredictions.csv",
   "page_validation": {
     "csv_games": 56,
     "line_match_rate": null,
