@@ -1,11 +1,11 @@
 {
-  "refreshed_at_utc": "2026-10-27T19:23:49.629243Z",
+  "refreshed_at_utc": "2026-10-28T18:18:11.102848Z",
   "season": 2026,
   "source": "ESPN public college-football scoreboard",
-  "date_window": "20261024-20261106",
+  "date_window": "20261025-20261107",
   "pt_games": 56,
   "status": "error",
-  "message": "400 Client Error: Bad Request for url: https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20261024-20261106&limit=1000",
+  "message": "400 Client Error: Bad Request for url: https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20261025-20261107&limit=1000",
   "matched_games": 0,
   "unmatched_games": 56
 }
